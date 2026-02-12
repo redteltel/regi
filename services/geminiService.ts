@@ -1,9 +1,13 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { ScannedResult } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Hardcoded API Key as requested for VPS environment to fix "API Key must be set" error.
+// Note: In a production environment, restrict this key to your specific domain/IP in Google Cloud Console.
+const API_KEY = "AIzaSyAztVJ2t2uLCuWkkZQ8j2ExEkD2WAwBIUg";
 
-// Using stable Gemini 2.0 Flash to ensure availability and fix 404 errors.
+const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+// Using stable Gemini 2.0 Flash to ensure availability.
 const MODEL_NAME = 'gemini-2.0-flash';
 
 // Helper to strip Markdown code blocks (e.g. ```json ... ```) from the response
