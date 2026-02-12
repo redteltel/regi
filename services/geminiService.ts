@@ -1,19 +1,16 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// Hardcoded API Key as requested for VPS environment to fix "API Key must be set" error.
-// Note: In a production environment, restrict this key to your specific domain/IP in Google Cloud Console.
-const API_KEY = "AIzaSyAztVJ2t2uLCuWkkZQ8j2ExEkD2WAwBIUg";
+// API Key must be obtained exclusively from process.env.API_KEY as per guidelines.
+// Assume this variable is pre-configured, valid, and accessible.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Using gemini-3-flash-preview as recommended for basic text tasks (and multimodal)
+const MODEL_NAME = 'gemini-3-flash-preview';
 
-// Using stable Gemini 2.0 Flash to ensure availability.
-const MODEL_NAME = 'gemini-2.0-flash';
-
-// Helper to strip Markdown code blocks (e.g. ```json ... ```) from the response
+// Helper to strip Markdown code blocks
 const cleanJsonString = (text: string): string => {
   let cleaned = text.trim();
-  // Remove wrapping markdown code blocks if present
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '');
   }
@@ -22,15 +19,14 @@ const cleanJsonString = (text: string): string => {
 
 export const extractPartNumber = async (base64Image: string): Promise<ScannedResult | null> => {
   try {
-    // Clean base64 string if it contains metadata header
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
 
-    const responseSchema: Schema = {
+    const responseSchema = {
       type: Type.OBJECT,
       properties: {
         partNumber: {
           type: Type.STRING,
-          description: "The alphanumeric product code, model number, or SKU found in the image (e.g., CS-J285D-W).",
+          description: "The alphanumeric product code, model number, or SKU found in the image.",
         },
         confidence: {
           type: Type.NUMBER,
@@ -51,7 +47,7 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
             },
           },
           {
-            text: "Extract the main product part number (品番) or SKU from this image. Return just the code. If there are multiple, pick the most prominent model number.",
+            text: "Extract the main product part number (品番) or SKU from this image. Return just the code.",
           },
         ],
       },
@@ -63,29 +59,20 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
     });
 
     const rawText = result.text;
-    if (!rawText) {
-      console.warn("Gemini returned empty text response.");
-      return null;
-    }
+    if (!rawText) return null;
 
-    // Strip markdown to prevent JSON parse errors
     const jsonText = cleanJsonString(rawText);
     
     try {
       const data = JSON.parse(jsonText) as ScannedResult;
       return data;
     } catch (parseError) {
-      console.error("JSON Parse Error. Raw text:", rawText);
-      throw new Error("Failed to parse AI response. " + (parseError instanceof Error ? parseError.message : ""));
+      console.error("JSON Parse Error", parseError);
+      throw new Error("Failed to parse AI response.");
     }
 
   } catch (error: any) {
     console.error("Gemini Vision Error:", error);
-    
-    // Provide more user-friendly error messages
-    if (error.message?.includes('404') || error.status === 404) {
-       throw new Error(`Model ${MODEL_NAME} not found or access denied. Check API Key.`);
-    }
     throw error;
   }
 };
