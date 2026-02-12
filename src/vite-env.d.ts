@@ -1,12 +1,14 @@
-// Fixed error by removing missing vite/client reference.
-// Declaring process to support process.env.API_KEY usage.
-declare global {
-  var process: {
-    env: {
-      API_KEY: string;
-      [key: string]: any;
-    }
-  };
+// Manually define ImportMetaEnv to avoid "Cannot find type definition file for 'vite/client'" error
+interface ImportMetaEnv {
+  readonly VITE_GEMINI_API_KEY: string;
+  readonly BASE_URL: string;
+  readonly MODE: string;
+  readonly DEV: boolean;
+  readonly PROD: boolean;
+  readonly SSR: boolean;
+  [key: string]: any;
 }
 
-export {};
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}

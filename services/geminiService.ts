@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// API Key must be accessed via process.env.API_KEY as per guidelines.
-// It is assumed to be pre-configured and valid.
+// Coding Guideline: The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+// This is polyfilled in vite.config.ts to read from VITE_GEMINI_API_KEY.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Using gemini-3-flash-preview as recommended for basic text tasks
