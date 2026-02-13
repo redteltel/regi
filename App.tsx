@@ -16,11 +16,10 @@ const App: React.FC = () => {
     characteristic: null,
   });
   
-  // Debug logs - increased buffer
+  // Debug logs - increased buffer to see full scan
   const [logs, setLogs] = useState<string[]>([]);
-  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-19), msg]); // Keep last 20
+  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-49), msg]); // Keep last 50
 
-  // Setup printer listeners
   useEffect(() => {
     printerService.setLogger(addLog);
     printerService.setOnDisconnect(() => {
@@ -37,10 +36,8 @@ const App: React.FC = () => {
 
   const handleConnectPrinter = async () => {
     try {
-      setLogs([]); // Clear previous logs
+      setLogs([]); 
       const device = await printerService.connect();
-      
-      // Determine display name (Name OR ID OR Default)
       const dispName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : 'MP-B20');
       
       setPrinterStatus({
@@ -53,7 +50,6 @@ const App: React.FC = () => {
       console.error(e);
       const msg = e.message || "Unknown error";
       addLog(`Error: ${msg}`);
-      // Only show alert if it's NOT a user cancellation
       if (!msg.includes("User cancelled")) {
         alert(`接続エラー:\n${msg}\n\nペアリングの問題が続く場合は、AndroidのBluetooth設定からMP-B20を削除(ペアリング解除)してからやり直してください。`);
       }
@@ -83,10 +79,8 @@ const App: React.FC = () => {
   const handlePrint = async () => {
     if (cart.length === 0) return;
     
-    // Check internal connection status
     let isReady = printerStatus.isConnected && printerService.isConnected();
 
-    // Try to auto-restore connection silently (this does NOT open the picker)
     if (!isReady) {
        addLog("Auto-reconnecting...");
        const restored = await printerService.restoreConnection();
@@ -96,7 +90,6 @@ const App: React.FC = () => {
        }
     }
 
-    // If still not ready, force user to click Connect manually.
     if (!isReady) {
       alert("プリンタと接続されていません。\n下の「Connect Printer」ボタンを押して再接続してください。");
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));
@@ -110,7 +103,6 @@ const App: React.FC = () => {
       alert("印刷が完了しました！");
     } catch (e: any) {
       console.error(e);
-      // If print fails, it might be a connection drop
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));
       alert(`印刷エラー:\n${e.message}\n\n再接続してから試してください。`);
     }
@@ -240,12 +232,12 @@ const App: React.FC = () => {
                 Print Receipt
               </button>
 
-              {/* Compact Debug Log - Enlarged and Spaced */}
-              <div className="mt-4 bg-black text-green-400 p-3 rounded-lg font-mono text-[11px] h-32 overflow-y-auto shadow-inner border border-gray-800">
-                <div className="flex flex-col gap-1">
+              {/* Enhanced Debug Log (h-40) */}
+              <div className="mt-4 bg-black text-green-400 p-3 rounded-lg font-mono text-[10px] h-40 overflow-y-auto shadow-inner border border-gray-800">
+                <div className="flex flex-col gap-0.5">
                   {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
                   {logs.slice().reverse().map((log, i) => (
-                    <div key={i} className="break-all border-b border-gray-800/50 pb-1">{log}</div>
+                    <div key={i} className="break-all border-b border-gray-800/50 pb-0.5 hover:bg-gray-900">{log}</div>
                   ))}
                 </div>
               </div>
@@ -258,7 +250,6 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-surface text-onSurface overflow-hidden">
-      {/* Top Bar (Only visible in Scan/List, hidden in preview for cleanliness) */}
       {appState !== AppState.PREVIEW && (
         <div className="flex justify-between items-center p-4 bg-surface/80 backdrop-blur-md z-10 shrink-0">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
@@ -278,12 +269,10 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Main Content Area - Fill remaining space */}
       <div className="flex-1 flex flex-col relative overflow-hidden">
         {renderContent()}
       </div>
 
-      {/* Bottom Navigation */}
       {appState !== AppState.PREVIEW && (
         <div className="h-20 bg-surface border-t border-gray-800 flex items-center justify-around px-6 pb-2 shrink-0 z-20">
           <button 

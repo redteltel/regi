@@ -70,14 +70,12 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       return;
     }
 
-    // Feedback start
     if (navigator.vibrate) navigator.vibrate(50);
     setIsProcessing(true);
     setStatusMsg("📸 画像処理中...");
     setDebugMsg("");
 
     try {
-      // 1. Capture and resize
       const MAX_WIDTH = 600;
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       
@@ -90,12 +88,10 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const base64 = canvas.toDataURL('image/jpeg', 0.5);
 
-      // 2. AI Processing
       setStatusMsg("🤖 AIが品番を解析中...");
       const result = await extractPartNumber(base64);
       
       if (result && result.partNumber) {
-        // 3. Database Search
         setStatusMsg(`🔍 検索中: ${result.partNumber}`);
         const product = await searchProduct(result.partNumber);
         
@@ -103,9 +99,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           setStatusMsg("✅ 商品が見つかりました");
           if (navigator.vibrate) navigator.vibrate([50, 50]);
           onProductFound(product);
-          // Don't clear processing immediately to prevent accidental double taps during transition
           setTimeout(() => setIsProcessing(false), 500);
-          return; // Exit here on success
+          return; 
         } else {
           setStatusMsg("⚠️ 商品マスタ未登録");
           setDebugMsg(`品番 "${result.partNumber}" は検出されましたが、登録されていません。`);
@@ -136,8 +131,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           <p>{error}</p>
         </div>
       ) : (
-        /* Force 40vh height using Tailwind class as requested */
-        <div className="relative w-full h-[40vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
+        /* Reduced to 30vh for better button visibility */
+        <div className="relative w-full h-[30vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
           <video
             ref={videoRef}
             autoPlay
@@ -155,7 +150,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
              )}
           </div>
 
-          {/* Guide Frame: Compact Horizontal for Part Number */}
+          {/* Guide Frame */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-64 h-16 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
               <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
@@ -174,7 +169,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         </div>
       )}
       
-      {/* Controls Area - Flex 1 to fill remaining space and center buttons */}
+      {/* Controls Area */}
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 bg-surface">
         <button
           onClick={handleCapture}
