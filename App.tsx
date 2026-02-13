@@ -16,9 +16,9 @@ const App: React.FC = () => {
     characteristic: null,
   });
   
-  // Debug logs
+  // Debug logs - increased buffer
   const [logs, setLogs] = useState<string[]>([]);
-  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-9), msg]); // Keep last 10
+  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-19), msg]); // Keep last 20
 
   // Setup printer listeners
   useEffect(() => {
@@ -240,12 +240,12 @@ const App: React.FC = () => {
                 Print Receipt
               </button>
 
-              {/* Compact Debug Log */}
-              <div className="mt-4 bg-black text-green-400 p-2 rounded-lg font-mono text-[10px] h-16 overflow-y-auto">
-                <div className="flex flex-col gap-0.5">
+              {/* Compact Debug Log - Enlarged and Spaced */}
+              <div className="mt-4 bg-black text-green-400 p-3 rounded-lg font-mono text-[11px] h-32 overflow-y-auto shadow-inner border border-gray-800">
+                <div className="flex flex-col gap-1">
                   {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
                   {logs.slice().reverse().map((log, i) => (
-                    <div key={i} className="break-all border-b border-gray-800/50 pb-0.5">{log}</div>
+                    <div key={i} className="break-all border-b border-gray-800/50 pb-1">{log}</div>
                   ))}
                 </div>
               </div>

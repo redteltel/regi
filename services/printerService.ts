@@ -52,21 +52,18 @@ export class PrinterService {
 
   async connect(): Promise<BluetoothDevice> {
     try {
-      this.log("Starting Bluetooth scan (Accept All)...");
+      this.log("Requesting Device (Accept All)...");
       
       // Pixel 9a / Android Optimization: 
-      // Use acceptAllDevices: true to ensure the device shows up in the list.
-      // MUST include optionalServices to access them later.
+      // acceptAllDevices: true finds everything.
+      // optionalServices: List SII and generic ones to ensure access.
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
             SII_SERVICE_UUID, 
             '000018f0-0000-1000-8000-00805f9b34fb',
-            // Broad compatibility services
-            0x18f0,
-            0x1800, 
-            0x1801,
-            0x180A
+            // Generic Services that might host the serial stream
+            0x1800, 0x1801, 0x180A, 0x18F0, 0xFF00
         ] 
       });
 
@@ -78,10 +75,8 @@ export class PrinterService {
       this.device.addEventListener('gattserverdisconnected', this.handleDisconnect);
 
       // Handle cases where name is null/undefined (Android security feature until connected)
-      const displayName = device.name || "Unknown Device";
-      const displayId = device.id; 
+      const displayName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : "Unknown");
       this.log(`Selected: ${displayName}`);
-      this.log(`ID: ${displayId.slice(0, 8)}...`);
 
       this.log("Connecting to GATT Server...");
       
@@ -89,64 +84,69 @@ export class PrinterService {
       if (!server) throw new Error("Could not connect to GATT Server");
       this.log("GATT connected");
 
-      // Requirement: 2000ms delay after connect for Android stability
-      this.log("Stabilizing connection (2000ms)...");
-      await new Promise(r => setTimeout(r, 2000));
+      // Requirement: 3000ms delay after connect for Android stability
+      // This is critical for Pixel 9a to populate the internal service DB.
+      this.log("WAITING 3000ms (Android DB build)...");
+      await new Promise(r => setTimeout(r, 3000));
 
-      this.log("Discovering ALL services...");
+      this.log("Scanning ALL services...");
       // Requirement: getPrimaryServices() (plural) to find everything
       const services = await server.getPrimaryServices();
-      
-      // Requirement: 2000ms delay after service acquisition
-      this.log(`Found ${services.length} services. Waiting 2000ms...`);
-      await new Promise(r => setTimeout(r, 2000));
+      this.log(`Found ${services.length} services.`);
       
       let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
       const foundServiceUUIDs: string[] = [];
 
-      // Brute force search for writable characteristic
+      // Brute force search for ANY writable characteristic
       for (const service of services) {
         foundServiceUUIDs.push(service.uuid);
-        this.log(`Scanning Service: ${service.uuid.slice(0,8)}...`);
-
-        // Check if this looks like the SII service (starts with 000018f0)
-        const isSiiService = service.uuid.startsWith('000018f0');
+        this.log(`Service: ${service.uuid.slice(0,8)}...`);
 
         try {
           const characteristics = await service.getCharacteristics();
+          this.log(` -> Found ${characteristics.length} chars`);
+          
           for (const char of characteristics) {
             const props = char.properties;
             const canWrite = props.write || props.writeWithoutResponse;
             
             if (canWrite) {
-                this.log(`  > Found Writable: ${char.uuid.slice(0,8)}...`);
-                // If this is the SII service, it's our best bet. Stop searching.
-                if (isSiiService) {
+                this.log(`   -> Writable: ${char.uuid.slice(0,8)}...`);
+                
+                // Requirement: Test Write to verify connection
+                try {
+                    this.log(`      Testing write (0x00)...`);
+                    const testByte = new Uint8Array([0x00]); // NUL byte (safe for ESC/POS)
+                    
+                    if (props.writeWithoutResponse) {
+                        await char.writeValueWithoutResponse(testByte);
+                    } else {
+                        await char.writeValue(testByte);
+                    }
+                    
+                    this.log("      [TEST WRITE OK]");
                     targetChar = char;
-                    this.log("  >>> MATCH: SII Service Writable Char");
-                    break;
-                }
-                // Otherwise, keep it as a fallback
-                if (!targetChar) {
-                    targetChar = char;
+                    break; // Found a working characteristic
+                } catch (e) {
+                    this.log(`      [TEST WRITE FAIL]: ${e}`);
                 }
             }
           }
         } catch (e) {
-          this.log(`  > Failed to read chars for ${service.uuid.slice(0,8)}`);
+          this.log(` -> Failed to read chars: ${e}`);
         }
         
-        if (targetChar && isSiiService) break;
+        if (targetChar) break; // Found our match, stop searching services
       }
 
       if (!targetChar) {
-        this.log("CRITICAL: No writable characteristic found.");
+        this.log("CRITICAL: No working writable characteristic found.");
         this.log("Services found:\n" + foundServiceUUIDs.join("\n"));
-        throw new Error("No writable characteristic found. See logs for details.");
+        throw new Error("No writable characteristic found. See logs.");
       }
 
       this.characteristic = targetChar;
-      this.log(`Selected Char: ${this.characteristic.uuid.slice(0,8)}...`);
+      this.log(`Connected to: ${this.characteristic.uuid.slice(0,8)}...`);
       this.log("Ready to print.");
       return device;
     } catch (error: any) {
@@ -168,11 +168,9 @@ export class PrinterService {
       const server = await this.device.gatt?.connect();
       if (!server) return false;
       
-      // Add stability delay for restore as well
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 2000));
       
       const services = await server.getPrimaryServices();
-      await new Promise(r => setTimeout(r, 1000));
       
       // Quick scan for writable
       for (const service of services) {
