@@ -130,7 +130,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   }, [isProcessing, onProductFound, setIsProcessing, debugMsg]);
 
   return (
-    <div className="flex flex-col w-full min-h-full bg-surface">
+    <div className="flex flex-col w-full min-h-full bg-surface pb-24">
       {error ? (
         <div className="h-64 flex items-center justify-center text-red-400 p-4 text-center bg-gray-900 rounded-b-2xl">
           <p>{error}</p>
@@ -154,7 +154,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
              )}
           </div>
 
-          {/* Guide Frame: Compact Horizontal */}
+          {/* Guide Frame: Compact Horizontal for Part Number */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-72 h-20 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
               <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-xs font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
@@ -180,7 +180,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         </div>
       )}
       
-      {/* Controls Area - Flow Layout */}
+      {/* Controls Area - Vertical Flow Layout */}
       <div className="flex-1 flex flex-col items-center justify-start p-8 gap-6 bg-surface">
         <button
           onClick={handleCapture}

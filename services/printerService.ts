@@ -55,14 +55,12 @@ export class PrinterService {
       this.log("Requesting Bluetooth Device...");
       
       // Pixel 9a / Android Fix: 
-      // Simplified filters to just namePrefix. 
-      // Removed services from filters to avoid discovery issues on some Android versions.
+      // Use acceptAllDevices: true to ensure the device shows up in the picker.
+      // MUST include the service UUID in optionalServices to access it later.
       const device = await navigator.bluetooth.requestDevice({
-        filters: [
-            { namePrefix: 'MP-B20' }
-        ],
+        acceptAllDevices: true,
         optionalServices: [
-            SII_SERVICE_UUID,
+            SII_SERVICE_UUID, // Critical: Must be listed to access the service
             '000018f0-0000-1000-8000-00805f9b34fb',
             0x18f0,
             0x1800, 
