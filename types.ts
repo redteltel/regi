@@ -63,10 +63,12 @@ declare global {
   }
 
   interface BluetoothRemoteGATTService {
+    uuid: string;
     getCharacteristics(characteristic?: string | number): Promise<BluetoothRemoteGATTCharacteristic[]>;
   }
 
   interface BluetoothRemoteGATTCharacteristic {
+    uuid: string;
     properties: {
       write: boolean;
       writeWithoutResponse: boolean;

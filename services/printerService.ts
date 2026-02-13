@@ -1,10 +1,9 @@
 import { CartItem } from '../types';
 
-// Standard BLE Service UUIDs often used as fallbacks, but printers usually have specific ones.
-// MP-B20 often uses a Serial Port Profile (SPP) over BLE or a proprietary one.
-// We will filter by name "MP-B20" to be safe.
-const SERVICE_UUID = "000018f0-0000-1000-8000-00805f9b34fb"; // Example generic service
-const CHARACTERISTIC_UUID = "00002af1-0000-1000-8000-00805f9b34fb"; // Example generic characteristic
+// Seiko Instruments (SII) often uses this specific service UUID for their mobile printers via BLE.
+const SII_SERVICE_UUID = "000018f0-0000-1000-8000-00805f9b34fb";
+// Common writable characteristic for SII
+const SII_CHAR_UUID = "00002af1-0000-1000-8000-00805f9b34fb";
 
 // ESC/POS Commands
 const ESC = 0x1B;
@@ -26,40 +25,56 @@ export class PrinterService {
 
   async connect(): Promise<BluetoothDevice> {
     try {
+      console.log("Requesting Bluetooth Device...");
       // Request device filter
       const device = await navigator.bluetooth.requestDevice({
         filters: [{ namePrefix: 'MP-B20' }],
         optionalServices: [
-            // List common UUIDs for serial/printer services just in case
-            '000018f0-0000-1000-8000-00805f9b34fb', 
-            0x18f0, 
-            'e7810a71-73ae-499d-8c15-faa9aef0c3f2' // Seiko generic
+            SII_SERVICE_UUID,
+            '000018f0-0000-1000-8000-00805f9b34fb', // Full UUID string
+            0x18f0, // Short 16-bit UUID
+            // Add generic services that might be present
+            0x1800, // Generic Access
+            0x1801, // Generic Attribute
+            'e7810a71-73ae-499d-8c15-faa9aef0c3f2' // Another potential generic UUID
         ] 
       });
 
       this.device = device;
+      console.log("Device selected:", device.name);
       
       const server = await device.gatt?.connect();
       if (!server) throw new Error("Could not connect to GATT Server");
+      console.log("GATT Server connected");
+
+      // Connection stability delay for Android
+      await new Promise(r => setTimeout(r, 500));
 
       // Attempt to find a writable characteristic
-      // Since we don't know the exact UUID for every MP-B20 firmware version,
-      // we iterate services to find one with Write properties.
+      console.log("Getting primary services...");
       const services = await server.getPrimaryServices();
+      console.log("Found services:", services.map(s => s.uuid));
       
       for (const service of services) {
-        const characteristics = await service.getCharacteristics();
-        for (const char of characteristics) {
-          if (char.properties.write || char.properties.writeWithoutResponse) {
-            this.characteristic = char;
-            break;
+        console.log(`Checking service: ${service.uuid}`);
+        try {
+          const characteristics = await service.getCharacteristics();
+          for (const char of characteristics) {
+            console.log(`  > Char: ${char.uuid}, Props: ${JSON.stringify(char.properties)}`);
+            if (char.properties.write || char.properties.writeWithoutResponse) {
+              this.characteristic = char;
+              console.log("  >>> Writable characteristic found!");
+              break;
+            }
           }
+        } catch (e) {
+          console.warn(`Failed to get characteristics for service ${service.uuid}`, e);
         }
         if (this.characteristic) break;
       }
 
       if (!this.characteristic) {
-        throw new Error("No writable characteristic found on printer.");
+        throw new Error("No writable characteristic found on printer. Please unpair from Android Bluetooth settings and try again.");
       }
 
       return device;
@@ -100,6 +115,8 @@ export class PrinterService {
     for (let i = 0; i < array.length; i += CHUNK_SIZE) {
       const chunk = array.slice(i, i + CHUNK_SIZE);
       await this.characteristic.writeValue(chunk);
+      // Small delay between chunks prevents buffer overflow
+      await new Promise(r => setTimeout(r, 10));
     }
   }
 

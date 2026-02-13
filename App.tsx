@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -18,8 +18,6 @@ const App: React.FC = () => {
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
-  // Check connection initially? No, browser blocks auto-connect without user gesture.
-
   const handleConnectPrinter = async () => {
     try {
       const device = await printerService.connect();
@@ -29,8 +27,12 @@ const App: React.FC = () => {
         device: device,
         characteristic: null // managed inside service
       });
-    } catch (e) {
-      alert("Failed to connect to printer. Ensure Bluetooth is on and device is paired or discoverable.");
+      alert("Printer connected successfully!");
+    } catch (e: any) {
+      console.error(e);
+      const msg = e.message || "Unknown error";
+      // Show more helpful error message
+      alert(`接続に失敗しました。\n\nAndroidの設定でプリンタとのペアリングを「解除」してから、再度試してください。\n\n詳細: ${msg}`);
     }
   };
 
@@ -46,7 +48,8 @@ const App: React.FC = () => {
     // Haptic feedback
     if (navigator.vibrate) navigator.vibrate(50);
     // Switch to list view momentarily or stay? Let's stay to scan more, but show toast.
-    alert(`Added ${product.name} to cart.`);
+    // alert(`Added ${product.name} to cart.`);
+    // Using simple visual feedback via UI update instead of alert for smoother flow
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -150,6 +153,11 @@ const App: React.FC = () => {
             <Receipt items={cart} total={cartTotal} />
 
             <div className="w-full max-w-sm mt-auto pb-8">
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm mb-4 flex items-start gap-2">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                <p>接続できない場合：スマホのBluetooth設定でMP-B20のペアリングを解除してから、下のボタンを押してください。</p>
+              </div>
+
               {!printerStatus.isConnected ? (
                 <button 
                   onClick={handleConnectPrinter}
