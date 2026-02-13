@@ -136,7 +136,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           <p>{error}</p>
         </div>
       ) : (
-        <div className="relative w-full aspect-[3/4] sm:aspect-video bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-2xl">
+        <div className="relative w-full aspect-square max-h-[50vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-2xl mx-auto">
           <video
             ref={videoRef}
             autoPlay
@@ -156,8 +156,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
 
           {/* Guide Frame: Compact Horizontal for Part Number */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-72 h-20 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-xs font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
+            <div className="w-64 h-16 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
                 品番をこの枠に合わせてください
               </div>
               {/* Corner markers */}
@@ -180,8 +180,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         </div>
       )}
       
-      {/* Controls Area - Vertical Flow Layout */}
-      <div className="flex-1 flex flex-col items-center justify-start p-8 gap-6 bg-surface">
+      {/* Controls Area - Vertical Flow Layout - Centered */}
+      <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6 bg-surface min-h-[200px]">
         <button
           onClick={handleCapture}
           disabled={isProcessing}

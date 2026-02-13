@@ -52,15 +52,18 @@ export class PrinterService {
 
   async connect(): Promise<BluetoothDevice> {
     try {
-      this.log("Requesting Bluetooth Device...");
+      this.log("Starting Bluetooth scan...");
+      this.log("Looking for namePrefix: 'MP-B20'");
       
-      // Pixel 9a / Android Fix: 
-      // Use acceptAllDevices: true to ensure the device shows up in the picker.
-      // MUST include the service UUID in optionalServices to access it later.
+      // Pixel 9a / Android Optimization: 
+      // Using 'filters' forces the OS to resolve the device name before showing it,
+      // reducing "Unknown device" entries compared to acceptAllDevices.
       const device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
+        filters: [
+            { namePrefix: 'MP-B20' }
+        ],
         optionalServices: [
-            SII_SERVICE_UUID, // Critical: Must be listed to access the service
+            SII_SERVICE_UUID, 
             '000018f0-0000-1000-8000-00805f9b34fb',
             0x18f0,
             0x1800, 
@@ -77,13 +80,14 @@ export class PrinterService {
       this.device.addEventListener('gattserverdisconnected', this.handleDisconnect);
 
       this.log(`Device selected: ${device.name}`);
+      this.log(`ID: ${device.id.slice(0, 8)}...`); // Log partial ID for debugging
       this.log("Connecting to GATT Server...");
       
       const server = await device.gatt?.connect();
       if (!server) throw new Error("Could not connect to GATT Server");
       this.log("GATT connected");
 
-      // Pixel 9a Fix: Increased delay to 1500ms to stabilize GATT before service discovery
+      // Pixel 9a Fix: Delay to stabilize GATT
       this.log("Stabilizing connection (1500ms)...");
       await new Promise(r => setTimeout(r, 1500));
 
@@ -95,6 +99,7 @@ export class PrinterService {
       let preferredChar: BluetoothRemoteGATTCharacteristic | null = null;
 
       for (const service of services) {
+        this.log(`Checking Service: ${service.uuid.slice(0,8)}...`);
         try {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
@@ -103,10 +108,11 @@ export class PrinterService {
             const canWrite = props.write || props.writeWithoutResponse;
             
             if (canWrite) {
+                this.log(` > Writable Char: ${uuid.slice(0,8)}...`);
                 // If this matches the SII specific characteristic, prefer it
                 if (uuid.startsWith(SII_CHAR_UUID_PREFIX) || uuid === SII_SERVICE_UUID) {
                     preferredChar = char;
-                    this.log(` > Found preferred write char: ${uuid}`);
+                    this.log(`   *** Preferred ***`);
                 }
                 // Keep the first writable one as fallback
                 if (!foundChar) foundChar = char;
@@ -123,7 +129,8 @@ export class PrinterService {
         throw new Error("No writable characteristic found. Please unpair and retry.");
       }
       
-      this.log(`Selected Char: ${this.characteristic.uuid}`);
+      this.log(`Final Char: ${this.characteristic.uuid.slice(0,8)}...`);
+      this.log("Ready to print.");
       return device;
     } catch (error: any) {
       this.log(`Connection error: ${error.message || error}`);
