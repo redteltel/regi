@@ -38,11 +38,13 @@ const App: React.FC = () => {
         device: device,
         characteristic: null
       });
-      // Do not use alert here to avoid blocking the pairing notification
     } catch (e: any) {
       console.error(e);
       const msg = e.message || "Unknown error";
-      alert(`接続エラー:\n${msg}\n\nAndroidの設定でプリンタのペアリングを解除済みか確認してください。`);
+      // Only show alert if it's NOT a user cancellation
+      if (!msg.includes("User cancelled")) {
+        alert(`接続エラー:\n${msg}\n\nペアリングの問題が続く場合は、AndroidのBluetooth設定からMP-B20を削除(ペアリング解除)してからやり直してください。`);
+      }
     }
   };
 
@@ -69,11 +71,12 @@ const App: React.FC = () => {
   const handlePrint = async () => {
     if (cart.length === 0) return;
     
+    // Check internal connection status
     let isReady = printerStatus.isConnected && printerService.isConnected();
 
-    // Try to auto-restore connection if it looks disconnected
+    // Try to auto-restore connection silently
     if (!isReady) {
-       console.log("Printer not ready, trying to restore...");
+       console.log("Printer not ready, trying to restore silently...");
        const restored = await printerService.restoreConnection();
        if (restored) {
          setPrinterStatus(prev => ({ ...prev, isConnected: true }));
@@ -82,9 +85,12 @@ const App: React.FC = () => {
     }
 
     if (!isReady) {
-      // If restore failed, ask user to pick device again
-      await handleConnectPrinter();
-      if (!printerService.isConnected()) return; 
+      // DO NOT call handleConnectPrinter() automatically.
+      // This causes the "infinite loop of connection prompts".
+      // Instead, show an error and make the user click "Connect Printer".
+      alert("プリンタと接続されていません。\n下の「Connect Printer」ボタンを押して再接続してください。");
+      setPrinterStatus(prev => ({ ...prev, isConnected: false }));
+      return; 
     }
 
     try {
@@ -94,7 +100,9 @@ const App: React.FC = () => {
       alert("印刷が完了しました！");
     } catch (e: any) {
       console.error(e);
-      alert(`印刷エラー:\n${e.message}\n\n画面上部に「ペア設定」の通知が出ている場合は、それをタップして「ペア設定」を選択してください。`);
+      // If print fails, it might be a connection drop
+      setPrinterStatus(prev => ({ ...prev, isConnected: false }));
+      alert(`印刷エラー:\n${e.message}\n\n再接続してから試してください。`);
     }
   };
 
@@ -173,22 +181,16 @@ const App: React.FC = () => {
             <Receipt items={cart} total={cartTotal} />
 
             <div className="w-full max-w-sm mt-auto pb-8">
-              {/* Critical Instruction Box */}
-              <div className="bg-blue-50 border border-blue-200 text-blue-900 px-4 py-3 rounded-lg text-sm mb-4">
-                 <div className="flex items-start gap-2 mb-2 font-bold">
-                    <BellRing size={18} className="text-blue-600 mt-0.5" />
-                    <span>重要：ペアリング通知について</span>
-                 </div>
-                 <p className="text-xs leading-relaxed">
-                   印刷ボタンを押した際、画面上部や通知センターに<b>「ペア設定を要求しています」</b>という通知が出ることがあります。<br/>
-                   必ず<b>「ペア設定して接続」</b>をタップしてください。
-                 </p>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-xs mb-4 flex items-start gap-2">
-                <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                <p>接続できない場合：スマホのBluetooth設定でMP-B20のペアリングを解除してから、下のボタンを押してください。</p>
-              </div>
+              {/* Connection Status Helper */}
+              {!printerStatus.isConnected && (
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-xs mb-4 flex items-start gap-2">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-bold">プリンタ未接続</p>
+                    <p>下の黒いボタンを押して接続してください。何度も失敗する場合はスマホのBluetooth設定でMP-B20を削除してください。</p>
+                  </div>
+                </div>
+              )}
 
               {!printerStatus.isConnected ? (
                 <button 
@@ -199,14 +201,27 @@ const App: React.FC = () => {
                   Connect Printer
                 </button>
               ) : (
-                <div className="text-center text-green-600 text-sm mb-4 font-medium flex items-center justify-center gap-2">
-                  <Bluetooth size={14} /> Connected to {printerStatus.name}
+                <div 
+                  className="w-full bg-green-50 border border-green-200 text-green-700 py-3 rounded-xl font-medium flex items-center justify-center gap-2 mb-4 cursor-pointer"
+                  onClick={() => {
+                     // Allow manual disconnect/reconnect if needed
+                     if(window.confirm("プリンタを切断しますか？")) {
+                        printerService.disconnect();
+                        setPrinterStatus(prev => ({ ...prev, isConnected: false }));
+                     }
+                  }}
+                >
+                  <Bluetooth size={18} /> 
+                  Connected to {printerStatus.name}
+                  <span className="text-xs bg-green-200 px-2 py-0.5 rounded-full ml-1">タップして切断</span>
                 </div>
               )}
 
               <button 
                 onClick={handlePrint}
-                className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                className={`w-full py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
+                  !printerStatus.isConnected ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-blue-600 text-white'
+                }`}
               >
                 <Printer size={20} />
                 Print Receipt

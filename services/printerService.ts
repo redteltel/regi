@@ -31,7 +31,6 @@ export class PrinterService {
 
   private handleDisconnect = () => {
     console.log("Printer disconnected via GATT event");
-    // We don't nullify this.device immediately to allow for reconnection attempts
     this.characteristic = null;
     if (this.onDisconnectCallback) {
       this.onDisconnectCallback();
@@ -41,7 +40,6 @@ export class PrinterService {
   async connect(): Promise<BluetoothDevice> {
     try {
       console.log("Requesting Bluetooth Device...");
-      // Request device filter
       const device = await navigator.bluetooth.requestDevice({
         filters: [{ namePrefix: 'MP-B20' }],
         optionalServices: [
@@ -54,7 +52,6 @@ export class PrinterService {
         ] 
       });
 
-      // Cleanup old listener if exists
       if (this.device) {
         this.device.removeEventListener('gattserverdisconnected', this.handleDisconnect);
       }
@@ -68,25 +65,19 @@ export class PrinterService {
       if (!server) throw new Error("Could not connect to GATT Server");
       console.log("GATT Server connected");
 
-      // Critical delay for Android pairing dialog to appear/process
-      await new Promise(r => setTimeout(r, 1000));
+      // Increased delay to 3000ms to give ample time for Android pairing dialog
+      await new Promise(r => setTimeout(r, 3000));
 
-      // Attempt to find a writable characteristic
       console.log("Getting primary services...");
       const services = await server.getPrimaryServices();
-      console.log("Found services:", services.map(s => s.uuid));
       
       let foundChar = false;
-
       for (const service of services) {
-        console.log(`Checking service: ${service.uuid}`);
         try {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
-            // console.log(`  > Char: ${char.uuid}, Props: ${JSON.stringify(char.properties)}`);
             if (char.properties.write || char.properties.writeWithoutResponse) {
               this.characteristic = char;
-              console.log("  >>> Writable characteristic found!");
               foundChar = true;
               break;
             }
@@ -120,8 +111,7 @@ export class PrinterService {
       const server = await this.device.gatt?.connect();
       if (!server) return false;
       
-      // Re-fetch services/characteristics as they might be invalidated
-      await new Promise(r => setTimeout(r, 500)); // Short delay
+      await new Promise(r => setTimeout(r, 1000)); // Short delay for stability
       const services = await server.getPrimaryServices();
       
       for (const service of services) {
@@ -166,74 +156,78 @@ export class PrinterService {
     
     const array = Array.isArray(data) ? new Uint8Array(data) : data;
     
-    const CHUNK_SIZE = 50; // Smaller chunk size for better stability
+    const CHUNK_SIZE = 50; 
     for (let i = 0; i < array.length; i += CHUNK_SIZE) {
       const chunk = array.slice(i, i + CHUNK_SIZE);
       await this.characteristic.writeValue(chunk);
-      // Increased delay between chunks
       await new Promise(r => setTimeout(r, 20));
     }
   }
 
   async printReceipt(items: CartItem[], total: number) {
-    // Check connection before printing
+    // 1. Check connection
     if (!this.isConnected()) {
-      // Try auto-reconnect first
       const restored = await this.restoreConnection();
       if (!restored) {
         throw new Error("Printer disconnected");
       }
     }
 
+    // Wrapper to perform printing
+    const performPrint = async () => {
+        // Initialize
+        await this.writeCommand([ESC, AT]);
+
+        // Header
+        await this.writeCommand(ALIGN_CENTER);
+        await this.writeCommand(SIZE_DOUBLE);
+        await this.writeCommand(this.encode("RECEIPT\n"));
+        await this.writeCommand(SIZE_NORMAL);
+        await this.writeCommand(this.encode("PixelPOS Store\n"));
+        await this.writeCommand(this.encode("--------------------------------\n"));
+        await this.writeCommand([LF]);
+
+        // Items
+        await this.writeCommand(ALIGN_LEFT);
+        for (const item of items) {
+            await this.writeCommand(this.encode(`${item.name}\n`));
+            const line = `${item.quantity} x Y${item.price.toLocaleString()}`;
+            const totalStr = `Y${(item.price * item.quantity).toLocaleString()}`;
+            
+            const spaces = 32 - (line.length + totalStr.length);
+            const padding = spaces > 0 ? " ".repeat(spaces) : " ";
+            
+            await this.writeCommand(this.encode(`${line}${padding}${totalStr}\n`));
+        }
+
+        await this.writeCommand(this.encode("--------------------------------\n"));
+
+        // Total
+        await this.writeCommand(EMPHASIS_ON);
+        await this.writeCommand(SIZE_DOUBLE);
+        await this.writeCommand(ALIGN_RIGHT);
+        await this.writeCommand(this.encode(`TOTAL: Y${total.toLocaleString()}\n`));
+        await this.writeCommand(EMPHASIS_OFF);
+        await this.writeCommand(SIZE_NORMAL);
+        await this.writeCommand(ALIGN_CENTER);
+        
+        // Footer
+        await this.writeCommand([LF]);
+        await this.writeCommand(this.encode(`Date: ${new Date().toLocaleString()}\n`));
+        await this.writeCommand(this.encode("Thank you!\n"));
+        
+        // Feed and Cut
+        await this.writeCommand([LF, LF, LF, LF]);
+    };
+
     try {
-      // 1. Initialize
-      await this.writeCommand([ESC, AT]);
-
-      // 2. Header
-      await this.writeCommand(ALIGN_CENTER);
-      await this.writeCommand(SIZE_DOUBLE);
-      await this.writeCommand(this.encode("RECEIPT\n"));
-      await this.writeCommand(SIZE_NORMAL);
-      await this.writeCommand(this.encode("PixelPOS Store\n"));
-      await this.writeCommand(this.encode("--------------------------------\n"));
-      await this.writeCommand([LF]);
-
-      // 3. Items
-      await this.writeCommand(ALIGN_LEFT);
-      for (const item of items) {
-        await this.writeCommand(this.encode(`${item.name}\n`));
-        const line = `${item.quantity} x Y${item.price.toLocaleString()}`;
-        const totalStr = `Y${(item.price * item.quantity).toLocaleString()}`;
-        
-        // Simple manual spacing
-        const spaces = 32 - (line.length + totalStr.length);
-        const padding = spaces > 0 ? " ".repeat(spaces) : " ";
-        
-        await this.writeCommand(this.encode(`${line}${padding}${totalStr}\n`));
-      }
-
-      await this.writeCommand(this.encode("--------------------------------\n"));
-
-      // 4. Total
-      await this.writeCommand(EMPHASIS_ON);
-      await this.writeCommand(SIZE_DOUBLE);
-      await this.writeCommand(ALIGN_RIGHT);
-      await this.writeCommand(this.encode(`TOTAL: Y${total.toLocaleString()}\n`));
-      await this.writeCommand(EMPHASIS_OFF);
-      await this.writeCommand(SIZE_NORMAL);
-      await this.writeCommand(ALIGN_CENTER);
-      
-      // 5. Footer
-      await this.writeCommand([LF]);
-      await this.writeCommand(this.encode(`Date: ${new Date().toLocaleString()}\n`));
-      await this.writeCommand(this.encode("Thank you!\n"));
-      
-      // 6. Feed and Cut
-      await this.writeCommand([LF, LF, LF, LF]);
-      
+        await performPrint();
     } catch (e) {
-      console.error("Print failed", e);
-      throw e;
+        console.warn("First print attempt failed, retrying once...", e);
+        // Simple retry logic: wait a bit, try to restore connection again, then print
+        await new Promise(r => setTimeout(r, 1000));
+        await this.restoreConnection();
+        await performPrint();
     }
   }
 }

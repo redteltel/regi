@@ -1,10 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// Access API Key directly from Vite environment variable as requested.
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Using gemini-3-flash-preview as recommended for basic text tasks
 const MODEL_NAME = 'gemini-3-flash-preview';
