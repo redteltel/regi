@@ -50,18 +50,18 @@ export class PrinterService {
   async connect(): Promise<BluetoothDevice> {
     try {
       this.log("Requesting Bluetooth Device...");
-      // Explicitly include the SII UUID and standard UUIDs to ensure Android allows access
+      // Pixel 9a Fix: Include UUID in filters AND optionalServices
       const device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: 'MP-B20' }],
+        filters: [
+            { namePrefix: 'MP-B20' },
+            { services: [SII_SERVICE_UUID] }
+        ],
         optionalServices: [
             SII_SERVICE_UUID,
             '000018f0-0000-1000-8000-00805f9b34fb',
-            // Short UUIDs sometimes help on certain Android versions
             0x18f0,
-            // Generic Access/Attribute
             0x1800,
             0x1801,
-            // Device Information
             0x180A
         ] 
       });
@@ -80,9 +80,9 @@ export class PrinterService {
       if (!server) throw new Error("Could not connect to GATT Server");
       this.log("GATT connected");
 
-      // Critical delay for Android pairing/connection stability (Pixel 9a fix)
-      this.log("Stabilizing connection (500ms)...");
-      await new Promise(r => setTimeout(r, 500));
+      // Pixel 9a Fix: 800ms delay to stabilize connection before service discovery
+      this.log("Stabilizing connection (800ms)...");
+      await new Promise(r => setTimeout(r, 800));
 
       this.log("Discovering services...");
       const services = await server.getPrimaryServices();
@@ -92,7 +92,6 @@ export class PrinterService {
       let preferredChar: BluetoothRemoteGATTCharacteristic | null = null;
 
       for (const service of services) {
-        // this.log(`Service: ${service.uuid}`);
         try {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
@@ -142,7 +141,7 @@ export class PrinterService {
       const server = await this.device.gatt?.connect();
       if (!server) return false;
       
-      await new Promise(r => setTimeout(r, 500)); // Short delay
+      await new Promise(r => setTimeout(r, 800)); // 800ms delay for restore as well
       
       const services = await server.getPrimaryServices();
       
@@ -207,11 +206,9 @@ export class PrinterService {
             await this.characteristic.writeValue(chunk);
         }
       } catch (e) {
-          // If the specific method failed, try the generic one as last resort
           try { await this.characteristic.writeValue(chunk); } catch (err) { throw err; }
       }
 
-      // Small delay between chunks to prevent buffer overflow
       await new Promise(r => setTimeout(r, 20));
     }
   }
@@ -228,10 +225,8 @@ export class PrinterService {
     // Wrapper to perform printing
     const performPrint = async () => {
         this.log("Sending print data...");
-        // Initialize
         await this.writeCommand([ESC, AT]);
 
-        // Header
         await this.writeCommand(ALIGN_CENTER);
         await this.writeCommand(SIZE_DOUBLE);
         await this.writeCommand(this.encode("RECEIPT\n"));
@@ -240,7 +235,6 @@ export class PrinterService {
         await this.writeCommand(this.encode("--------------------------------\n"));
         await this.writeCommand([LF]);
 
-        // Items
         await this.writeCommand(ALIGN_LEFT);
         for (const item of items) {
             await this.writeCommand(this.encode(`${item.name}\n`));
@@ -255,7 +249,6 @@ export class PrinterService {
 
         await this.writeCommand(this.encode("--------------------------------\n"));
 
-        // Total
         await this.writeCommand(EMPHASIS_ON);
         await this.writeCommand(SIZE_DOUBLE);
         await this.writeCommand(ALIGN_RIGHT);
@@ -264,12 +257,10 @@ export class PrinterService {
         await this.writeCommand(SIZE_NORMAL);
         await this.writeCommand(ALIGN_CENTER);
         
-        // Footer
         await this.writeCommand([LF]);
         await this.writeCommand(this.encode(`Date: ${new Date().toLocaleString()}\n`));
         await this.writeCommand(this.encode("Thank you!\n"));
         
-        // Feed and Cut
         await this.writeCommand([LF, LF, LF, LF]);
         this.log("Print sent.");
     };
@@ -279,7 +270,6 @@ export class PrinterService {
     } catch (e) {
         this.log("Print failed, retrying...");
         console.warn("First print attempt failed, retrying once...", e);
-        // Simple retry logic: wait a bit, try to restore connection again, then print
         await new Promise(r => setTimeout(r, 1000));
         await this.restoreConnection();
         await performPrint();
