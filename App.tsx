@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -15,11 +15,17 @@ const App: React.FC = () => {
     device: null,
     characteristic: null,
   });
+  
+  // Debug logs
+  const [logs, setLogs] = useState<string[]>([]);
+  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-9), msg]); // Keep last 10
 
-  // Listen for unexpected disconnects
+  // Setup printer listeners
   useEffect(() => {
+    printerService.setLogger(addLog);
     printerService.setOnDisconnect(() => {
       console.log("App detected printer disconnect");
+      addLog("Status: Disconnected");
       setPrinterStatus(prev => ({
         ...prev,
         isConnected: false,
@@ -31,6 +37,7 @@ const App: React.FC = () => {
 
   const handleConnectPrinter = async () => {
     try {
+      setLogs([]); // Clear previous logs
       const device = await printerService.connect();
       setPrinterStatus({
         isConnected: true,
@@ -41,6 +48,7 @@ const App: React.FC = () => {
     } catch (e: any) {
       console.error(e);
       const msg = e.message || "Unknown error";
+      addLog(`Error: ${msg}`);
       // Only show alert if it's NOT a user cancellation
       if (!msg.includes("User cancelled")) {
         alert(`接続エラー:\n${msg}\n\nペアリングの問題が続く場合は、AndroidのBluetooth設定からMP-B20を削除(ペアリング解除)してからやり直してください。`);
@@ -76,7 +84,7 @@ const App: React.FC = () => {
 
     // Try to auto-restore connection silently
     if (!isReady) {
-       console.log("Printer not ready, trying to restore silently...");
+       addLog("Auto-reconnecting...");
        const restored = await printerService.restoreConnection();
        if (restored) {
          setPrinterStatus(prev => ({ ...prev, isConnected: true }));
@@ -85,9 +93,6 @@ const App: React.FC = () => {
     }
 
     if (!isReady) {
-      // DO NOT call handleConnectPrinter() automatically.
-      // This causes the "infinite loop of connection prompts".
-      // Instead, show an error and make the user click "Connect Printer".
       alert("プリンタと接続されていません。\n下の「Connect Printer」ボタンを押して再接続してください。");
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));
       return; 
@@ -226,6 +231,21 @@ const App: React.FC = () => {
                 <Printer size={20} />
                 Print Receipt
               </button>
+
+              {/* Debug Log Console */}
+              <div className="mt-6 bg-black text-green-400 p-3 rounded-lg font-mono text-xs overflow-hidden">
+                <div className="flex items-center gap-2 mb-2 border-b border-gray-800 pb-1">
+                   <Terminal size={12} />
+                   <span className="font-bold">Debug Log</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
+                  {logs.map((log, i) => (
+                    <div key={i} className="break-all border-b border-gray-900 pb-0.5">{log}</div>
+                  ))}
+                </div>
+              </div>
+
             </div>
           </div>
         );

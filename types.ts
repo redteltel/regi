@@ -74,5 +74,7 @@ declare global {
       writeWithoutResponse: boolean;
     };
     writeValue(value: BufferSource): Promise<void>;
+    writeValueWithResponse(value: BufferSource): Promise<void>;
+    writeValueWithoutResponse(value: BufferSource): Promise<void>;
   }
 }

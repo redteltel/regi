@@ -3,7 +3,7 @@ import { CartItem } from '../types';
 // Seiko Instruments (SII) often uses this specific service UUID for their mobile printers via BLE.
 const SII_SERVICE_UUID = "000018f0-0000-1000-8000-00805f9b34fb";
 // Common writable characteristic for SII
-const SII_CHAR_UUID = "00002af1-0000-1000-8000-00805f9b34fb";
+const SII_CHAR_UUID_PREFIX = "00002af1"; 
 
 // ESC/POS Commands
 const ESC = 0x1B;
@@ -23,6 +23,16 @@ export class PrinterService {
   private device: BluetoothDevice | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private onDisconnectCallback: (() => void) | null = null;
+  private logger: ((msg: string) => void) | null = null;
+
+  setLogger(callback: (msg: string) => void) {
+    this.logger = callback;
+  }
+
+  private log(msg: string) {
+    console.log(`[Printer] ${msg}`);
+    if (this.logger) this.logger(msg);
+  }
 
   // Set a callback to update UI when the printer disconnects unexpectedly
   setOnDisconnect(callback: () => void) {
@@ -30,7 +40,7 @@ export class PrinterService {
   }
 
   private handleDisconnect = () => {
-    console.log("Printer disconnected via GATT event");
+    this.log("Disconnected via GATT event");
     this.characteristic = null;
     if (this.onDisconnectCallback) {
       this.onDisconnectCallback();
@@ -39,16 +49,20 @@ export class PrinterService {
 
   async connect(): Promise<BluetoothDevice> {
     try {
-      console.log("Requesting Bluetooth Device...");
+      this.log("Requesting Bluetooth Device...");
+      // Explicitly include the SII UUID and standard UUIDs to ensure Android allows access
       const device = await navigator.bluetooth.requestDevice({
         filters: [{ namePrefix: 'MP-B20' }],
         optionalServices: [
             SII_SERVICE_UUID,
             '000018f0-0000-1000-8000-00805f9b34fb',
+            // Short UUIDs sometimes help on certain Android versions
             0x18f0,
+            // Generic Access/Attribute
             0x1800,
             0x1801,
-            'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
+            // Device Information
+            0x180A
         ] 
       });
 
@@ -59,41 +73,63 @@ export class PrinterService {
       this.device = device;
       this.device.addEventListener('gattserverdisconnected', this.handleDisconnect);
 
-      console.log("Device selected:", device.name);
+      this.log(`Device selected: ${device.name}`);
+      this.log("Connecting to GATT Server...");
       
       const server = await device.gatt?.connect();
       if (!server) throw new Error("Could not connect to GATT Server");
-      console.log("GATT Server connected");
+      this.log("GATT connected");
 
-      // Increased delay to 3000ms to give ample time for Android pairing dialog
-      await new Promise(r => setTimeout(r, 3000));
+      // Critical delay for Android pairing/connection stability
+      this.log("Stabilizing connection (500ms)...");
+      await new Promise(r => setTimeout(r, 500));
 
-      console.log("Getting primary services...");
+      this.log("Discovering services...");
       const services = await server.getPrimaryServices();
+      this.log(`Found ${services.length} services`);
       
-      let foundChar = false;
+      let foundChar: BluetoothRemoteGATTCharacteristic | null = null;
+      let preferredChar: BluetoothRemoteGATTCharacteristic | null = null;
+
       for (const service of services) {
+        this.log(`Service: ${service.uuid}`);
         try {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
-            if (char.properties.write || char.properties.writeWithoutResponse) {
-              this.characteristic = char;
-              foundChar = true;
-              break;
+            const props = char.properties;
+            const uuid = char.uuid;
+            const canWrite = props.write || props.writeWithoutResponse;
+            
+            // this.log(` > Char: ${uuid.substring(0,8)}... W:${props.write} WNR:${props.writeWithoutResponse}`);
+
+            if (canWrite) {
+                // If this matches the SII specific characteristic, prefer it
+                if (uuid.startsWith(SII_CHAR_UUID_PREFIX) || uuid === SII_SERVICE_UUID) {
+                    preferredChar = char;
+                    this.log(` > Found preferred write char: ${uuid}`);
+                }
+                // Keep the first writable one as fallback
+                if (!foundChar) foundChar = char;
             }
           }
         } catch (e) {
-          console.warn(`Failed to get characteristics for service ${service.uuid}`, e);
+          this.log(`Failed to read service ${service.uuid}`);
         }
-        if (foundChar) break;
       }
+
+      this.characteristic = preferredChar || foundChar;
 
       if (!this.characteristic) {
-        throw new Error("プリンタへの書き込み権限が見つかりません。Androidの設定でペアリングを解除してから、再試行してください。");
+        throw new Error("No writable characteristic found. Please unpair and retry.");
       }
+      
+      this.log(`Selected Char: ${this.characteristic.uuid}`);
+      const p = this.characteristic.properties;
+      this.log(`Properties - Write: ${p.write}, NoResp: ${p.writeWithoutResponse}`);
 
       return device;
-    } catch (error) {
+    } catch (error: any) {
+      this.log(`Connection error: ${error.message || error}`);
       console.error("Bluetooth connection error:", error);
       throw error;
     }
@@ -107,26 +143,30 @@ export class PrinterService {
     if (this.device.gatt?.connected && this.characteristic) return true;
 
     try {
-      console.log("Attempting to restore connection...");
+      this.log("Attempting auto-reconnect...");
       const server = await this.device.gatt?.connect();
       if (!server) return false;
       
-      await new Promise(r => setTimeout(r, 1000)); // Short delay for stability
+      await new Promise(r => setTimeout(r, 500)); // Short delay
+      
+      // We often need to re-fetch services after a reconnect
       const services = await server.getPrimaryServices();
       
+      // Quick scan for writable
       for (const service of services) {
         try {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
             if (char.properties.write || char.properties.writeWithoutResponse) {
               this.characteristic = char;
+              this.log("Reconnected successfully.");
               return true;
             }
           }
         } catch (e) { continue; }
       }
     } catch (e) {
-      console.warn("Restoration failed:", e);
+      this.log(`Reconnect failed: ${e}`);
     }
     return false;
   }
@@ -140,6 +180,7 @@ export class PrinterService {
     }
     this.device = null;
     this.characteristic = null;
+    this.log("Disconnected.");
   }
 
   isConnected(): boolean {
@@ -156,10 +197,27 @@ export class PrinterService {
     
     const array = Array.isArray(data) ? new Uint8Array(data) : data;
     
+    // Check property capability
+    const canWriteNoResp = this.characteristic.properties.writeWithoutResponse;
+
     const CHUNK_SIZE = 50; 
     for (let i = 0; i < array.length; i += CHUNK_SIZE) {
       const chunk = array.slice(i, i + CHUNK_SIZE);
-      await this.characteristic.writeValue(chunk);
+      
+      try {
+        if (canWriteNoResp) {
+            // Prefer NoResponse for speed and sometimes better stability on Android
+            await this.characteristic.writeValueWithoutResponse(chunk);
+        } else {
+            // Fallback to standard write
+            await this.characteristic.writeValue(chunk);
+        }
+      } catch (e) {
+          // If the specific method failed, try the generic one as last resort
+          try { await this.characteristic.writeValue(chunk); } catch (err) { throw err; }
+      }
+
+      // Small delay between chunks to prevent buffer overflow
       await new Promise(r => setTimeout(r, 20));
     }
   }
@@ -175,6 +233,7 @@ export class PrinterService {
 
     // Wrapper to perform printing
     const performPrint = async () => {
+        this.log("Sending print data...");
         // Initialize
         await this.writeCommand([ESC, AT]);
 
@@ -218,11 +277,13 @@ export class PrinterService {
         
         // Feed and Cut
         await this.writeCommand([LF, LF, LF, LF]);
+        this.log("Print sent.");
     };
 
     try {
         await performPrint();
     } catch (e) {
+        this.log("Print failed, retrying...");
         console.warn("First print attempt failed, retrying once...", e);
         // Simple retry logic: wait a bit, try to restore connection again, then print
         await new Promise(r => setTimeout(r, 1000));
