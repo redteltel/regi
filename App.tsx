@@ -244,12 +244,12 @@ const App: React.FC = () => {
 
               {/* Enhanced Debug Log (h-64, text-xs) */}
               <div className="mt-4 bg-black p-3 rounded-lg border border-gray-800 shadow-inner">
-                {/* Warning Message */}
-                <div className="text-red-500 font-bold text-sm mb-2 text-center animate-pulse bg-red-900/20 p-2 rounded">
-                   ※ 接続後、15秒間そのままお待ちください
+                {/* Status Indicator */}
+                <div className="text-gray-400 text-xs mb-2 border-b border-gray-800 pb-1">
+                    System Logs (Service Discovery)
                 </div>
 
-                <div className="text-green-400 font-mono text-xs h-64 overflow-y-auto mb-2">
+                <div className="text-green-400 font-mono text-xs h-40 overflow-y-auto mb-2">
                   <div className="flex flex-col gap-0.5">
                     {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
                     {logs.slice().reverse().map((log, i) => (

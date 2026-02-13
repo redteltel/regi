@@ -23,6 +23,7 @@ export class PrinterService {
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private onDisconnectCallback: (() => void) | null = null;
   private logger: ((msg: string) => void) | null = null;
+  private intentionalDisconnect = false;
 
   setLogger(callback: (msg: string) => void) {
     this.logger = callback;
@@ -40,16 +41,29 @@ export class PrinterService {
   private handleDisconnect = () => {
     this.log("Disconnected via GATT event");
     this.characteristic = null;
+
+    if (!this.intentionalDisconnect) {
+        this.log("⚠️ Unexpected disconnect. Attempting Keep-Alive reconnect...");
+        // Simple exponential backoff or immediate retry could go here.
+        // For now, we notify the UI, but we could also try to auto-reconnect silently.
+        // Given Web Bluetooth limitations, silent reconnect often fails without user gesture,
+        // but we can try if the device object is still valid.
+        this.restoreConnection().then(success => {
+            if (success) this.log("✅ Auto-reconnected!");
+            else this.log("❌ Auto-reconnect failed.");
+        });
+    }
+
     if (this.onDisconnectCallback) {
       this.onDisconnectCallback();
     }
   };
 
   async connect(): Promise<BluetoothDevice> {
+    this.intentionalDisconnect = false;
     try {
       this.log("Requesting Device (Accept ALL)...");
       
-      // 1. Device Selection: Open filter completely (No name filters)
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
@@ -72,19 +86,11 @@ export class PrinterService {
       this.log("Connecting GATT...");
       const server = await device.gatt?.connect();
       if (!server) throw new Error("GATT Connect failed");
-      this.log("Connected.");
+      this.log("Connected. Starting Discovery Loop...");
 
-      // 2. POST-CONNECT DELAY (15 seconds) - CRITICAL for Android 14 Pairing
-      this.log("!!! PAIRING WAIT !!!");
-      this.log("Waiting 15s for OS Dialog...");
-      for (let i = 15; i > 0; i--) {
-        this.log(`Wait: ${i}s...`);
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      this.log("Stabilization complete.");
-
-      // 3. Service Discovery
-      await this.discoverServices(server);
+      // DYNAMIC DISCOVERY LOOP (Keep-Alive & Retry)
+      // Instead of a static wait, we poll for services.
+      await this.pollForServices(server);
 
       return device;
     } catch (error: any) {
@@ -94,80 +100,118 @@ export class PrinterService {
     }
   }
 
-  // Separate method to allow retry without reconnecting socket
   async retryDiscovery() {
       if (!this.device || !this.device.gatt?.connected) {
-          throw new Error("Device not connected. Please connect first.");
+          // Try to reconnect the socket if allowed
+          if (this.device) {
+             this.log("Socket closed. Reconnecting...");
+             await this.device.gatt?.connect();
+          } else {
+             throw new Error("Device not connected. Please connect first.");
+          }
       }
-      this.log("Retrying Service Discovery...");
-      // Add a small delay before retry
-      await new Promise(r => setTimeout(r, 2000));
-      await this.discoverServices(this.device.gatt);
+      this.log("Manual Retry triggered...");
+      if (this.device.gatt) {
+          await this.pollForServices(this.device.gatt);
+      }
   }
 
-  private async discoverServices(server: BluetoothRemoteGATTServer) {
+  private async pollForServices(server: BluetoothRemoteGATTServer) {
+      const MAX_ATTEMPTS = 10;
+      const INTERVAL_MS = 3000;
       let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
-      
-      try {
-        this.log(`Fetching ALL Services (no-filter)...`);
-        // FORCE fetch all services (no argument)
-        const services = await server.getPrimaryServices();
-        this.log(`Found ${services.length} services.`);
 
-        if (services.length === 0) {
-             throw new Error("No services returned. Try Retry.");
-        }
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          // 1. Keep-Alive Check
+          if (!server.connected) {
+              this.log(`⚠️ Connection dropped (Attempt ${attempt}). Reconnecting...`);
+              try {
+                  await server.connect();
+                  this.log("✅ Reconnected.");
+              } catch (e) {
+                  this.log("❌ Reconnect failed. Retrying...");
+                  await new Promise(r => setTimeout(r, 1000));
+                  continue;
+              }
+          }
 
-        // Iterate and Log ALL UUIDs first
-        for (const service of services) {
-            this.log(`[Svc] ${service.uuid}`);
-            
-            // Optimization: If we already found a target, we can skip detailed lookup, 
-            // but for debugging we might want to see everything. 
-            // Let's look for characteristics in this service.
-            try {
-                const chars = await service.getCharacteristics();
-                for (const char of chars) {
-                    const props = char.properties;
-                    const isWritable = props.write || props.writeWithoutResponse;
-                    
-                    // Log characteristic
-                    this.log(`  -[Char] ${char.uuid.slice(0,8)}... [WR:${isWritable ? 'YES' : 'NO'}]`);
-                    
-                    if (isWritable) {
-                        // Check for SII Specific match
-                        if (service.uuid === SII_SERVICE_UUID || 
-                            char.uuid === SII_WRITE_UUID_1 || 
-                            char.uuid === SII_WRITE_UUID_2) {
-                            this.log(`  >>> PRIORITY MATCH FOUND!`);
-                            targetChar = char;
-                        }
-                        // Fallback match (First writable found)
-                        else if (!targetChar) {
-                            targetChar = char;
-                            this.log(`  (Backup candidate)`);
-                        }
-                    }
-                }
-            } catch (e) { 
-                this.log(`  x Access Denied to chars in this service`);
-            }
-        }
+          this.log(`Searching services (Attempt ${attempt}/${MAX_ATTEMPTS})...`);
 
-      } catch (e: any) {
-          this.log(`Discovery Error: ${e.message}`);
-          throw e;
+          try {
+              // 2. Fetch All Services
+              // Using plural getPrimaryServices() to get the full list
+              const services = await server.getPrimaryServices();
+              this.log(`> Found ${services.length} services.`);
+
+              if (services.length > 0) {
+                  // 3. Prioritize SII UUID
+                  const siiService = services.find(s => s.uuid === SII_SERVICE_UUID);
+                  if (siiService) {
+                      this.log(">>> Found SII MP-B20 Service!");
+                      targetChar = await this.findWritableChar(siiService, true);
+                      if (targetChar) break;
+                  }
+
+                  // 4. Fallback to other services
+                  if (!targetChar) {
+                      for (const service of services) {
+                          if (service.uuid === SII_SERVICE_UUID) continue; // Already checked
+                          this.log(`> Checking generic svc: ${service.uuid.slice(0,8)}...`);
+                          targetChar = await this.findWritableChar(service, false);
+                          if (targetChar) break;
+                      }
+                  }
+              }
+          } catch (e: any) {
+              this.log(`> Discovery partial fail: ${e.message}`);
+          }
+
+          if (targetChar) break;
+
+          if (attempt < MAX_ATTEMPTS) {
+              this.log(`> No writable char yet. Waiting ${INTERVAL_MS/1000}s...`);
+              await new Promise(r => setTimeout(r, INTERVAL_MS));
+          }
       }
 
       if (!targetChar) {
-          this.log("CRITICAL: Failed to find writable port.");
-          throw new Error("No writable characteristic found.");
+          this.log("CRITICAL: Discovery timeout. No writable characteristic found.");
+          throw new Error("Service discovery failed after retries.");
       }
 
       this.characteristic = targetChar;
       this.log(`Bound to: ${this.characteristic.uuid.slice(0,8)}...`);
+      await this.sendWakeup();
+  }
 
-      // Wake up / Test
+  private async findWritableChar(service: BluetoothRemoteGATTService, isPriority: boolean): Promise<BluetoothRemoteGATTCharacteristic | null> {
+      try {
+          const chars = await service.getCharacteristics();
+          for (const char of chars) {
+              const props = char.properties;
+              const isWritable = props.write || props.writeWithoutResponse;
+              
+              if (isWritable) {
+                  if (isPriority) {
+                       // If we are in the SII service, look for the specific Write UUIDs first
+                       if (char.uuid === SII_WRITE_UUID_1 || char.uuid === SII_WRITE_UUID_2) {
+                           this.log(">>> MATCH: SII Write Characteristic!");
+                           return char;
+                       }
+                  }
+                  // Return first writable if we are desperate or just scanning
+                  this.log(`> Candidate found: ${char.uuid.slice(0,8)}`);
+                  return char;
+              }
+          }
+      } catch (e) {
+          this.log(`> Access denied to service ${service.uuid.slice(0,8)}`);
+      }
+      return null;
+  }
+
+  private async sendWakeup() {
+      if (!this.characteristic) return;
       try {
           this.log("Sending wakeup byte...");
           const nullByte = new Uint8Array([0x00]);
@@ -186,12 +230,21 @@ export class PrinterService {
     if (!this.device) return false;
     if (this.device.gatt?.connected && this.characteristic) return true;
     try {
-        await this.device.gatt?.connect();
-        return true; 
+        this.log("Restoring connection...");
+        const server = await this.device.gatt?.connect();
+        if (server) {
+             // If we reconnected, we might need to re-bind the characteristic if it was invalidated
+             if (!this.characteristic) {
+                 await this.pollForServices(server);
+             }
+             return true;
+        }
+        return false;
     } catch { return false; }
   }
 
   disconnect() {
+    this.intentionalDisconnect = true;
     if (this.device) {
       this.device.removeEventListener('gattserverdisconnected', this.handleDisconnect);
       if (this.device.gatt?.connected) {
