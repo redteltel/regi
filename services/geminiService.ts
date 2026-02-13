@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// Trim the API key to remove accidental newlines or spaces that cause "String contains non ISO-8859-1 code point" errors.
-const apiKey = (process.env.API_KEY || '').trim();
+// Strictly remove any whitespace or newlines from the API key to prevent "String contains non ISO-8859-1 code point" errors.
+const apiKey = (process.env.API_KEY || '').replace(/[\r\n\s]/g, '');
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
 // Using gemini-3-flash-preview as recommended for basic text tasks

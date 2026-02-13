@@ -45,22 +45,27 @@ export class PrinterService {
     if (this.onDisconnectCallback) {
       this.onDisconnectCallback();
     }
+    // Attempt auto-reconnect if it was an accidental drop
+    this.log("Attempting silent reconnect...");
+    this.restoreConnection().catch(() => {});
   };
 
   async connect(): Promise<BluetoothDevice> {
     try {
       this.log("Requesting Bluetooth Device...");
-      // Pixel 9a Fix: Include UUID in filters AND optionalServices
+      
+      // Pixel 9a / Android Fix: 
+      // Simplified filters to just namePrefix. 
+      // Removed services from filters to avoid discovery issues on some Android versions.
       const device = await navigator.bluetooth.requestDevice({
         filters: [
-            { namePrefix: 'MP-B20' },
-            { services: [SII_SERVICE_UUID] }
+            { namePrefix: 'MP-B20' }
         ],
         optionalServices: [
             SII_SERVICE_UUID,
             '000018f0-0000-1000-8000-00805f9b34fb',
             0x18f0,
-            0x1800,
+            0x1800, 
             0x1801,
             0x180A
         ] 
@@ -80,9 +85,9 @@ export class PrinterService {
       if (!server) throw new Error("Could not connect to GATT Server");
       this.log("GATT connected");
 
-      // Pixel 9a Fix: 800ms delay to stabilize connection before service discovery
-      this.log("Stabilizing connection (800ms)...");
-      await new Promise(r => setTimeout(r, 800));
+      // Pixel 9a Fix: Increased delay to 1500ms to stabilize GATT before service discovery
+      this.log("Stabilizing connection (1500ms)...");
+      await new Promise(r => setTimeout(r, 1500));
 
       this.log("Discovering services...");
       const services = await server.getPrimaryServices();
@@ -141,7 +146,8 @@ export class PrinterService {
       const server = await this.device.gatt?.connect();
       if (!server) return false;
       
-      await new Promise(r => setTimeout(r, 800)); // 800ms delay for restore as well
+      // Delay for restore as well
+      await new Promise(r => setTimeout(r, 1500));
       
       const services = await server.getPrimaryServices();
       
