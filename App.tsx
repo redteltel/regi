@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -53,6 +53,16 @@ const App: React.FC = () => {
       if (!msg.includes("User cancelled")) {
         alert(`接続エラー:\n${msg}\n\nペアリングの問題が続く場合は、AndroidのBluetooth設定からMP-B20を削除(ペアリング解除)してからやり直してください。`);
       }
+    }
+  };
+
+  const handleRetryDiscovery = async () => {
+    try {
+      addLog("Manual Retry triggered...");
+      await printerService.retryDiscovery();
+      alert("再検索が完了しました。");
+    } catch (e: any) {
+      addLog(`Retry Error: ${e.message}`);
     }
   };
 
@@ -233,13 +243,31 @@ const App: React.FC = () => {
               </button>
 
               {/* Enhanced Debug Log (h-64, text-xs) */}
-              <div className="mt-4 bg-black text-green-400 p-3 rounded-lg font-mono text-xs h-64 overflow-y-auto shadow-inner border border-gray-800">
-                <div className="flex flex-col gap-0.5">
-                  {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
-                  {logs.slice().reverse().map((log, i) => (
-                    <div key={i} className="break-all border-b border-gray-800/50 pb-0.5 hover:bg-gray-900">{log}</div>
-                  ))}
+              <div className="mt-4 bg-black p-3 rounded-lg border border-gray-800 shadow-inner">
+                {/* Warning Message */}
+                <div className="text-red-500 font-bold text-sm mb-2 text-center animate-pulse bg-red-900/20 p-2 rounded">
+                   ※ 接続後、15秒間そのままお待ちください
                 </div>
+
+                <div className="text-green-400 font-mono text-xs h-64 overflow-y-auto mb-2">
+                  <div className="flex flex-col gap-0.5">
+                    {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
+                    {logs.slice().reverse().map((log, i) => (
+                      <div key={i} className="break-all border-b border-gray-800/50 pb-0.5 hover:bg-gray-900">{log}</div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Retry Button */}
+                {printerStatus.isConnected && (
+                    <button 
+                        onClick={handleRetryDiscovery}
+                        className="w-full bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 rounded border border-gray-600 flex items-center justify-center gap-2"
+                    >
+                        <RefreshCw size={12} />
+                        Retry Discovery (サービス再検索)
+                    </button>
+                )}
               </div>
 
             </div>

@@ -69,99 +69,99 @@ export class PrinterService {
       const displayName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : "Unknown Device");
       this.log(`Selected: ${displayName}`);
 
-      // 2. PRE-CONNECT DELAY (10 seconds)
-      this.log("WAITING 10s BEFORE CONNECT...");
-      for (let i = 10; i > 0; i--) {
-        this.log(`Pre-Connect Wait: ${i}s...`);
-        await new Promise(r => setTimeout(r, 1000));
-      }
-
       this.log("Connecting GATT...");
       const server = await device.gatt?.connect();
       if (!server) throw new Error("GATT Connect failed");
       this.log("Connected.");
 
-      // 3. POST-CONNECT DELAY (10 seconds)
-      this.log("WAITING 10s AFTER CONNECT (Stabilizing)...");
-      for (let i = 10; i > 0; i--) {
-        this.log(`Post-Connect Wait: ${i}s...`);
+      // 2. POST-CONNECT DELAY (15 seconds) - CRITICAL for Android 14 Pairing
+      this.log("!!! PAIRING WAIT !!!");
+      this.log("Waiting 15s for OS Dialog...");
+      for (let i = 15; i > 0; i--) {
+        this.log(`Wait: ${i}s...`);
         await new Promise(r => setTimeout(r, 1000));
       }
       this.log("Stabilization complete.");
 
-      // 4. Service Discovery with Retry
+      // 3. Service Discovery
+      await this.discoverServices(server);
+
+      return device;
+    } catch (error: any) {
+      this.log(`Conn Error: ${error.message || error}`);
+      console.error(error);
+      throw error;
+    }
+  }
+
+  // Separate method to allow retry without reconnecting socket
+  async retryDiscovery() {
+      if (!this.device || !this.device.gatt?.connected) {
+          throw new Error("Device not connected. Please connect first.");
+      }
+      this.log("Retrying Service Discovery...");
+      // Add a small delay before retry
+      await new Promise(r => setTimeout(r, 2000));
+      await this.discoverServices(this.device.gatt);
+  }
+
+  private async discoverServices(server: BluetoothRemoteGATTServer) {
       let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
-      const MAX_ATTEMPTS = 3;
+      
+      try {
+        this.log(`Fetching ALL Services (no-filter)...`);
+        // FORCE fetch all services (no argument)
+        const services = await server.getPrimaryServices();
+        this.log(`Found ${services.length} services.`);
 
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        this.log(`Finding Services (Attempt ${attempt}/${MAX_ATTEMPTS})...`);
-        
-        try {
-            // STRATEGY A: Direct "Hitman" Approach (Target known SII UUID directly)
+        if (services.length === 0) {
+             throw new Error("No services returned. Try Retry.");
+        }
+
+        // Iterate and Log ALL UUIDs first
+        for (const service of services) {
+            this.log(`[Svc] ${service.uuid}`);
+            
+            // Optimization: If we already found a target, we can skip detailed lookup, 
+            // but for debugging we might want to see everything. 
+            // Let's look for characteristics in this service.
             try {
-                this.log(`Trying Direct SII Service...`);
-                const service = await server.getPrimaryService(SII_SERVICE_UUID);
-                this.log(`> Found SII Service! Getting Char...`);
-                
-                try {
-                    targetChar = await service.getCharacteristic(SII_WRITE_UUID_1);
-                    this.log(`> Found Primary Write Char!`);
-                    break;
-                } catch {
-                     try {
-                        targetChar = await service.getCharacteristic(SII_WRITE_UUID_2);
-                        this.log(`> Found Secondary Write Char!`);
-                        break;
-                     } catch (e) { this.log(`> Direct Char lookup failed.`); }
-                }
-            } catch (e) {
-                this.log(`Direct SII lookup failed.`);
-            }
-
-            if (targetChar) break;
-
-            // STRATEGY B: Brute Force Scan (List All)
-            this.log(`Scanning ALL services...`);
-            const services = await server.getPrimaryServices();
-            this.log(`Found ${services.length} services via scan.`);
-
-            if (services.length === 0) {
-                 throw new Error("No services returned.");
-            }
-
-            for (const service of services) {
-                this.log(`Scanned Svc: ${service.uuid.slice(0,8)}...`);
-                try {
-                    const chars = await service.getCharacteristics();
-                    for (const char of chars) {
-                        const props = char.properties;
-                        const isWritable = props.write || props.writeWithoutResponse;
-                        
-                        if (isWritable && !targetChar) {
+                const chars = await service.getCharacteristics();
+                for (const char of chars) {
+                    const props = char.properties;
+                    const isWritable = props.write || props.writeWithoutResponse;
+                    
+                    // Log characteristic
+                    this.log(`  -[Char] ${char.uuid.slice(0,8)}... [WR:${isWritable ? 'YES' : 'NO'}]`);
+                    
+                    if (isWritable) {
+                        // Check for SII Specific match
+                        if (service.uuid === SII_SERVICE_UUID || 
+                            char.uuid === SII_WRITE_UUID_1 || 
+                            char.uuid === SII_WRITE_UUID_2) {
+                            this.log(`  >>> PRIORITY MATCH FOUND!`);
                             targetChar = char;
-                            this.log(`MATCHED: ${char.uuid}`);
+                        }
+                        // Fallback match (First writable found)
+                        else if (!targetChar) {
+                            targetChar = char;
+                            this.log(`  (Backup candidate)`);
                         }
                     }
-                } catch (e) { /* ignore access errors */ }
-                
-                if (targetChar) break;
+                }
+            } catch (e) { 
+                this.log(`  x Access Denied to chars in this service`);
             }
-
-        } catch (e: any) {
-            this.log(`Scan Error: ${e.message}`);
         }
 
-        if (targetChar) break;
-        
-        if (attempt < MAX_ATTEMPTS) {
-            this.log("Retrying in 2s...");
-            await new Promise(r => setTimeout(r, 2000));
-        }
+      } catch (e: any) {
+          this.log(`Discovery Error: ${e.message}`);
+          throw e;
       }
 
       if (!targetChar) {
-          this.log("CRITICAL: Failed to find writable port after retries.");
-          throw new Error("Service discovery failed. Please restart Printer and App.");
+          this.log("CRITICAL: Failed to find writable port.");
+          throw new Error("No writable characteristic found.");
       }
 
       this.characteristic = targetChar;
@@ -180,13 +180,6 @@ export class PrinterService {
       } catch (e) {
           this.log(`Wakeup warning: ${e}`);
       }
-
-      return device;
-    } catch (error: any) {
-      this.log(`Conn Error: ${error.message || error}`);
-      console.error(error);
-      throw error;
-    }
   }
 
   async restoreConnection(): Promise<boolean> {
