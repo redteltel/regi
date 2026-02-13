@@ -193,7 +193,8 @@ export class PrinterService {
     // Check property capability
     const canWriteNoResp = this.characteristic.properties.writeWithoutResponse;
 
-    const CHUNK_SIZE = 50; 
+    // Reduced chunk size to 20 bytes for Android stability
+    const CHUNK_SIZE = 20; 
     for (let i = 0; i < array.length; i += CHUNK_SIZE) {
       const chunk = array.slice(i, i + CHUNK_SIZE);
       

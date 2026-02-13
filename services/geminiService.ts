@@ -1,9 +1,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// The API Key must be obtained exclusively from process.env.API_KEY.
-// Do NOT hardcode the key here. Ensure your build environment provides this variable.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Trim the API key to remove accidental newlines or spaces that cause "String contains non ISO-8859-1 code point" errors.
+const apiKey = (process.env.API_KEY || '').trim();
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 // Using gemini-3-flash-preview as recommended for basic text tasks
 const MODEL_NAME = 'gemini-3-flash-preview';
