@@ -17,3 +17,4 @@ export default defineConfig({
     sourcemap: false
   }
 });
+// update-trigger
