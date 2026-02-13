@@ -72,6 +72,8 @@ declare global {
     properties: {
       write: boolean;
       writeWithoutResponse: boolean;
+      read: boolean;
+      notify: boolean;
     };
     writeValue(value: BufferSource): Promise<void>;
     writeValueWithResponse(value: BufferSource): Promise<void>;

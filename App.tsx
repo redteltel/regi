@@ -16,9 +16,9 @@ const App: React.FC = () => {
     characteristic: null,
   });
   
-  // Debug logs - increased buffer to see full scan
+  // Debug logs - Increased to 99 to capture full UUID lists
   const [logs, setLogs] = useState<string[]>([]);
-  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-49), msg]); // Keep last 50
+  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-99), msg]);
 
   useEffect(() => {
     printerService.setLogger(addLog);
