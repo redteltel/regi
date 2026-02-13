@@ -60,11 +60,13 @@ declare global {
     connect(): Promise<BluetoothRemoteGATTServer>;
     disconnect(): void;
     getPrimaryServices(service?: string | number): Promise<BluetoothRemoteGATTService[]>;
+    getPrimaryService(service: string | number): Promise<BluetoothRemoteGATTService>;
   }
 
   interface BluetoothRemoteGATTService {
     uuid: string;
     getCharacteristics(characteristic?: string | number): Promise<BluetoothRemoteGATTCharacteristic[]>;
+    getCharacteristic(characteristic: string | number): Promise<BluetoothRemoteGATTCharacteristic>;
   }
 
   interface BluetoothRemoteGATTCharacteristic {

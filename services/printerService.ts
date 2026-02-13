@@ -13,13 +13,12 @@ const EMPHASIS_OFF = [ESC, 0x45, 0];
 const SIZE_NORMAL = [GS, 0x21, 0x00];
 const SIZE_DOUBLE = [GS, 0x21, 0x11];
 
-// PRIORITY TARGETS for MP-B20
-const TARGET_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"; // Microchip / SII Private Service
-const TARGET_WRITE_UUID   = "49535343-1e4d-4bd9-ba61-802d64c64e01"; // Specific Write Char
-const ALT_WRITE_UUID      = "49535343-8841-43f4-a8d4-ecbe34729bb3"; // Transparent UART
-
-const FALLBACK_SERVICE_UUID = "000018f0-0000-1000-8000-00805f9b34fb"; // SII Standard Service
-const FALLBACK_WRITE_UUID   = "00002af1-0000-1000-8000-00805f9b34fb"; // SII Standard Write
+// PRIORITY TARGETS for MP-B20 (SII / Microchip)
+// Service: 49535343-fe7d-4ae5-8fa9-9fafd205e455
+// Write Char: 49535343-1e4d-4bd9-ba61-802d64c64e01 or 49535343-8841-43f4-a8d4-ecbe34729bb3
+const SII_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
+const SII_WRITE_UUID_1 = "49535343-1e4d-4bd9-ba61-802d64c64e01";
+const SII_WRITE_UUID_2 = "49535343-8841-43f4-a8d4-ecbe34729bb3";
 
 export class PrinterService {
   private device: BluetoothDevice | null = null;
@@ -50,14 +49,14 @@ export class PrinterService {
 
   async connect(): Promise<BluetoothDevice> {
     try {
-      this.log("Requesting Device (MP-B20)...");
+      this.log("Requesting Device (Accept ALL)...");
       
+      // 1. Device Selection: Open filter completely
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
-            TARGET_SERVICE_UUID,
-            FALLBACK_SERVICE_UUID,
-            "49535343-fe7d-4ae5-8fa9-9fafd205e455", // Explicit string
+            SII_SERVICE_UUID,
+            "000018f0-0000-1000-8000-00805f9b34fb", // Standard SII
             0x18f0, 0x1800, 0x1801, 0x180A, 0xFF00, 0xFF02 // Generics
         ] 
       });
@@ -69,7 +68,7 @@ export class PrinterService {
       this.device = device;
       this.device.addEventListener('gattserverdisconnected', this.handleDisconnect);
 
-      const displayName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : "Unknown");
+      const displayName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : "Unknown Device");
       this.log(`Selected: ${displayName}`);
 
       this.log("Connecting GATT...");
@@ -77,98 +76,108 @@ export class PrinterService {
       if (!server) throw new Error("GATT Connect failed");
       this.log("Connected.");
 
-      // CRITICAL: 7000ms delay for Pixel 9a stability
-      this.log("WAITING 7 SECONDS (Stabilizing)...");
-      await new Promise(r => setTimeout(r, 7000));
+      // 2. STABILIZATION DELAY (10 seconds)
+      // Visual countdown for user assurance
+      for (let i = 10; i > 0; i--) {
+        this.log(`Waiting ${i}s for Android GATT...`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      this.log("Stabilization complete.");
 
-      this.log("Discovering Services...");
-      const services = await server.getPrimaryServices();
-      this.log(`Found ${services.length} services.`);
-      
+      // 3. Service Discovery with Retry & Direct Targeting
       let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
-      let fallbackChar: BluetoothRemoteGATTCharacteristic | null = null;
+      const MAX_ATTEMPTS = 3;
 
-      // Scan loop
-      for (const service of services) {
-        const sUuid = service.uuid;
-        // Check if this is our Priority Service
-        const isPriorityService = sUuid === TARGET_SERVICE_UUID;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        this.log(`Finding Services (Attempt ${attempt}/${MAX_ATTEMPTS})...`);
         
-        if (isPriorityService) {
-            this.log(`>>> FOUND PRIORITY SERVICE: ${sUuid.slice(0,8)}...`);
-        } else {
-            this.log(`[S] ${sUuid.slice(0,8)}...`);
-        }
-
         try {
-          const characteristics = await service.getCharacteristics();
-          
-          for (const char of characteristics) {
-            const cUuid = char.uuid;
-            const props = char.properties;
-            const isWritable = props.write || props.writeWithoutResponse;
-            
-            this.log(`  -[C] ${cUuid.slice(0,8)}... [WR:${isWritable}]`);
-
-            if (isWritable) {
-                // 1. Exact Match Priority 1
-                if (cUuid === TARGET_WRITE_UUID) {
-                    this.log(`  >>> TARGET MATCH (Primary)!`);
-                    targetChar = char;
-                    break; // Stop looking in this service
+            // STRATEGY A: Direct "Hitman" Approach (Target known SII UUID directly)
+            // This bypasses "List All" which often fails on Android 13+
+            try {
+                this.log(`Trying Direct SII Service...`);
+                const service = await server.getPrimaryService(SII_SERVICE_UUID);
+                this.log(`> Found SII Service! Getting Char...`);
+                
+                // Try getting characteristic directly
+                try {
+                    targetChar = await service.getCharacteristic(SII_WRITE_UUID_1);
+                    this.log(`> Found Primary Write Char!`);
+                    break;
+                } catch {
+                     try {
+                        targetChar = await service.getCharacteristic(SII_WRITE_UUID_2);
+                        this.log(`> Found Secondary Write Char!`);
+                        break;
+                     } catch (e) { this.log(`> Direct Char lookup failed.`); }
                 }
-                // 2. Exact Match Priority 2
-                if (cUuid === ALT_WRITE_UUID) {
-                    this.log(`  >>> TARGET MATCH (Secondary)!`);
-                    targetChar = char;
-                }
-                // 3. Fallback Standard
-                if (cUuid === FALLBACK_WRITE_UUID) {
-                    this.log(`  >>> FALLBACK MATCH (Standard)!`);
-                    if (!targetChar) targetChar = char;
-                }
-                // 4. Any writable
-                if (!fallbackChar) {
-                    fallbackChar = char;
-                }
+            } catch (e) {
+                this.log(`Direct SII lookup failed. Moving to scan.`);
             }
-          }
-        } catch (e) {
-          this.log(`  x Error reading chars: ${e}`);
+
+            if (targetChar) break;
+
+            // STRATEGY B: Brute Force Scan (List All)
+            this.log(`Scanning ALL services...`);
+            const services = await server.getPrimaryServices();
+            this.log(`Found ${services.length} services via scan.`);
+
+            for (const service of services) {
+                this.log(`Scanned Svc: ${service.uuid.slice(0,8)}...`);
+                try {
+                    const chars = await service.getCharacteristics();
+                    for (const char of chars) {
+                        const props = char.properties;
+                        const isWritable = props.write || props.writeWithoutResponse;
+                        this.log(` - Char: ${char.uuid.slice(0,8)} [WR:${isWritable}]`);
+                        
+                        if (isWritable && !targetChar) {
+                            targetChar = char;
+                            this.log(`MATCHED: ${char.uuid}`);
+                        }
+                    }
+                } catch (e) { /* ignore access errors */ }
+                
+                if (targetChar) break;
+            }
+
+        } catch (e: any) {
+            this.log(`Scan Error: ${e.message}`);
         }
+
+        if (targetChar) break;
         
-        if (targetChar && isPriorityService) break; // Found best match in best service
+        if (attempt < MAX_ATTEMPTS) {
+            this.log("Retrying in 2s...");
+            await new Promise(r => setTimeout(r, 2000));
+        }
       }
 
-      // Final Selection
-      if (targetChar) {
-          this.characteristic = targetChar;
-          this.log(`Bound to TARGET: ${this.characteristic.uuid.slice(0,8)}`);
-      } else if (fallbackChar) {
-          this.characteristic = fallbackChar;
-          this.log(`Bound to FALLBACK: ${this.characteristic.uuid.slice(0,8)}`);
-      } else {
-          this.log("CRITICAL: No writable characteristic found.");
-          throw new Error("No writable ports found. See logs.");
+      if (!targetChar) {
+          this.log("CRITICAL: Failed to find writable port after retries.");
+          throw new Error("Service discovery failed. Please restart Printer and App.");
       }
+
+      this.characteristic = targetChar;
+      this.log(`Bound to: ${this.characteristic.uuid.slice(0,8)}...`);
 
       // Wake up / Test
       try {
-          this.log("Sending wakeup (0x00)...");
+          this.log("Sending wakeup byte...");
           const nullByte = new Uint8Array([0x00]);
           if (this.characteristic.properties.writeWithoutResponse) {
               await this.characteristic.writeValueWithoutResponse(nullByte);
           } else {
               await this.characteristic.writeValue(nullByte);
           }
-          this.log("Wakeup sent.");
+          this.log("Wakeup OK.");
       } catch (e) {
           this.log(`Wakeup warning: ${e}`);
       }
 
       return device;
     } catch (error: any) {
-      this.log(`Connection failed: ${error.message || error}`);
+      this.log(`Conn Error: ${error.message || error}`);
       console.error(error);
       throw error;
     }
