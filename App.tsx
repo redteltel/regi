@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -16,6 +16,17 @@ const App: React.FC = () => {
     characteristic: null,
   });
 
+  // Listen for unexpected disconnects
+  useEffect(() => {
+    printerService.setOnDisconnect(() => {
+      console.log("App detected printer disconnect");
+      setPrinterStatus(prev => ({
+        ...prev,
+        isConnected: false,
+      }));
+    });
+  }, []);
+
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
   const handleConnectPrinter = async () => {
@@ -25,19 +36,17 @@ const App: React.FC = () => {
         isConnected: true,
         name: device.name || 'MP-B20',
         device: device,
-        characteristic: null // managed inside service
+        characteristic: null
       });
-      alert("Printer connected successfully!");
+      // Do not use alert here to avoid blocking the pairing notification
     } catch (e: any) {
       console.error(e);
       const msg = e.message || "Unknown error";
-      // Show more helpful error message
-      alert(`接続に失敗しました。\n\nAndroidの設定でプリンタとのペアリングを「解除」してから、再度試してください。\n\n詳細: ${msg}`);
+      alert(`接続エラー:\n${msg}\n\nAndroidの設定でプリンタのペアリングを解除済みか確認してください。`);
     }
   };
 
   const handleProductFound = (product: Product) => {
-    // Check if already in cart
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
@@ -45,11 +54,7 @@ const App: React.FC = () => {
       }
       return [...prev, { ...product, quantity: 1 }];
     });
-    // Haptic feedback
     if (navigator.vibrate) navigator.vibrate(50);
-    // Switch to list view momentarily or stay? Let's stay to scan more, but show toast.
-    // alert(`Added ${product.name} to cart.`);
-    // Using simple visual feedback via UI update instead of alert for smoother flow
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -63,18 +68,33 @@ const App: React.FC = () => {
 
   const handlePrint = async () => {
     if (cart.length === 0) return;
-    if (!printerStatus.isConnected) {
+    
+    let isReady = printerStatus.isConnected && printerService.isConnected();
+
+    // Try to auto-restore connection if it looks disconnected
+    if (!isReady) {
+       console.log("Printer not ready, trying to restore...");
+       const restored = await printerService.restoreConnection();
+       if (restored) {
+         setPrinterStatus(prev => ({ ...prev, isConnected: true }));
+         isReady = true;
+       }
+    }
+
+    if (!isReady) {
+      // If restore failed, ask user to pick device again
       await handleConnectPrinter();
-      if (!printerService.isConnected()) return; // User cancelled
+      if (!printerService.isConnected()) return; 
     }
 
     try {
       await printerService.printReceipt(cart, cartTotal);
-      setCart([]); // Clear cart after print
+      setCart([]); 
       setAppState(AppState.SCANNING);
-      alert("Printing successful!");
-    } catch (e) {
-      alert("Error printing. Please check printer status.");
+      alert("印刷が完了しました！");
+    } catch (e: any) {
+      console.error(e);
+      alert(`印刷エラー:\n${e.message}\n\n画面上部に「ペア設定」の通知が出ている場合は、それをタップして「ペア設定」を選択してください。`);
     }
   };
 
@@ -153,7 +173,19 @@ const App: React.FC = () => {
             <Receipt items={cart} total={cartTotal} />
 
             <div className="w-full max-w-sm mt-auto pb-8">
-              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm mb-4 flex items-start gap-2">
+              {/* Critical Instruction Box */}
+              <div className="bg-blue-50 border border-blue-200 text-blue-900 px-4 py-3 rounded-lg text-sm mb-4">
+                 <div className="flex items-start gap-2 mb-2 font-bold">
+                    <BellRing size={18} className="text-blue-600 mt-0.5" />
+                    <span>重要：ペアリング通知について</span>
+                 </div>
+                 <p className="text-xs leading-relaxed">
+                   印刷ボタンを押した際、画面上部や通知センターに<b>「ペア設定を要求しています」</b>という通知が出ることがあります。<br/>
+                   必ず<b>「ペア設定して接続」</b>をタップしてください。
+                 </p>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-xs mb-4 flex items-start gap-2">
                 <AlertTriangle size={16} className="mt-0.5 shrink-0" />
                 <p>接続できない場合：スマホのBluetooth設定でMP-B20のペアリングを解除してから、下のボタンを押してください。</p>
               </div>

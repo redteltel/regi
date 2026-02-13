@@ -49,7 +49,7 @@ declare global {
     services?: (string | number)[];
   }
 
-  interface BluetoothDevice {
+  interface BluetoothDevice extends EventTarget {
     id: string;
     name?: string;
     gatt?: BluetoothRemoteGATTServer;
