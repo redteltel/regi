@@ -232,8 +232,8 @@ const App: React.FC = () => {
                 Print Receipt
               </button>
 
-              {/* Enhanced Debug Log (h-40) */}
-              <div className="mt-4 bg-black text-green-400 p-3 rounded-lg font-mono text-[10px] h-40 overflow-y-auto shadow-inner border border-gray-800">
+              {/* Enhanced Debug Log (h-64, text-xs) */}
+              <div className="mt-4 bg-black text-green-400 p-3 rounded-lg font-mono text-xs h-64 overflow-y-auto shadow-inner border border-gray-800">
                 <div className="flex flex-col gap-0.5">
                   {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
                   {logs.slice().reverse().map((log, i) => (

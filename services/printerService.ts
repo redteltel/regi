@@ -14,8 +14,6 @@ const SIZE_NORMAL = [GS, 0x21, 0x00];
 const SIZE_DOUBLE = [GS, 0x21, 0x11];
 
 // PRIORITY TARGETS for MP-B20 (SII / Microchip)
-// Service: 49535343-fe7d-4ae5-8fa9-9fafd205e455
-// Write Char: 49535343-1e4d-4bd9-ba61-802d64c64e01 or 49535343-8841-43f4-a8d4-ecbe34729bb3
 const SII_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
 const SII_WRITE_UUID_1 = "49535343-1e4d-4bd9-ba61-802d64c64e01";
 const SII_WRITE_UUID_2 = "49535343-8841-43f4-a8d4-ecbe34729bb3";
@@ -51,7 +49,7 @@ export class PrinterService {
     try {
       this.log("Requesting Device (Accept ALL)...");
       
-      // 1. Device Selection: Open filter completely
+      // 1. Device Selection: Open filter completely (No name filters)
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
@@ -71,20 +69,27 @@ export class PrinterService {
       const displayName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : "Unknown Device");
       this.log(`Selected: ${displayName}`);
 
+      // 2. PRE-CONNECT DELAY (10 seconds)
+      this.log("WAITING 10s BEFORE CONNECT...");
+      for (let i = 10; i > 0; i--) {
+        this.log(`Pre-Connect Wait: ${i}s...`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
       this.log("Connecting GATT...");
       const server = await device.gatt?.connect();
       if (!server) throw new Error("GATT Connect failed");
       this.log("Connected.");
 
-      // 2. STABILIZATION DELAY (10 seconds)
-      // Visual countdown for user assurance
+      // 3. POST-CONNECT DELAY (10 seconds)
+      this.log("WAITING 10s AFTER CONNECT (Stabilizing)...");
       for (let i = 10; i > 0; i--) {
-        this.log(`Waiting ${i}s for Android GATT...`);
+        this.log(`Post-Connect Wait: ${i}s...`);
         await new Promise(r => setTimeout(r, 1000));
       }
       this.log("Stabilization complete.");
 
-      // 3. Service Discovery with Retry & Direct Targeting
+      // 4. Service Discovery with Retry
       let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
       const MAX_ATTEMPTS = 3;
 
@@ -93,13 +98,11 @@ export class PrinterService {
         
         try {
             // STRATEGY A: Direct "Hitman" Approach (Target known SII UUID directly)
-            // This bypasses "List All" which often fails on Android 13+
             try {
                 this.log(`Trying Direct SII Service...`);
                 const service = await server.getPrimaryService(SII_SERVICE_UUID);
                 this.log(`> Found SII Service! Getting Char...`);
                 
-                // Try getting characteristic directly
                 try {
                     targetChar = await service.getCharacteristic(SII_WRITE_UUID_1);
                     this.log(`> Found Primary Write Char!`);
@@ -112,7 +115,7 @@ export class PrinterService {
                      } catch (e) { this.log(`> Direct Char lookup failed.`); }
                 }
             } catch (e) {
-                this.log(`Direct SII lookup failed. Moving to scan.`);
+                this.log(`Direct SII lookup failed.`);
             }
 
             if (targetChar) break;
@@ -122,6 +125,10 @@ export class PrinterService {
             const services = await server.getPrimaryServices();
             this.log(`Found ${services.length} services via scan.`);
 
+            if (services.length === 0) {
+                 throw new Error("No services returned.");
+            }
+
             for (const service of services) {
                 this.log(`Scanned Svc: ${service.uuid.slice(0,8)}...`);
                 try {
@@ -129,7 +136,6 @@ export class PrinterService {
                     for (const char of chars) {
                         const props = char.properties;
                         const isWritable = props.write || props.writeWithoutResponse;
-                        this.log(` - Char: ${char.uuid.slice(0,8)} [WR:${isWritable}]`);
                         
                         if (isWritable && !targetChar) {
                             targetChar = char;
