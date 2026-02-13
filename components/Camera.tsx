@@ -14,6 +14,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
   
   // UI States for feedback
   const [statusMsg, setStatusMsg] = useState<string>("");
@@ -69,6 +70,10 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       setTimeout(() => setStatusMsg(""), 1000);
       return;
     }
+
+    // Trigger visual flash
+    setFlash(true);
+    setTimeout(() => setFlash(false), 200);
 
     if (navigator.vibrate) navigator.vibrate(50);
     setIsProcessing(true);
@@ -139,6 +144,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
             playsInline
             muted
             className="absolute inset-0 w-full h-full object-cover"
+          />
+
+          {/* Flash Effect Overlay */}
+          <div 
+            className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-200 z-50 ${flash ? 'opacity-80' : 'opacity-0'}`}
           />
           
           {/* Status Overlay */}

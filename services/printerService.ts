@@ -13,12 +13,13 @@ const EMPHASIS_OFF = [ESC, 0x45, 0];
 const SIZE_NORMAL = [GS, 0x21, 0x00];
 const SIZE_DOUBLE = [GS, 0x21, 0x11];
 
-// Known Target UUIDs for MP-B20 / SII / Microchip
-// We prioritize these if found.
-const TARGET_UUIDS = [
-  "00002af1-0000-1000-8000-00805f9b34fb", // SII Standard Write
-  "49535343-8841-43f4-a8d4-ecbe34729bb3", // Microchip Transparent UART
-];
+// PRIORITY TARGETS for MP-B20
+const TARGET_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"; // Microchip / SII Private Service
+const TARGET_WRITE_UUID   = "49535343-1e4d-4bd9-ba61-802d64c64e01"; // Specific Write Char
+const ALT_WRITE_UUID      = "49535343-8841-43f4-a8d4-ecbe34729bb3"; // Transparent UART
+
+const FALLBACK_SERVICE_UUID = "000018f0-0000-1000-8000-00805f9b34fb"; // SII Standard Service
+const FALLBACK_WRITE_UUID   = "00002af1-0000-1000-8000-00805f9b34fb"; // SII Standard Write
 
 export class PrinterService {
   private device: BluetoothDevice | null = null;
@@ -45,24 +46,19 @@ export class PrinterService {
     if (this.onDisconnectCallback) {
       this.onDisconnectCallback();
     }
-    // Do not auto-reconnect immediately to avoid cache loops on error
   };
 
   async connect(): Promise<BluetoothDevice> {
     try {
-      this.log("Requesting Device...");
+      this.log("Requesting Device (MP-B20)...");
       
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
-            // SII Service
-            "000018f0-0000-1000-8000-00805f9b34fb", 
-            // Microchip Service (often parent of 49535343-8841...)
-            "49535343-fe7d-4ae5-8fa9-9fafd205e455",
-            // Generic & Standard Services
-            0x18f0, 0x1800, 0x1801, 0x180A, 0xFF00, 0xFF02,
-            // Explicitly list the target chars as services just in case implementation varies
-            "49535343-8841-43f4-a8d4-ecbe34729bb3"
+            TARGET_SERVICE_UUID,
+            FALLBACK_SERVICE_UUID,
+            "49535343-fe7d-4ae5-8fa9-9fafd205e455", // Explicit string
+            0x18f0, 0x1800, 0x1801, 0x180A, 0xFF00, 0xFF02 // Generics
         ] 
       });
 
@@ -81,9 +77,9 @@ export class PrinterService {
       if (!server) throw new Error("GATT Connect failed");
       this.log("Connected.");
 
-      // CRITICAL: 5000ms delay to bypass Android Service Cache
-      this.log("WAITING 5 SECONDS (Cache Clear)...");
-      await new Promise(r => setTimeout(r, 5000));
+      // CRITICAL: 7000ms delay for Pixel 9a stability
+      this.log("WAITING 7 SECONDS (Stabilizing)...");
+      await new Promise(r => setTimeout(r, 7000));
 
       this.log("Discovering Services...");
       const services = await server.getPrimaryServices();
@@ -92,12 +88,17 @@ export class PrinterService {
       let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
       let fallbackChar: BluetoothRemoteGATTCharacteristic | null = null;
 
-      // Verbose Logging Loop
+      // Scan loop
       for (const service of services) {
         const sUuid = service.uuid;
-        // Clean log for short UUIDs, keep full for 128-bit
-        const sLog = sUuid.startsWith("0000") ? sUuid.slice(4, 8) : sUuid.slice(0, 8) + "..";
-        this.log(`[S] ${sLog}`);
+        // Check if this is our Priority Service
+        const isPriorityService = sUuid === TARGET_SERVICE_UUID;
+        
+        if (isPriorityService) {
+            this.log(`>>> FOUND PRIORITY SERVICE: ${sUuid.slice(0,8)}...`);
+        } else {
+            this.log(`[S] ${sUuid.slice(0,8)}...`);
+        }
 
         try {
           const characteristics = await service.getCharacteristics();
@@ -105,77 +106,75 @@ export class PrinterService {
           for (const char of characteristics) {
             const cUuid = char.uuid;
             const props = char.properties;
-            
-            // Build property string
-            const pList = [];
-            if (props.write) pList.push("WR");
-            if (props.writeWithoutResponse) pList.push("WWoR");
-            if (props.notify) pList.push("NT");
-            if (props.read) pList.push("RD");
-            
-            const cLog = cUuid.startsWith("0000") ? cUuid.slice(4, 8) : cUuid.slice(0, 8) + "..";
-            this.log(`  -[C] ${cLog} [${pList.join(',')}]`);
-
-            // Check capability
             const isWritable = props.write || props.writeWithoutResponse;
+            
+            this.log(`  -[C] ${cUuid.slice(0,8)}... [WR:${isWritable}]`);
 
             if (isWritable) {
-                // 1. Check for Exact Target Match
-                if (TARGET_UUIDS.includes(cUuid)) {
-                    this.log(`  >>> TARGET MATCH FOUND!`);
+                // 1. Exact Match Priority 1
+                if (cUuid === TARGET_WRITE_UUID) {
+                    this.log(`  >>> TARGET MATCH (Primary)!`);
+                    targetChar = char;
+                    break; // Stop looking in this service
+                }
+                // 2. Exact Match Priority 2
+                if (cUuid === ALT_WRITE_UUID) {
+                    this.log(`  >>> TARGET MATCH (Secondary)!`);
                     targetChar = char;
                 }
-                // 2. Fallback to any writable if not found yet
-                else if (!fallbackChar) {
+                // 3. Fallback Standard
+                if (cUuid === FALLBACK_WRITE_UUID) {
+                    this.log(`  >>> FALLBACK MATCH (Standard)!`);
+                    if (!targetChar) targetChar = char;
+                }
+                // 4. Any writable
+                if (!fallbackChar) {
                     fallbackChar = char;
                 }
             }
           }
         } catch (e) {
-          this.log(`  x Error reading service chars`);
+          this.log(`  x Error reading chars: ${e}`);
         }
         
-        // If we found a specific target, stop scanning to save time? 
-        // No, user requested FULL logs, so we scan everything.
+        if (targetChar && isPriorityService) break; // Found best match in best service
       }
 
-      // Selection Logic
+      // Final Selection
       if (targetChar) {
           this.characteristic = targetChar;
-          this.log("Selected: TARGET Characteristic");
+          this.log(`Bound to TARGET: ${this.characteristic.uuid.slice(0,8)}`);
       } else if (fallbackChar) {
           this.characteristic = fallbackChar;
-          this.log("Selected: Fallback Characteristic");
+          this.log(`Bound to FALLBACK: ${this.characteristic.uuid.slice(0,8)}`);
       } else {
           this.log("CRITICAL: No writable characteristic found.");
-          throw new Error("No writable ports found. Check logs.");
+          throw new Error("No writable ports found. See logs.");
       }
 
-      this.log(`Bound: ${this.characteristic.uuid.slice(0,8)}...`);
-
-      // Test Write (0x00)
+      // Wake up / Test
       try {
+          this.log("Sending wakeup (0x00)...");
           const nullByte = new Uint8Array([0x00]);
           if (this.characteristic.properties.writeWithoutResponse) {
               await this.characteristic.writeValueWithoutResponse(nullByte);
           } else {
               await this.characteristic.writeValue(nullByte);
           }
-          this.log("Test write (0x00) OK.");
+          this.log("Wakeup sent.");
       } catch (e) {
-          this.log(`Test write warning: ${e}`);
+          this.log(`Wakeup warning: ${e}`);
       }
 
       return device;
     } catch (error: any) {
-      this.log(`Err: ${error.message || error}`);
+      this.log(`Connection failed: ${error.message || error}`);
       console.error(error);
       throw error;
     }
   }
 
   async restoreConnection(): Promise<boolean> {
-    // Simplified restore for now, focusing on initial connection stability
     if (!this.device) return false;
     if (this.device.gatt?.connected && this.characteristic) return true;
     try {
@@ -220,7 +219,6 @@ export class PrinterService {
             await this.characteristic.writeValue(chunk);
         }
       } catch (e) {
-          // Retry once
           await new Promise(r => setTimeout(r, 50));
           try { await this.characteristic.writeValue(chunk); } catch (err) { throw err; }
       }
@@ -261,7 +259,7 @@ export class PrinterService {
     await this.writeCommand(this.encode(`Date: ${new Date().toLocaleString()}\n`));
     await this.writeCommand(this.encode("Thank you!\n"));
     await this.writeCommand([LF, LF, LF, LF]);
-    this.log("Done.");
+    this.log("Print Done.");
   }
 }
 
