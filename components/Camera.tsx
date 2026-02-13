@@ -130,13 +130,14 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   }, [isProcessing, onProductFound, setIsProcessing, debugMsg]);
 
   return (
-    <div className="flex flex-col w-full min-h-full bg-surface pb-24">
+    <div className="flex flex-col w-full h-full bg-surface pb-20">
       {error ? (
-        <div className="h-64 flex items-center justify-center text-red-400 p-4 text-center bg-gray-900 rounded-b-2xl">
+        <div className="h-40 flex items-center justify-center text-red-400 p-4 text-center bg-gray-900">
           <p>{error}</p>
         </div>
       ) : (
-        <div className="relative w-full aspect-square max-h-[50vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-2xl mx-auto">
+        /* Force 40vh height as requested to ensure buttons below are visible */
+        <div className="relative w-full h-[40vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
           <video
             ref={videoRef}
             autoPlay
@@ -160,13 +161,6 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
               <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
                 品番をこの枠に合わせてください
               </div>
-              {/* Corner markers */}
-              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-white"></div>
-              <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-white"></div>
-              <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-white"></div>
-              <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-white"></div>
-              
-              {/* Center scan line */}
               <div className="absolute top-1/2 left-4 right-4 h-px bg-red-500/50"></div>
             </div>
           </div>
@@ -180,31 +174,33 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         </div>
       )}
       
-      {/* Controls Area - Vertical Flow Layout - Centered */}
-      <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6 bg-surface min-h-[200px]">
+      {/* Controls Area - Flex 1 to fill remaining space and center buttons */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 bg-surface">
         <button
           onClick={handleCapture}
           disabled={isProcessing}
           className={`
-            relative w-20 h-20 rounded-full border-4 border-surface ring-4 ring-primary/20 flex items-center justify-center
-            transition-all duration-200 shadow-xl
+            relative w-24 h-24 rounded-full border-4 border-surface ring-4 ring-primary/20 flex items-center justify-center
+            transition-all duration-200 shadow-2xl
             ${isProcessing ? 'bg-gray-700 scale-95 opacity-80 cursor-not-allowed' : 'bg-primary hover:bg-primary/90 active:scale-90 active:bg-white'}
           `}
         >
           {isProcessing ? (
-             <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+             <svg className="animate-spin h-10 w-10 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
              </svg>
           ) : (
-            <div className="w-16 h-16 rounded-full bg-white/20 pointer-events-none backdrop-blur-sm"></div>
+            <div className="w-20 h-20 rounded-full bg-white/20 pointer-events-none backdrop-blur-sm flex items-center justify-center">
+                 <div className="w-16 h-16 rounded-full bg-white opacity-80"></div>
+            </div>
           )}
         </button>
 
-        <div className="text-center space-y-2">
-            <h3 className="text-lg font-bold text-onSurface">Scan Part Number</h3>
-            <p className="text-gray-400 text-sm max-w-xs mx-auto">
-              カメラを商品の品番ラベルに向けて、上のボタンを押してください。
+        <div className="text-center space-y-1">
+            <h3 className="text-xl font-bold text-onSurface">Scan Label</h3>
+            <p className="text-gray-400 text-sm">
+              Press button to analyze
             </p>
         </div>
       </div>

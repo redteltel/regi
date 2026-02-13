@@ -125,7 +125,7 @@ const App: React.FC = () => {
         );
       case AppState.LIST:
         return (
-          <div className="flex-1 p-4 pb-24">
+          <div className="flex-1 p-4 pb-24 overflow-y-auto">
             <h2 className="text-2xl font-bold mb-6 text-primary">Cart ({cart.length})</h2>
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-500">
@@ -178,23 +178,28 @@ const App: React.FC = () => {
         );
       case AppState.PREVIEW:
         return (
-          <div className="flex-1 p-4 bg-gray-100 text-black flex flex-col items-center min-h-0">
-            <div className="w-full flex justify-between items-center mb-6 px-2 shrink-0">
+          <div className="flex-1 flex flex-col min-h-0 bg-gray-100 text-black">
+            {/* Header */}
+            <div className="w-full flex justify-between items-center px-4 py-4 shrink-0 bg-white shadow-sm z-10">
               <button onClick={() => setAppState(AppState.LIST)} className="text-blue-600 font-medium">Back</button>
               <h2 className="font-bold">Preview</h2>
               <div className="w-8"></div>
             </div>
             
-            <Receipt items={cart} total={cartTotal} />
+            {/* Scrollable Receipt Area */}
+            <div className="flex-1 overflow-y-auto p-4">
+               <Receipt items={cart} total={cartTotal} />
+            </div>
 
-            <div className="w-full max-w-sm mt-auto pb-8 shrink-0">
+            {/* Fixed Bottom Controls */}
+            <div className="w-full shrink-0 bg-white p-4 pb-8 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-20">
               {/* Connection Status Helper */}
               {!printerStatus.isConnected && (
-                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-xs mb-4 flex items-start gap-2">
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-xs mb-3 flex items-start gap-2">
                   <AlertTriangle size={16} className="mt-0.5 shrink-0" />
                   <div>
                     <p className="font-bold">プリンタ未接続</p>
-                    <p>下の黒いボタンを押して接続してください。何度も失敗する場合はスマホのBluetooth設定でMP-B20を削除してください。</p>
+                    <p>下の黒いボタンを押して接続してください。</p>
                   </div>
                 </div>
               )}
@@ -202,16 +207,15 @@ const App: React.FC = () => {
               {!printerStatus.isConnected ? (
                 <button 
                   onClick={handleConnectPrinter}
-                  className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl mb-4"
+                  className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl mb-3"
                 >
                   <Bluetooth size={20} />
                   Connect Printer
                 </button>
               ) : (
                 <div 
-                  className="w-full bg-green-50 border border-green-200 text-green-700 py-3 rounded-xl font-medium flex items-center justify-center gap-2 mb-4 cursor-pointer"
+                  className="w-full bg-green-50 border border-green-200 text-green-700 py-3 rounded-xl font-medium flex items-center justify-center gap-2 mb-3 cursor-pointer"
                   onClick={() => {
-                     // Allow manual disconnect/reconnect if needed
                      if(window.confirm("プリンタを切断しますか？")) {
                         printerService.disconnect();
                         setPrinterStatus(prev => ({ ...prev, isConnected: false }));
@@ -220,7 +224,6 @@ const App: React.FC = () => {
                 >
                   <Bluetooth size={18} /> 
                   Connected to {printerStatus.name}
-                  <span className="text-xs bg-green-200 px-2 py-0.5 rounded-full ml-1">タップして切断</span>
                 </div>
               )}
 
@@ -234,16 +237,12 @@ const App: React.FC = () => {
                 Print Receipt
               </button>
 
-              {/* Debug Log Console */}
-              <div className="mt-6 bg-black text-green-400 p-3 rounded-lg font-mono text-xs overflow-hidden">
-                <div className="flex items-center gap-2 mb-2 border-b border-gray-800 pb-1">
-                   <Terminal size={12} />
-                   <span className="font-bold">Debug Log</span>
-                </div>
-                <div className="flex flex-col gap-1">
+              {/* Compact Debug Log */}
+              <div className="mt-4 bg-black text-green-400 p-2 rounded-lg font-mono text-[10px] h-16 overflow-y-auto">
+                <div className="flex flex-col gap-0.5">
                   {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
-                  {logs.map((log, i) => (
-                    <div key={i} className="break-all border-b border-gray-900 pb-0.5">{log}</div>
+                  {logs.slice().reverse().map((log, i) => (
+                    <div key={i} className="break-all border-b border-gray-800/50 pb-0.5">{log}</div>
                   ))}
                 </div>
               </div>
@@ -276,8 +275,8 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Main Content Area - Scrollable */}
-      <div className="flex-1 flex flex-col relative overflow-y-auto">
+      {/* Main Content Area - Fill remaining space */}
+      <div className="flex-1 flex flex-col relative overflow-hidden">
         {renderContent()}
       </div>
 
