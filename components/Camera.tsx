@@ -136,7 +136,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           <p>{error}</p>
         </div>
       ) : (
-        /* Force 40vh height as requested to ensure buttons below are visible */
+        /* Force 40vh height using Tailwind class as requested */
         <div className="relative w-full h-[40vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
           <video
             ref={videoRef}

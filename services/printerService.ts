@@ -55,13 +55,14 @@ export class PrinterService {
       this.log("Starting Bluetooth scan (Accept All)...");
       
       // Pixel 9a / Android Optimization: 
-      // Use acceptAllDevices: true to ensure the device shows up in the list, even if the name isn't resolved yet.
-      // We MUST NOT use 'filters' when acceptAllDevices is true.
+      // Use acceptAllDevices: true to ensure the device shows up in the list.
+      // MUST include optionalServices to access them later.
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
             SII_SERVICE_UUID, 
             '000018f0-0000-1000-8000-00805f9b34fb',
+            // Broad compatibility services
             0x18f0,
             0x1800, 
             0x1801,
@@ -78,9 +79,9 @@ export class PrinterService {
 
       // Handle cases where name is null/undefined (Android security feature until connected)
       const displayName = device.name || "Unknown Device";
-      const displayId = device.id.slice(0, 8); // Show partial ID for identification
+      const displayId = device.id; 
       this.log(`Selected: ${displayName}`);
-      this.log(`ID: ${displayId}...`);
+      this.log(`ID: ${displayId.slice(0, 8)}...`);
 
       this.log("Connecting to GATT Server...");
       
@@ -88,48 +89,65 @@ export class PrinterService {
       if (!server) throw new Error("Could not connect to GATT Server");
       this.log("GATT connected");
 
-      // Pixel 9a Fix: Delay to stabilize GATT
-      this.log("Stabilizing connection (1500ms)...");
-      await new Promise(r => setTimeout(r, 1500));
+      // Requirement: 2000ms delay after connect for Android stability
+      this.log("Stabilizing connection (2000ms)...");
+      await new Promise(r => setTimeout(r, 2000));
 
-      this.log("Discovering services...");
+      this.log("Discovering ALL services...");
+      // Requirement: getPrimaryServices() (plural) to find everything
       const services = await server.getPrimaryServices();
-      this.log(`Found ${services.length} services`);
       
-      let foundChar: BluetoothRemoteGATTCharacteristic | null = null;
-      let preferredChar: BluetoothRemoteGATTCharacteristic | null = null;
+      // Requirement: 2000ms delay after service acquisition
+      this.log(`Found ${services.length} services. Waiting 2000ms...`);
+      await new Promise(r => setTimeout(r, 2000));
+      
+      let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
+      const foundServiceUUIDs: string[] = [];
 
+      // Brute force search for writable characteristic
       for (const service of services) {
-        this.log(`Chk Svc: ${service.uuid.slice(0,8)}...`);
+        foundServiceUUIDs.push(service.uuid);
+        this.log(`Scanning Service: ${service.uuid.slice(0,8)}...`);
+
+        // Check if this looks like the SII service (starts with 000018f0)
+        const isSiiService = service.uuid.startsWith('000018f0');
+
         try {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
             const props = char.properties;
-            const uuid = char.uuid;
             const canWrite = props.write || props.writeWithoutResponse;
             
             if (canWrite) {
-                // If this matches the SII specific characteristic, prefer it
-                if (uuid.startsWith(SII_CHAR_UUID_PREFIX) || uuid === SII_SERVICE_UUID) {
-                    preferredChar = char;
-                    this.log(` > Preferred Char found`);
+                this.log(`  > Found Writable: ${char.uuid.slice(0,8)}...`);
+                // If this is the SII service, it's our best bet. Stop searching.
+                if (isSiiService) {
+                    targetChar = char;
+                    this.log("  >>> MATCH: SII Service Writable Char");
+                    break;
                 }
-                // Keep the first writable one as fallback
-                if (!foundChar) foundChar = char;
+                // Otherwise, keep it as a fallback
+                if (!targetChar) {
+                    targetChar = char;
+                }
             }
           }
         } catch (e) {
-          // Ignore services we can't read
+          this.log(`  > Failed to read chars for ${service.uuid.slice(0,8)}`);
         }
+        
+        if (targetChar && isSiiService) break;
       }
 
-      this.characteristic = preferredChar || foundChar;
-
-      if (!this.characteristic) {
-        throw new Error("No writable characteristic found. Please unpair and retry.");
+      if (!targetChar) {
+        this.log("CRITICAL: No writable characteristic found.");
+        this.log("Services found:\n" + foundServiceUUIDs.join("\n"));
+        throw new Error("No writable characteristic found. See logs for details.");
       }
-      
-      this.log(`Ready to print.`);
+
+      this.characteristic = targetChar;
+      this.log(`Selected Char: ${this.characteristic.uuid.slice(0,8)}...`);
+      this.log("Ready to print.");
       return device;
     } catch (error: any) {
       this.log(`Connection error: ${error.message || error}`);
@@ -150,10 +168,11 @@ export class PrinterService {
       const server = await this.device.gatt?.connect();
       if (!server) return false;
       
-      // Delay for restore as well
+      // Add stability delay for restore as well
       await new Promise(r => setTimeout(r, 1500));
       
       const services = await server.getPrimaryServices();
+      await new Promise(r => setTimeout(r, 1000));
       
       // Quick scan for writable
       for (const service of services) {

@@ -39,9 +39,13 @@ const App: React.FC = () => {
     try {
       setLogs([]); // Clear previous logs
       const device = await printerService.connect();
+      
+      // Determine display name (Name OR ID OR Default)
+      const dispName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : 'MP-B20');
+      
       setPrinterStatus({
         isConnected: true,
-        name: device.name || 'MP-B20',
+        name: dispName,
         device: device,
         characteristic: null
       });
@@ -93,7 +97,6 @@ const App: React.FC = () => {
     }
 
     // If still not ready, force user to click Connect manually.
-    // DO NOT call handleConnectPrinter() here to avoid loop/popups.
     if (!isReady) {
       alert("プリンタと接続されていません。\n下の「Connect Printer」ボタンを押して再接続してください。");
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));
