@@ -80,7 +80,7 @@ export class PrinterService {
       if (!server) throw new Error("Could not connect to GATT Server");
       this.log("GATT connected");
 
-      // Critical delay for Android pairing/connection stability
+      // Critical delay for Android pairing/connection stability (Pixel 9a fix)
       this.log("Stabilizing connection (500ms)...");
       await new Promise(r => setTimeout(r, 500));
 
@@ -92,7 +92,7 @@ export class PrinterService {
       let preferredChar: BluetoothRemoteGATTCharacteristic | null = null;
 
       for (const service of services) {
-        this.log(`Service: ${service.uuid}`);
+        // this.log(`Service: ${service.uuid}`);
         try {
           const characteristics = await service.getCharacteristics();
           for (const char of characteristics) {
@@ -100,8 +100,6 @@ export class PrinterService {
             const uuid = char.uuid;
             const canWrite = props.write || props.writeWithoutResponse;
             
-            // this.log(` > Char: ${uuid.substring(0,8)}... W:${props.write} WNR:${props.writeWithoutResponse}`);
-
             if (canWrite) {
                 // If this matches the SII specific characteristic, prefer it
                 if (uuid.startsWith(SII_CHAR_UUID_PREFIX) || uuid === SII_SERVICE_UUID) {
@@ -124,9 +122,6 @@ export class PrinterService {
       }
       
       this.log(`Selected Char: ${this.characteristic.uuid}`);
-      const p = this.characteristic.properties;
-      this.log(`Properties - Write: ${p.write}, NoResp: ${p.writeWithoutResponse}`);
-
       return device;
     } catch (error: any) {
       this.log(`Connection error: ${error.message || error}`);
@@ -149,7 +144,6 @@ export class PrinterService {
       
       await new Promise(r => setTimeout(r, 500)); // Short delay
       
-      // We often need to re-fetch services after a reconnect
       const services = await server.getPrimaryServices();
       
       // Quick scan for writable
@@ -206,7 +200,7 @@ export class PrinterService {
       
       try {
         if (canWriteNoResp) {
-            // Prefer NoResponse for speed and sometimes better stability on Android
+            // Prefer NoResponse for speed and stability on Android
             await this.characteristic.writeValueWithoutResponse(chunk);
         } else {
             // Fallback to standard write

@@ -82,7 +82,7 @@ const App: React.FC = () => {
     // Check internal connection status
     let isReady = printerStatus.isConnected && printerService.isConnected();
 
-    // Try to auto-restore connection silently
+    // Try to auto-restore connection silently (this does NOT open the picker)
     if (!isReady) {
        addLog("Auto-reconnecting...");
        const restored = await printerService.restoreConnection();
@@ -92,6 +92,8 @@ const App: React.FC = () => {
        }
     }
 
+    // If still not ready, force user to click Connect manually.
+    // DO NOT call handleConnectPrinter() here to avoid loop/popups.
     if (!isReady) {
       alert("プリンタと接続されていません。\n下の「Connect Printer」ボタンを押して再接続してください。");
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));

@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
+// The API Key must be obtained exclusively from process.env.API_KEY.
+// Do NOT hardcode the key here. Ensure your build environment provides this variable.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Using gemini-3-flash-preview as recommended for basic text tasks
