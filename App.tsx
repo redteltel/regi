@@ -125,7 +125,7 @@ const App: React.FC = () => {
         );
       case AppState.LIST:
         return (
-          <div className="flex-1 overflow-y-auto p-4 pb-24">
+          <div className="flex-1 p-4 pb-24">
             <h2 className="text-2xl font-bold mb-6 text-primary">Cart ({cart.length})</h2>
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-500">
@@ -178,8 +178,8 @@ const App: React.FC = () => {
         );
       case AppState.PREVIEW:
         return (
-          <div className="flex-1 overflow-y-auto p-4 bg-gray-100 text-black flex flex-col items-center">
-            <div className="w-full flex justify-between items-center mb-6 px-2">
+          <div className="flex-1 p-4 bg-gray-100 text-black flex flex-col items-center min-h-0">
+            <div className="w-full flex justify-between items-center mb-6 px-2 shrink-0">
               <button onClick={() => setAppState(AppState.LIST)} className="text-blue-600 font-medium">Back</button>
               <h2 className="font-bold">Preview</h2>
               <div className="w-8"></div>
@@ -187,7 +187,7 @@ const App: React.FC = () => {
             
             <Receipt items={cart} total={cartTotal} />
 
-            <div className="w-full max-w-sm mt-auto pb-8">
+            <div className="w-full max-w-sm mt-auto pb-8 shrink-0">
               {/* Connection Status Helper */}
               {!printerStatus.isConnected && (
                 <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-xs mb-4 flex items-start gap-2">
@@ -258,7 +258,7 @@ const App: React.FC = () => {
     <div className="h-screen w-screen flex flex-col bg-surface text-onSurface overflow-hidden">
       {/* Top Bar (Only visible in Scan/List, hidden in preview for cleanliness) */}
       {appState !== AppState.PREVIEW && (
-        <div className="flex justify-between items-center p-4 bg-surface/80 backdrop-blur-md z-10">
+        <div className="flex justify-between items-center p-4 bg-surface/80 backdrop-blur-md z-10 shrink-0">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             PixelPOS
           </h1>
@@ -276,14 +276,14 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative overflow-hidden">
+      {/* Main Content Area - Scrollable */}
+      <div className="flex-1 flex flex-col relative overflow-y-auto">
         {renderContent()}
       </div>
 
       {/* Bottom Navigation */}
       {appState !== AppState.PREVIEW && (
-        <div className="h-20 bg-surface border-t border-gray-800 flex items-center justify-around px-6 pb-2">
+        <div className="h-20 bg-surface border-t border-gray-800 flex items-center justify-around px-6 pb-2 shrink-0 z-20">
           <button 
             onClick={() => setAppState(AppState.SCANNING)}
             className={`flex flex-col items-center gap-1 p-2 transition-colors ${appState === AppState.SCANNING ? 'text-primary' : 'text-gray-500'}`}

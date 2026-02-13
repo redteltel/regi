@@ -78,7 +78,6 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
 
     try {
       // 1. Capture and resize
-      // Reduced size for faster upload/processing (600px width is enough for text)
       const MAX_WIDTH = 600;
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       
@@ -122,71 +121,72 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       setDebugMsg(e.message || "Unknown error occurred");
       if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     } finally {
-      // On failure or non-found, reset processing state
       setIsProcessing(false);
-      
-      // Clear status after delay if not success (success handles its own transition)
       setTimeout(() => {
         setStatusMsg("");
-        // Keep debug msg a bit longer if exists
         if (!debugMsg) setDebugMsg("");
       }, 4000);
     }
   }, [isProcessing, onProductFound, setIsProcessing, debugMsg]);
 
   return (
-    <div className="relative w-full h-full flex flex-col bg-black">
+    <div className="flex flex-col w-full min-h-full bg-surface">
       {error ? (
-        <div className="flex-1 flex items-center justify-center text-red-400 p-4 text-center bg-gray-900">
+        <div className="h-64 flex items-center justify-center text-red-400 p-4 text-center bg-gray-900 rounded-b-2xl">
           <p>{error}</p>
         </div>
       ) : (
-        <div className="relative flex-1 overflow-hidden">
+        <div className="relative w-full aspect-[3/4] sm:aspect-video bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-2xl">
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="absolute top-0 left-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover"
           />
           
           {/* Status Overlay */}
-          <div className="absolute inset-x-4 bottom-4 z-30 flex flex-col gap-2 pointer-events-none">
+          <div className="absolute top-4 left-0 right-0 z-30 flex flex-col gap-2 items-center pointer-events-none px-4">
              {statusMsg && (
-               <div className="bg-black/80 backdrop-blur-md text-white py-3 px-4 rounded-xl text-center font-bold text-lg shadow-lg animate-pulse border border-white/10">
+               <div className="bg-black/80 backdrop-blur-md text-white py-2 px-4 rounded-full text-center font-bold text-sm shadow-lg animate-fade-in border border-white/10">
                  {statusMsg}
-               </div>
-             )}
-             {debugMsg && (
-               <div className="bg-red-900/90 text-white py-2 px-3 rounded-lg text-xs font-mono break-all border border-red-500/30">
-                 {debugMsg}
                </div>
              )}
           </div>
 
-          {/* Guide Frame */}
-          <div className="absolute inset-0 border-[40px] border-black/50 flex items-center justify-center pointer-events-none">
-            <div className="w-72 h-32 border-2 border-primary/80 rounded-lg relative shadow-[0_0_20px_rgba(168,199,250,0.4)]">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black/60 text-primary text-[10px] font-bold px-3 py-1 rounded-full border border-primary/30">
-                品番を枠内に入れてください
+          {/* Guide Frame: Compact Horizontal */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-72 h-20 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-xs font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
+                品番をこの枠に合わせてください
               </div>
               {/* Corner markers */}
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white"></div>
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white"></div>
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white"></div>
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-white"></div>
+              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-white"></div>
+              <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-white"></div>
+              <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-white"></div>
+              <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-white"></div>
+              
+              {/* Center scan line */}
+              <div className="absolute top-1/2 left-4 right-4 h-px bg-red-500/50"></div>
             </div>
           </div>
+          
+           {/* Debug msg */}
+           {debugMsg && (
+             <div className="absolute bottom-4 left-4 right-4 bg-red-900/90 text-white p-2 rounded text-xs font-mono break-all border border-red-500/30">
+               {debugMsg}
+             </div>
+           )}
         </div>
       )}
       
-      {/* Controls Area */}
-      <div className="bg-surface p-6 flex justify-center items-center pb-10 safe-area-pb z-20 border-t border-gray-800">
+      {/* Controls Area - Flow Layout */}
+      <div className="flex-1 flex flex-col items-center justify-start p-8 gap-6 bg-surface">
         <button
           onClick={handleCapture}
           disabled={isProcessing}
           className={`
-            relative w-20 h-20 rounded-full border-4 border-white flex items-center justify-center
+            relative w-20 h-20 rounded-full border-4 border-surface ring-4 ring-primary/20 flex items-center justify-center
             transition-all duration-200 shadow-xl
             ${isProcessing ? 'bg-gray-700 scale-95 opacity-80 cursor-not-allowed' : 'bg-primary hover:bg-primary/90 active:scale-90 active:bg-white'}
           `}
@@ -197,9 +197,16 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
              </svg>
           ) : (
-            <div className="w-16 h-16 rounded-full bg-white/20 pointer-events-none"></div>
+            <div className="w-16 h-16 rounded-full bg-white/20 pointer-events-none backdrop-blur-sm"></div>
           )}
         </button>
+
+        <div className="text-center space-y-2">
+            <h3 className="text-lg font-bold text-onSurface">Scan Part Number</h3>
+            <p className="text-gray-400 text-sm max-w-xs mx-auto">
+              カメラを商品の品番ラベルに向けて、上のボタンを押してください。
+            </p>
+        </div>
       </div>
       <canvas ref={canvasRef} className="hidden" />
     </div>
