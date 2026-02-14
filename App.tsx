@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -135,9 +135,15 @@ const App: React.FC = () => {
 
   // PDF Export via Web Share API (Google Drive support)
   const handleSharePDF = async () => {
-    const element = document.getElementById('receipt-preview');
-    if (!element) return;
+    if (isProcessing) return;
 
+    const element = document.getElementById('receipt-preview');
+    if (!element) {
+      alert("プレビューの取得に失敗しました。");
+      return;
+    }
+
+    setIsProcessing(true);
     if (navigator.vibrate) navigator.vibrate(50);
 
     try {
@@ -145,7 +151,7 @@ const App: React.FC = () => {
       const canvas = await html2canvas(element, { 
         scale: 2, 
         useCORS: true, 
-        logging: false,
+        logging: false, 
         backgroundColor: '#ffffff'
       });
       
@@ -173,22 +179,28 @@ const App: React.FC = () => {
 
       // 4. Invoke System Share Sheet (Web Share API)
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'パナランドヨシダ 領収書',
-          text: `領収書 (${dateStr}) を送信します。`,
-        });
+        try {
+            await navigator.share({
+              files: [file],
+              title: 'パナランドヨシダ 領収書',
+              text: `領収書 (${dateStr}) を送信します。`,
+            });
+        } catch (shareError: any) {
+            if (shareError.name !== 'AbortError') {
+                // If share fails, fallback to save
+                pdf.save(filename);
+            }
+        }
       } else {
         // Fallback for non-supported browsers
         pdf.save(filename);
-        alert('PDFをダウンロードしました。\nGoogleドライブへは「ファイル」アプリからアップロードしてください。');
       }
       
     } catch (e: any) {
       console.error("PDF Export failed:", e);
-      if (e.name !== 'AbortError') { // Ignore user cancel
-         alert("PDF保存に失敗しました。");
-      }
+      alert(`PDF作成に失敗しました: ${e.message}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -336,10 +348,17 @@ const App: React.FC = () => {
               <div className="flex gap-3">
                   <button 
                     onClick={handleSharePDF}
-                    className="flex-1 bg-gray-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                    disabled={isProcessing}
+                    className={`flex-1 bg-gray-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
+                      isProcessing ? 'opacity-70 cursor-wait' : ''
+                    }`}
                   >
-                    <Share size={20} />
-                    PDF共有
+                    {isProcessing ? (
+                        <Loader2 className="animate-spin" size={20} />
+                    ) : (
+                        <Share size={20} />
+                    )}
+                    {isProcessing ? '生成中' : 'PDF共有'}
                   </button>
 
                   <button 
