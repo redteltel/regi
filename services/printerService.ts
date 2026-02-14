@@ -1,4 +1,3 @@
-
 import { CartItem } from '../types';
 
 // ESC/POS Commands
@@ -14,24 +13,15 @@ const EMPHASIS_OFF = [ESC, 0x45, 0];
 const SIZE_NORMAL = [GS, 0x21, 0x00];
 const SIZE_DOUBLE = [GS, 0x21, 0x11];
 
-// PRIORITY TARGETS for MP-B20 (SII / Microchip)
-const SII_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
-const SII_WRITE_UUID_1 = "49535343-1e4d-4bd9-ba61-802d64c64e01";
-const SII_WRITE_UUID_2 = "49535343-8841-43f4-a8d4-ecbe34729bb3";
-const STANDARD_PRINTER_UUID = "000018f0-0000-1000-8000-00805f9b34fb";
-
 export class PrinterService {
-  private bluetoothDevice: BluetoothDevice | null = null;
-  private bluetoothChar: BluetoothRemoteGATTCharacteristic | null = null;
-  
-  // USB / Serial Properties
-  private serialPort: SerialPort | null = null;
-  private serialWriter: WritableStreamDefaultWriter | null = null;
-  private serialDisconnectListener: ((e: Event) => void) | null = null;
-
+  private buffer: number[] = [];
+  private timer: any = null;
   private onDisconnectCallback: (() => void) | null = null;
   private logger: ((msg: string) => void) | null = null;
-  private intentionalDisconnect = false;
+  
+  // Mock State to fool App.tsx
+  private isConnectedFlag = false;
+  private mockDeviceName = "MP-B20 (RawBT)";
 
   setLogger(callback: (msg: string) => void) {
     this.logger = callback;
@@ -46,226 +36,134 @@ export class PrinterService {
     this.onDisconnectCallback = callback;
   }
 
-  private handleDisconnect = () => {
-    this.log("Device Disconnected");
-    this.bluetoothChar = null;
-    this.serialWriter = null;
-
-    if (this.serialDisconnectListener) {
-      navigator.serial.removeEventListener('disconnect', this.serialDisconnectListener);
-      this.serialDisconnectListener = null;
-    }
-
-    if (!this.intentionalDisconnect && this.bluetoothDevice) {
-        this.log("⚠️ Unexpected BT disconnect. Attempting Keep-Alive reconnect...");
-        this.restoreBluetoothConnection().then(success => {
-            if (success) this.log("✅ Auto-reconnected!");
-        });
-    }
-
-    if (this.onDisconnectCallback) {
-      this.onDisconnectCallback();
-    }
-  };
-
   // ==========================================
-  // USB / Web Serial Connection
+  // Connection Mock (RawBT doesn't need real connection)
   // ==========================================
-  async connectUsb(): Promise<string> {
-      this.intentionalDisconnect = false;
-      if (!navigator.serial) {
-          throw new Error("Web Serial API not supported in this browser.");
-      }
+  async connect(): Promise<BluetoothDevice> {
+    this.log("Preparing RawBT Link...");
+    this.isConnectedFlag = true;
+    this.buffer = [];
 
-      this.log("Requesting USB Device...");
-      // Filter for SII vendor ID (0x0603) or just let user pick
-      const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x0603 }] });
-      
-      this.log("Opening Serial Port...");
-      await port.open({ baudRate: 115200 }); // MP-B20 standard
-
-      this.serialPort = port;
-      const textEncoder = new TextEncoderStream();
-      const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
-      // We write raw bytes, so we access port.writable directly or via a writer
-      // Actually for binary data (ESC/POS), we should bypass TextEncoder
-      // Let's get a direct writer
-      this.serialWriter = port.writable.getWriter();
-
-      // Monitor disconnect
-      this.serialDisconnectListener = (e: Event) => {
-        const event = e as any;
-        if (event.port === port) {
-          this.handleDisconnect();
-        }
-      };
-      navigator.serial.addEventListener('disconnect', this.serialDisconnectListener);
-
-      this.log("USB Connected.");
-      return "USB Printer";
+    // Return a Mock Device Object that satisfies App.tsx requirements
+    return {
+      id: "rawbt-link",
+      name: this.mockDeviceName,
+      gatt: {
+        connected: true,
+        connect: async () => this.log("Reconnected (Mock)"),
+        disconnect: () => this.disconnect(),
+        getPrimaryServices: async () => [],
+        getPrimaryService: async () => ({
+            uuid: "mock-service",
+            getCharacteristics: async () => [],
+            getCharacteristic: async () => ({
+                uuid: "mock-char",
+                properties: { write: true, writeWithoutResponse: true, read: false, notify: false },
+                writeValue: async () => {},
+                writeValueWithoutResponse: async () => {},
+                writeValueWithResponse: async () => {}
+            })
+        })
+      } as any,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => true,
+    } as unknown as BluetoothDevice;
   }
 
-  // ==========================================
-  // Bluetooth Connection
-  // ==========================================
-  async connectBluetooth(): Promise<BluetoothDevice> {
-    this.intentionalDisconnect = false;
-    try {
-      this.log("Requesting Bluetooth Device...");
-      
-      // Use specific filters instead of acceptAllDevices for better stability on Pixel/Android 13+
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: "MP-B" }], // Target MP-B20 specifically
-        optionalServices: [SII_SERVICE_UUID, STANDARD_PRINTER_UUID] 
-      });
+  // Compatible aliases for App.tsx
+  async connectBluetooth() { return this.connect(); }
+  async connectUsb() { return this.connect().then(d => d.name || "USB"); }
+  async restoreBluetoothConnection() { return true; }
+  async retryDiscovery() { this.log("RawBT is always ready."); }
+  async restoreConnection() { return true; }
 
-      if (this.bluetoothDevice) {
-        this.bluetoothDevice.removeEventListener('gattserverdisconnected', this.handleDisconnect);
-      }
-
-      this.bluetoothDevice = device;
-      this.bluetoothDevice.addEventListener('gattserverdisconnected', this.handleDisconnect);
-
-      this.log(`Selected: ${device.name}`);
-      this.log("Stabilizing radio (500ms)...");
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      this.log("Connecting GATT...");
-      const server = await device.gatt?.connect();
-      if (!server) throw new Error("GATT Connect failed");
-      this.log("Connected. Finding Services...");
-
-      await this.pollForServices(server);
-
-      return device;
-    } catch (error: any) {
-      if (!error.message?.includes("cancelled")) {
-          this.log(`BT Error: ${error.message || error}`);
-      }
-      throw error;
-    }
-  }
-
-  async restoreBluetoothConnection(): Promise<boolean> {
-    if (!this.bluetoothDevice) return false;
-    if (this.bluetoothDevice.gatt?.connected && this.bluetoothChar) return true;
-    try {
-        this.log("Restoring BT connection...");
-        const server = await this.bluetoothDevice.gatt?.connect();
-        if (server) {
-             if (!this.bluetoothChar) {
-                 await this.pollForServices(server);
-             }
-             return true;
-        }
-        return false;
-    } catch { return false; }
-  }
-
-  private async pollForServices(server: BluetoothRemoteGATTServer) {
-      // (Simplified logic from previous step, keeping it robust)
-      try {
-          const services = await server.getPrimaryServices();
-          const siiService = services.find(s => s.uuid === SII_SERVICE_UUID) 
-                          || services.find(s => s.uuid === STANDARD_PRINTER_UUID)
-                          || services[0];
-          
-          if (!siiService) throw new Error("No suitable service found");
-          
-          this.log(`Using Service: ${siiService.uuid.slice(0,8)}...`);
-          
-          const chars = await siiService.getCharacteristics();
-          const writable = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
-          
-          if (!writable) throw new Error("No writable characteristic");
-          
-          this.bluetoothChar = writable;
-          this.log("Bluetooth Ready.");
-      } catch (e: any) {
-          this.log(`Svc Error: ${e.message}`);
-          throw e;
-      }
-  }
-
-  // ==========================================
-  // Common Methods
-  // ==========================================
-  
   disconnect() {
-    this.intentionalDisconnect = true;
-    
-    // Bluetooth cleanup
-    if (this.bluetoothDevice) {
-      this.bluetoothDevice.removeEventListener('gattserverdisconnected', this.handleDisconnect);
-      if (this.bluetoothDevice.gatt?.connected) {
-        this.bluetoothDevice.gatt.disconnect();
-      }
-    }
-    this.bluetoothDevice = null;
-    this.bluetoothChar = null;
-
-    // USB cleanup
-    if (this.serialDisconnectListener) {
-      navigator.serial.removeEventListener('disconnect', this.serialDisconnectListener);
-      this.serialDisconnectListener = null;
-    }
-
-    if (this.serialWriter) {
-        this.serialWriter.releaseLock();
-        this.serialWriter = null;
-    }
-    if (this.serialPort) {
-        this.serialPort.close().catch(console.error);
-        this.serialPort = null;
-    }
-
+    this.isConnectedFlag = false;
     this.log("Disconnected.");
+    if (this.onDisconnectCallback) this.onDisconnectCallback();
   }
 
   isConnected(): boolean {
-    const btConnected = !!(this.bluetoothDevice && this.bluetoothDevice.gatt?.connected && this.bluetoothChar);
-    const usbConnected = !!(this.serialPort && this.serialWriter);
-    return btConnected || usbConnected;
+    return this.isConnectedFlag;
   }
 
+  // ==========================================
+  // RawBT Data Handling
+  // ==========================================
   private encode(text: string): Uint8Array {
+    // Note: MP-B20 expects Shift_JIS usually. 
+    // Since JS TextEncoder is UTF-8, please set RawBT driver to handle UTF-8 if possible,
+    // or rely on RawBT's image rendering if mojibake occurs.
     const encoder = new TextEncoder(); 
     return encoder.encode(text);
   }
 
   private async writeCommand(data: number[] | Uint8Array) {
-    const array = Array.isArray(data) ? new Uint8Array(data) : data;
-
-    // 1. Try USB
-    if (this.serialWriter) {
-        await this.serialWriter.write(array);
+    const bytes = data instanceof Uint8Array ? Array.from(data) : data;
+    
+    // FILTER: Ignore single "0x00" (Wakeup) bytes to prevent "AA==" prints
+    if (bytes.length === 1 && bytes[0] === 0x00) {
+        this.log("Skipping Wakeup Byte for RawBT...");
         return;
     }
 
-    // 2. Try Bluetooth
-    if (this.bluetoothChar) {
-        const canWriteNoResp = this.bluetoothChar.properties.writeWithoutResponse;
-        const CHUNK_SIZE = 20; 
-        for (let i = 0; i < array.length; i += CHUNK_SIZE) {
-            const chunk = array.slice(i, i + CHUNK_SIZE);
-            if (canWriteNoResp) {
-                await this.bluetoothChar.writeValueWithoutResponse(chunk);
-            } else {
-                await this.bluetoothChar.writeValue(chunk);
-            }
-            await new Promise(r => setTimeout(r, 10)); // tiny delay
-        }
-        return;
-    }
+    // Accumulate to buffer
+    this.buffer.push(...bytes);
+    this.log(`Buffering... (${this.buffer.length} bytes)`);
 
-    throw new Error("Printer not connected");
+    // Debounce flush (wait for more data)
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.flushToRawBT();
+    }, 1000); // Wait 1s after last write to send intent
   }
 
-  async printReceipt(items: CartItem[], total: number) {
-    if (!this.isConnected()) throw new Error("Printer disconnected");
+  private flushToRawBT() {
+    if (this.buffer.length === 0) return;
 
-    this.log("Printing...");
-    await this.writeCommand([ESC, AT]);
+    this.log("🚀 Sending to RawBT App...");
+    
+    try {
+      // Convert buffer to Binary String (Stack-safe approach)
+      // Using reduce for massive arrays might be slow, but receipts are small (<5KB).
+      let binary = "";
+      const len = this.buffer.length;
+      for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(this.buffer[i]);
+      }
+
+      // Encode to Base64
+      const base64data = btoa(binary);
+
+      // Use specific rawbt scheme to prevent interpretation errors
+      // Format: rawbt:base64,data
+      const intentUrl = `rawbt:base64,${base64data}`;
+      
+      this.buffer = []; // Clear buffer
+      
+      // Trigger Intent
+      window.location.href = intentUrl;
+      this.log("✅ Sent!");
+
+    } catch (e: any) {
+      this.log(`RawBT Error: ${e.message}`);
+      // Fallback for huge data
+      this.buffer = [];
+    }
+  }
+
+  // ==========================================
+  // Receipt Logic (Same as before, feeds writeCommand)
+  // ==========================================
+  async printReceipt(items: CartItem[], total: number) {
+    // 1. Reset Buffer
+    if (this.timer) clearTimeout(this.timer);
+    this.buffer = []; 
+    this.log("Generating Receipt...");
+
+    // 2. Generate Commands (Feed buffer)
+    await this.writeCommand([ESC, AT]); // Init
     await this.writeCommand(ALIGN_CENTER);
     await this.writeCommand(SIZE_DOUBLE);
     await this.writeCommand(this.encode("RECEIPT\n"));
@@ -273,15 +171,18 @@ export class PrinterService {
     await this.writeCommand(this.encode("PixelPOS Store\n"));
     await this.writeCommand(this.encode("--------------------------------\n"));
     await this.writeCommand([LF]);
+    
     await this.writeCommand(ALIGN_LEFT);
     for (const item of items) {
         await this.writeCommand(this.encode(`${item.name}\n`));
         const line = `${item.quantity} x Y${item.price.toLocaleString()}`;
         const totalStr = `Y${(item.price * item.quantity).toLocaleString()}`;
-        const spaces = 32 - (line.length + totalStr.length);
+        // MP-B20 has 32 columns in standard font
+        const spaces = 32 - (line.length + totalStr.length); 
         const padding = spaces > 0 ? " ".repeat(spaces) : " ";
         await this.writeCommand(this.encode(`${line}${padding}${totalStr}\n`));
     }
+    
     await this.writeCommand(this.encode("--------------------------------\n"));
     await this.writeCommand(EMPHASIS_ON);
     await this.writeCommand(SIZE_DOUBLE);
@@ -289,12 +190,14 @@ export class PrinterService {
     await this.writeCommand(this.encode(`TOTAL: Y${total.toLocaleString()}\n`));
     await this.writeCommand(EMPHASIS_OFF);
     await this.writeCommand(SIZE_NORMAL);
+    
     await this.writeCommand(ALIGN_CENTER);
     await this.writeCommand([LF]);
     await this.writeCommand(this.encode(`Date: ${new Date().toLocaleString()}\n`));
     await this.writeCommand(this.encode("Thank you!\n"));
-    await this.writeCommand([LF, LF, LF, LF]);
-    this.log("Print Done.");
+    await this.writeCommand([LF, LF, LF, LF]); // Feed
+    
+    // The flush will happen automatically 1s after the last command
   }
 }
 
