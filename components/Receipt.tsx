@@ -10,7 +10,7 @@ interface ReceiptProps {
 
 const Receipt: React.FC<ReceiptProps> = ({ items, subTotal, tax, total }) => {
   return (
-    <div id="receipt-preview" className="bg-white text-black p-6 rounded-sm shadow-xl max-w-sm mx-auto font-mono text-sm leading-relaxed mb-4 border-t-8 border-gray-200">
+    <div className="bg-white text-black p-6 rounded-sm shadow-xl max-w-sm mx-auto font-mono text-sm leading-relaxed mb-4 border-t-8 border-gray-200">
       <div className="text-center mb-6">
         <h2 className="text-xl font-bold mb-1">パナランドヨシダ</h2>
         <p className="text-gray-500 text-xs">領収書 (Receipt)</p>
