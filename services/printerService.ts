@@ -17,6 +17,8 @@ const SIZE_DOUBLE = [GS, 0x21, 0x11];
 const SII_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
 const SII_WRITE_UUID_1 = "49535343-1e4d-4bd9-ba61-802d64c64e01";
 const SII_WRITE_UUID_2 = "49535343-8841-43f4-a8d4-ecbe34729bb3";
+// STANDARD PRINTER SERVICE (Often needed for negotiation)
+const STANDARD_PRINTER_UUID = "000018f0-0000-1000-8000-00805f9b34fb";
 
 export class PrinterService {
   private device: BluetoothDevice | null = null;
@@ -60,12 +62,10 @@ export class PrinterService {
     try {
       this.log("Requesting Device...");
       
-      // MINIMALIST REQUEST: Only ask for what we absolutely need.
-      // Providing too many optionalServices can sometimes cause Android 
-      // to filter out devices that don't advertise all of them perfectly.
+      // Broader filters: Include Standard Printer UUID to help Android's negotiation
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: [SII_SERVICE_UUID] 
+        optionalServices: [SII_SERVICE_UUID, STANDARD_PRINTER_UUID] 
       });
 
       if (this.device) {
@@ -77,6 +77,10 @@ export class PrinterService {
 
       const displayName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : "Unknown Device");
       this.log(`Selected: ${displayName}`);
+
+      // ADDED DELAY: Wait 1s before connecting to let the radio settle
+      this.log("Stabilizing radio (1s)...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       this.log("Connecting GATT...");
       const server = await device.gatt?.connect();
