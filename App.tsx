@@ -3,7 +3,9 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, FileText, Download } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -125,6 +127,45 @@ const App: React.FC = () => {
     }
   };
 
+  // Improved PDF Generation using html2canvas to avoid font issues (mojibake)
+  const handleDownloadPDF = async () => {
+    const element = document.getElementById('receipt-preview');
+    if (!element) return;
+
+    try {
+      // 1. Capture the component as a high-res image
+      const canvas = await html2canvas(element, { 
+        scale: 2, // Increase scale for better quality
+        useCORS: true, 
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      
+      // 2. Initialize PDF (Portrait)
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+      });
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // 3. Add image to PDF
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      // 4. Save
+      const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+      pdf.save(`Receipt_Panaland_${dateStr}.pdf`);
+      
+    } catch (e: any) {
+      console.error("PDF Generation failed:", e);
+      alert("PDF生成に失敗しました。");
+    }
+  };
+
   const renderContent = () => {
     switch (appState) {
       case AppState.SCANNING:
@@ -209,7 +250,7 @@ const App: React.FC = () => {
                <Receipt items={cart} subTotal={subTotal} tax={tax} total={totalAmount} />
             </div>
 
-            <div className="w-full shrink-0 bg-white p-4 pb-8 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-20">
+            <div className="w-full shrink-0 bg-white p-4 pb-8 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-20 space-y-3">
               
               {!printerStatus.isConnected ? (
                 <div className="flex flex-col gap-2 mb-3">
@@ -248,15 +289,25 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              <button 
-                onClick={handlePrint}
-                className={`w-full py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
-                  !printerStatus.isConnected ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-blue-600 text-white'
-                }`}
-              >
-                <Printer size={20} />
-                Print Receipt
-              </button>
+              <div className="flex gap-2">
+                  <button 
+                    onClick={handleDownloadPDF}
+                    className="flex-1 bg-gray-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                  >
+                    <Download size={20} />
+                    PDF保存
+                  </button>
+
+                  <button 
+                    onClick={handlePrint}
+                    className={`flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
+                      !printerStatus.isConnected ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-blue-600 text-white'
+                    }`}
+                  >
+                    <Printer size={20} />
+                    Print
+                  </button>
+              </div>
             </div>
           </div>
         );
