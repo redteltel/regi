@@ -304,7 +304,7 @@ const App: React.FC = () => {
       </div>
 
       {appState !== AppState.PREVIEW && (
-        <div className="h-20 bg-surface border-t border-gray-800 flex items-center justify-around px-6 pb-2 shrink-0 z-20">
+        <div className="bg-surface border-t border-gray-800 flex items-center justify-around px-6 pt-3 pb-10 shrink-0 z-20">
           <button 
             onClick={() => setAppState(AppState.SCANNING)}
             className={`flex flex-col items-center gap-1 p-2 transition-colors ${appState === AppState.SCANNING ? 'text-primary' : 'text-gray-500'}`}
