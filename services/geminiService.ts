@@ -1,9 +1,6 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
-
-// Strictly remove any whitespace or newlines from the API key to prevent "String contains non ISO-8859-1 code point" errors.
-const apiKey = (process.env.API_KEY || '').replace(/[\r\n\s]/g, '');
-const ai = new GoogleGenAI({ apiKey: apiKey });
 
 // Using gemini-3-flash-preview as recommended for basic text tasks
 const MODEL_NAME = 'gemini-3-flash-preview';
@@ -18,7 +15,17 @@ const cleanJsonString = (text: string): string => {
 };
 
 export const extractPartNumber = async (base64Image: string): Promise<ScannedResult | null> => {
+  // Retrieve API Key at runtime (function execution time)
+  // This prevents the "Uncaught ApiError" during module import if the key is empty.
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey) {
+    console.error("Gemini API Key is missing. Please check your .env file or environment variables.");
+    throw new Error("Gemini API Key is not configured.");
+  }
+
   try {
+    const ai = new GoogleGenAI({ apiKey });
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
 
     const responseSchema = {

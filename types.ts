@@ -53,6 +53,7 @@ declare global {
     open(options: SerialOptions): Promise<void>;
     close(): Promise<void>;
     writable: WritableStream;
+    getInfo(): { usbVendorId?: number; usbProductId?: number };
   }
 
   interface SerialOptions {
