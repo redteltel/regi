@@ -170,7 +170,15 @@ const App: React.FC = () => {
       
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
-      const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+      // Generate filename with timestamp: Receipt_Panaland_YYYYMMDD_HHMMSS.pdf
+      const now = new Date();
+      const dateStr = now.getFullYear() +
+                      (now.getMonth() + 1).toString().padStart(2, '0') +
+                      now.getDate().toString().padStart(2, '0') + '_' +
+                      now.getHours().toString().padStart(2, '0') +
+                      now.getMinutes().toString().padStart(2, '0') +
+                      now.getSeconds().toString().padStart(2, '0');
+                      
       const filename = `Receipt_Panaland_${dateStr}.pdf`;
       
       // 3. Create File object
