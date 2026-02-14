@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal, RefreshCw } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal, RefreshCw, HelpCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -49,9 +49,21 @@ const App: React.FC = () => {
     } catch (e: any) {
       console.error(e);
       const msg = e.message || "Unknown error";
-      addLog(`Error: ${msg}`);
-      if (!msg.includes("User cancelled")) {
-        alert(`接続エラー:\n${msg}\n\nペアリングの問題が続く場合は、AndroidのBluetooth設定からMP-B20を削除(ペアリング解除)してからやり直してください。`);
+      
+      // Intelligent Error Handling for "User cancelled"
+      if (msg.includes("cancelled")) {
+          addLog("⚠️ Connection Cancelled");
+          alert(
+              "【デバイスが見つかりませんか？】\n\n" +
+              "リストにプリンタが表示されない場合、以下を確認してください：\n\n" +
+              "1. Androidの「設定 > Bluetooth」でMP-B20のペアリングを【解除/削除】する（最重要）\n" +
+              "2. 位置情報(GPS)をONにする\n" +
+              "3. プリンタの電源を入れ直す\n\n" +
+              "※ ブラウザ接続では、Android本体とペアリングしていると表示されません。"
+          );
+      } else {
+          addLog(`Error: ${msg}`);
+          alert(`接続エラー:\n${msg}`);
       }
     }
   };
@@ -242,14 +254,15 @@ const App: React.FC = () => {
                 Print Receipt
               </button>
 
-              {/* Enhanced Debug Log (h-64, text-xs) */}
+              {/* Enhanced Debug Log (Increased Height for visibility) */}
               <div className="mt-4 bg-black p-3 rounded-lg border border-gray-800 shadow-inner">
                 {/* Status Indicator */}
-                <div className="text-gray-400 text-xs mb-2 border-b border-gray-800 pb-1">
-                    System Logs (Service Discovery)
+                <div className="text-gray-400 text-xs mb-2 border-b border-gray-800 pb-1 flex justify-between">
+                    <span>System Logs</span>
+                    <span className="text-[10px]">MP-B20 Protocol</span>
                 </div>
 
-                <div className="text-green-400 font-mono text-xs h-40 overflow-y-auto mb-2">
+                <div className="text-green-400 font-mono text-xs h-48 overflow-y-auto mb-2">
                   <div className="flex flex-col gap-0.5">
                     {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
                     {logs.slice().reverse().map((log, i) => (

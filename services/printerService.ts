@@ -44,10 +44,6 @@ export class PrinterService {
 
     if (!this.intentionalDisconnect) {
         this.log("⚠️ Unexpected disconnect. Attempting Keep-Alive reconnect...");
-        // Simple exponential backoff or immediate retry could go here.
-        // For now, we notify the UI, but we could also try to auto-reconnect silently.
-        // Given Web Bluetooth limitations, silent reconnect often fails without user gesture,
-        // but we can try if the device object is still valid.
         this.restoreConnection().then(success => {
             if (success) this.log("✅ Auto-reconnected!");
             else this.log("❌ Auto-reconnect failed.");
@@ -62,15 +58,14 @@ export class PrinterService {
   async connect(): Promise<BluetoothDevice> {
     this.intentionalDisconnect = false;
     try {
-      this.log("Requesting Device (Accept ALL)...");
+      this.log("Requesting Device...");
       
+      // MINIMALIST REQUEST: Only ask for what we absolutely need.
+      // Providing too many optionalServices can sometimes cause Android 
+      // to filter out devices that don't advertise all of them perfectly.
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: [
-            SII_SERVICE_UUID,
-            "000018f0-0000-1000-8000-00805f9b34fb", // Standard SII
-            0x18f0, 0x1800, 0x1801, 0x180A, 0xFF00, 0xFF02 // Generics
-        ] 
+        optionalServices: [SII_SERVICE_UUID] 
       });
 
       if (this.device) {
@@ -89,12 +84,14 @@ export class PrinterService {
       this.log("Connected. Starting Discovery Loop...");
 
       // DYNAMIC DISCOVERY LOOP (Keep-Alive & Retry)
-      // Instead of a static wait, we poll for services.
       await this.pollForServices(server);
 
       return device;
     } catch (error: any) {
-      this.log(`Conn Error: ${error.message || error}`);
+      // Don't log "User cancelled" as a generic error here, let the UI handle it for better UX
+      if (!error.message?.includes("cancelled")) {
+          this.log(`Conn Error: ${error.message || error}`);
+      }
       console.error(error);
       throw error;
     }
@@ -102,7 +99,6 @@ export class PrinterService {
 
   async retryDiscovery() {
       if (!this.device || !this.device.gatt?.connected) {
-          // Try to reconnect the socket if allowed
           if (this.device) {
              this.log("Socket closed. Reconnecting...");
              await this.device.gatt?.connect();
@@ -122,7 +118,6 @@ export class PrinterService {
       let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-          // 1. Keep-Alive Check
           if (!server.connected) {
               this.log(`⚠️ Connection dropped (Attempt ${attempt}). Reconnecting...`);
               try {
@@ -138,8 +133,6 @@ export class PrinterService {
           this.log(`Searching services (Attempt ${attempt}/${MAX_ATTEMPTS})...`);
 
           try {
-              // 2. Fetch All Services
-              // Using plural getPrimaryServices() to get the full list
               const services = await server.getPrimaryServices();
               this.log(`> Found ${services.length} services.`);
 
@@ -155,7 +148,7 @@ export class PrinterService {
                   // 4. Fallback to other services
                   if (!targetChar) {
                       for (const service of services) {
-                          if (service.uuid === SII_SERVICE_UUID) continue; // Already checked
+                          if (service.uuid === SII_SERVICE_UUID) continue; 
                           this.log(`> Checking generic svc: ${service.uuid.slice(0,8)}...`);
                           targetChar = await this.findWritableChar(service, false);
                           if (targetChar) break;
@@ -193,13 +186,11 @@ export class PrinterService {
               
               if (isWritable) {
                   if (isPriority) {
-                       // If we are in the SII service, look for the specific Write UUIDs first
                        if (char.uuid === SII_WRITE_UUID_1 || char.uuid === SII_WRITE_UUID_2) {
                            this.log(">>> MATCH: SII Write Characteristic!");
                            return char;
                        }
                   }
-                  // Return first writable if we are desperate or just scanning
                   this.log(`> Candidate found: ${char.uuid.slice(0,8)}`);
                   return char;
               }
@@ -233,7 +224,6 @@ export class PrinterService {
         this.log("Restoring connection...");
         const server = await this.device.gatt?.connect();
         if (server) {
-             // If we reconnected, we might need to re-bind the characteristic if it was invalidated
              if (!this.characteristic) {
                  await this.pollForServices(server);
              }
