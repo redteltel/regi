@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal, RefreshCw, HelpCircle } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal, RefreshCw, HelpCircle, Cable } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -11,12 +11,12 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>({
     isConnected: false,
+    type: null,
     name: null,
     device: null,
     characteristic: null,
   });
   
-  // Debug logs - Increased to 99 to capture full UUID lists
   const [logs, setLogs] = useState<string[]>([]);
   const addLog = (msg: string) => setLogs(prev => [...prev.slice(-99), msg]);
 
@@ -28,53 +28,55 @@ const App: React.FC = () => {
       setPrinterStatus(prev => ({
         ...prev,
         isConnected: false,
+        type: null
       }));
     });
   }, []);
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
-  const handleConnectPrinter = async () => {
+  const handleConnectBluetooth = async () => {
     try {
       setLogs([]); 
-      const device = await printerService.connect();
+      const device = await printerService.connectBluetooth();
       const dispName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : 'MP-B20');
       
       setPrinterStatus({
         isConnected: true,
+        type: 'BLUETOOTH',
         name: dispName,
         device: device,
         characteristic: null
       });
     } catch (e: any) {
-      console.error(e);
-      const msg = e.message || "Unknown error";
-      
-      // Intelligent Error Handling for "User cancelled"
-      if (msg.includes("cancelled")) {
-          addLog("⚠️ Connection Cancelled");
-          alert(
-              "【デバイスが見つかりませんか？】\n\n" +
-              "リストにプリンタが表示されない場合、以下を確認してください：\n\n" +
-              "1. Androidの「設定 > Bluetooth」でMP-B20のペアリングを【解除/削除】する（最重要）\n" +
-              "2. 位置情報(GPS)をONにする\n" +
-              "3. プリンタの電源を入れ直す\n\n" +
-              "※ ブラウザ接続では、Android本体とペアリングしていると表示されません。"
-          );
-      } else {
-          addLog(`Error: ${msg}`);
-          alert(`接続エラー:\n${msg}`);
-      }
+      handleConnError(e);
     }
   };
 
-  const handleRetryDiscovery = async () => {
+  const handleConnectUsb = async () => {
     try {
-      addLog("Manual Retry triggered...");
-      await printerService.retryDiscovery();
-      alert("再検索が完了しました。");
+      setLogs([]); 
+      const name = await printerService.connectUsb();
+      setPrinterStatus({
+        isConnected: true,
+        type: 'USB',
+        name: name,
+        device: null,
+        characteristic: null
+      });
     } catch (e: any) {
-      addLog(`Retry Error: ${e.message}`);
+      handleConnError(e);
+    }
+  };
+
+  const handleConnError = (e: any) => {
+    console.error(e);
+    const msg = e.message || "Unknown error";
+    if (msg.includes("cancelled")) {
+        addLog("⚠️ Cancelled");
+    } else {
+        addLog(`Error: ${msg}`);
+        alert(`接続エラー:\n${msg}`);
     }
   };
 
@@ -103,9 +105,9 @@ const App: React.FC = () => {
     
     let isReady = printerStatus.isConnected && printerService.isConnected();
 
-    if (!isReady) {
-       addLog("Auto-reconnecting...");
-       const restored = await printerService.restoreConnection();
+    if (!isReady && printerStatus.type === 'BLUETOOTH') {
+       addLog("Auto-reconnecting BT...");
+       const restored = await printerService.restoreBluetoothConnection();
        if (restored) {
          setPrinterStatus(prev => ({ ...prev, isConnected: true }));
          isReady = true;
@@ -113,8 +115,8 @@ const App: React.FC = () => {
     }
 
     if (!isReady) {
-      alert("プリンタと接続されていません。\n下の「Connect Printer」ボタンを押して再接続してください。");
-      setPrinterStatus(prev => ({ ...prev, isConnected: false }));
+      alert("プリンタと接続されていません。再接続してください。");
+      setPrinterStatus(prev => ({ ...prev, isConnected: false, type: null }));
       return; 
     }
 
@@ -126,7 +128,7 @@ const App: React.FC = () => {
     } catch (e: any) {
       console.error(e);
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));
-      alert(`印刷エラー:\n${e.message}\n\n再接続してから試してください。`);
+      alert(`印刷エラー:\n${e.message}`);
     }
   };
 
@@ -196,50 +198,51 @@ const App: React.FC = () => {
       case AppState.PREVIEW:
         return (
           <div className="flex-1 flex flex-col min-h-0 bg-gray-100 text-black">
-            {/* Header */}
             <div className="w-full flex justify-between items-center px-4 py-4 shrink-0 bg-white shadow-sm z-10">
               <button onClick={() => setAppState(AppState.LIST)} className="text-blue-600 font-medium">Back</button>
               <h2 className="font-bold">Preview</h2>
               <div className="w-8"></div>
             </div>
             
-            {/* Scrollable Receipt Area */}
             <div className="flex-1 overflow-y-auto p-4">
                <Receipt items={cart} total={cartTotal} />
             </div>
 
-            {/* Fixed Bottom Controls */}
             <div className="w-full shrink-0 bg-white p-4 pb-8 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-20">
-              {/* Connection Status Helper */}
-              {!printerStatus.isConnected && (
-                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-xs mb-3 flex items-start gap-2">
-                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-bold">プリンタ未接続</p>
-                    <p>下の黒いボタンを押して接続してください。</p>
-                  </div>
-                </div>
-              )}
-
+              
               {!printerStatus.isConnected ? (
-                <button 
-                  onClick={handleConnectPrinter}
-                  className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl mb-3"
-                >
-                  <Bluetooth size={20} />
-                  Connect Printer
-                </button>
+                <div className="flex flex-col gap-2 mb-3">
+                    <button 
+                      onClick={handleConnectBluetooth}
+                      className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      <Bluetooth size={20} />
+                      Connect Bluetooth (Wireless)
+                    </button>
+                    <div className="flex items-center gap-2 text-xs text-gray-400 justify-center">
+                        <span className="h-px w-12 bg-gray-300"></span>
+                        OR
+                        <span className="h-px w-12 bg-gray-300"></span>
+                    </div>
+                    <button 
+                      onClick={handleConnectUsb}
+                      className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      <Cable size={20} />
+                      Connect USB Cable (Stable)
+                    </button>
+                </div>
               ) : (
                 <div 
                   className="w-full bg-green-50 border border-green-200 text-green-700 py-3 rounded-xl font-medium flex items-center justify-center gap-2 mb-3 cursor-pointer"
                   onClick={() => {
                      if(window.confirm("プリンタを切断しますか？")) {
                         printerService.disconnect();
-                        setPrinterStatus(prev => ({ ...prev, isConnected: false }));
+                        setPrinterStatus(prev => ({ ...prev, isConnected: false, type: null }));
                      }
                   }}
                 >
-                  <Bluetooth size={18} /> 
+                  {printerStatus.type === 'USB' ? <Cable size={18} /> : <Bluetooth size={18} />}
                   Connected to {printerStatus.name}
                 </div>
               )}
@@ -254,15 +257,13 @@ const App: React.FC = () => {
                 Print Receipt
               </button>
 
-              {/* Enhanced Debug Log (Increased Height for visibility) */}
               <div className="mt-4 bg-black p-3 rounded-lg border border-gray-800 shadow-inner">
-                {/* Status Indicator */}
                 <div className="text-gray-400 text-xs mb-2 border-b border-gray-800 pb-1 flex justify-between">
                     <span>System Logs</span>
                     <span className="text-[10px]">MP-B20 Protocol</span>
                 </div>
 
-                <div className="text-green-400 font-mono text-xs h-48 overflow-y-auto mb-2">
+                <div className="text-green-400 font-mono text-xs h-32 overflow-y-auto mb-2">
                   <div className="flex flex-col gap-0.5">
                     {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
                     {logs.slice().reverse().map((log, i) => (
@@ -270,17 +271,6 @@ const App: React.FC = () => {
                     ))}
                   </div>
                 </div>
-
-                {/* Retry Button */}
-                {printerStatus.isConnected && (
-                    <button 
-                        onClick={handleRetryDiscovery}
-                        className="w-full bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 rounded border border-gray-600 flex items-center justify-center gap-2"
-                    >
-                        <RefreshCw size={12} />
-                        Retry Discovery (サービス再検索)
-                    </button>
-                )}
               </div>
 
             </div>
@@ -297,14 +287,13 @@ const App: React.FC = () => {
             PixelPOS
           </h1>
           <button 
-            onClick={printerStatus.isConnected ? () => {} : handleConnectPrinter}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
               printerStatus.isConnected 
                 ? 'bg-green-500/10 border-green-500/50 text-green-300' 
                 : 'bg-gray-800 border-gray-700 text-gray-400'
             }`}
           >
-            <Bluetooth size={12} />
+            {printerStatus.type === 'USB' ? <Cable size={12} /> : <Bluetooth size={12} />}
             {printerStatus.isConnected ? 'Ready' : 'No Printer'}
           </button>
         </div>
