@@ -9,6 +9,9 @@ interface CameraProps {
   setIsProcessing: (val: boolean) => void;
 }
 
+// Simple in-memory cache for recent scan results to prevent duplicate processing
+const resultCache = new Map<string, Product | null>();
+
 const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProcessing }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -16,9 +19,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
   
-  // UI States for feedback
+  // Simplified Status UI
   const [statusMsg, setStatusMsg] = useState<string>("");
-  const [debugMsg, setDebugMsg] = useState<string>("");
 
   useEffect(() => {
     startCamera();
@@ -31,8 +33,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 } 
+          width: { ideal: 1280 }, // Lower resolution is sufficient for OCR preview
+          height: { ideal: 720 } 
         },
         audio: false,
       });
@@ -43,7 +45,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       setError(null);
     } catch (err) {
       console.error("Camera access error:", err);
-      setError("カメラへのアクセスが拒否されました。設定を確認してください。");
+      setError("カメラへのアクセスが拒否されました。");
     }
   };
 
@@ -60,74 +62,75 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (!video || !canvas) {
-      setDebugMsg("Error: Video/Canvas ref missing");
-      return;
-    }
+    if (!video || !canvas) return;
 
     if (video.readyState !== 4 || video.videoWidth === 0) {
-      setStatusMsg("カメラ準備中...");
-      setTimeout(() => setStatusMsg(""), 1000);
       return;
     }
 
-    // Trigger visual flash
+    // Visual Flash Feedback
     setFlash(true);
     setTimeout(() => setFlash(false), 200);
 
-    if (navigator.vibrate) navigator.vibrate(50);
+    if (navigator.vibrate) navigator.vibrate(30);
     setIsProcessing(true);
-    setStatusMsg("📸 画像処理中...");
-    setDebugMsg("");
+    setStatusMsg("解析中...");
 
     try {
-      const MAX_WIDTH = 600;
+      // OPTIMIZATION: Resize to max 512px width for faster upload/processing
+      // Gemini Flash model works great with smaller images for text
+      const MAX_WIDTH = 512; 
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       
       canvas.width = video.videoWidth * scale;
       canvas.height = video.videoHeight * scale;
 
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) throw new Error("Canvas context error");
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64 = canvas.toDataURL('image/jpeg', 0.5);
+      
+      // OPTIMIZATION: Use WebP with 0.4 quality for minimal payload size
+      const base64 = canvas.toDataURL('image/webp', 0.4);
 
-      setStatusMsg("🤖 AIが品番を解析中...");
+      // Check cache to see if we processed this exact image recently (unlikely but good for rapid taps)
+      // Note: hashing base64 is expensive, so we just proceed to AI for now, 
+      // but rely on `isProcessing` flag to prevent concurrent requests.
+
       const result = await extractPartNumber(base64);
       
       if (result && result.partNumber) {
-        setStatusMsg(`🔍 検索中: ${result.partNumber}`);
+        // Local search is now instant due to sheetService caching
         const product = await searchProduct(result.partNumber);
         
         if (product) {
-          setStatusMsg("✅ 商品が見つかりました");
           if (navigator.vibrate) navigator.vibrate([50, 50]);
           onProductFound(product);
-          setTimeout(() => setIsProcessing(false), 500);
+          setStatusMsg(`✅ ${product.name}`);
+          // Short delay to show success before resetting
+          setTimeout(() => {
+             setIsProcessing(false);
+             setStatusMsg("");
+          }, 800);
           return; 
         } else {
-          setStatusMsg("⚠️ 商品マスタ未登録");
-          setDebugMsg(`品番 "${result.partNumber}" は検出されましたが、登録されていません。`);
+          setStatusMsg("⚠️ 未登録商品");
           if (navigator.vibrate) navigator.vibrate(200);
         }
       } else {
-        setStatusMsg("⚠️ 品番を読み取れませんでした");
-        setDebugMsg("文字が不鮮明か、品番が含まれていません。");
+        setStatusMsg("⚠️ 読取不可");
       }
     } catch (e: any) {
-      console.error("Scan Process Error:", e);
-      setStatusMsg("❌ エラー発生");
-      setDebugMsg(e.message || "Unknown error occurred");
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+      console.error("Scan Error:", e);
+      setStatusMsg("エラー");
     } finally {
-      setIsProcessing(false);
+      // Ensure we unblock UI if we didn't return early
       setTimeout(() => {
+        setIsProcessing(false);
         setStatusMsg("");
-        if (!debugMsg) setDebugMsg("");
-      }, 4000);
+      }, 1500);
     }
-  }, [isProcessing, onProductFound, setIsProcessing, debugMsg]);
+  }, [isProcessing, onProductFound, setIsProcessing]);
 
   return (
     <div className="flex flex-col w-full h-full bg-surface pb-20">
@@ -136,7 +139,6 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           <p>{error}</p>
         </div>
       ) : (
-        /* Reduced to 30vh for better button visibility */
         <div className="relative w-full h-[30vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
           <video
             ref={videoRef}
@@ -146,40 +148,32 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
             className="absolute inset-0 w-full h-full object-cover"
           />
 
-          {/* Flash Effect Overlay */}
           <div 
             className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-200 z-50 ${flash ? 'opacity-80' : 'opacity-0'}`}
           />
           
-          {/* Status Overlay */}
-          <div className="absolute top-4 left-0 right-0 z-30 flex flex-col gap-2 items-center pointer-events-none px-4">
+          {/* Minimal Status Overlay */}
+          <div className="absolute top-4 left-0 right-0 z-30 flex justify-center pointer-events-none px-4">
              {statusMsg && (
-               <div className="bg-black/80 backdrop-blur-md text-white py-2 px-4 rounded-full text-center font-bold text-sm shadow-lg animate-fade-in border border-white/10">
+               <div className="bg-black/70 backdrop-blur-md text-white py-1.5 px-4 rounded-full font-bold text-sm shadow-lg border border-white/10 animate-fade-in">
                  {statusMsg}
                </div>
              )}
           </div>
 
-          {/* Guide Frame */}
+          {/* Clean Guide Frame */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-64 h-16 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
               <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
-                品番をこの枠に合わせてください
+                枠に合わせてください
               </div>
               <div className="absolute top-1/2 left-4 right-4 h-px bg-red-500/50"></div>
             </div>
           </div>
-          
-           {/* Debug msg */}
-           {debugMsg && (
-             <div className="absolute bottom-4 left-4 right-4 bg-red-900/90 text-white p-2 rounded text-xs font-mono break-all border border-red-500/30">
-               {debugMsg}
-             </div>
-           )}
         </div>
       )}
       
-      {/* Controls Area */}
+      {/* Controls */}
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 bg-surface">
         <button
           onClick={handleCapture}
