@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { CartItem } from '../types';
 
@@ -36,7 +35,7 @@ const Receipt: React.FC<ReceiptProps> = ({ items, subTotal, tax, total }) => {
           <span>¥{subTotal.toLocaleString()}</span>
         </div>
         <div className="flex justify-between text-gray-600">
-          <span>消費税(10%)</span>
+          <span>(内消費税10%)</span>
           <span>¥{tax.toLocaleString()}</span>
         </div>
         <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-2 mt-2">

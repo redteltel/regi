@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Camera from './components/Camera';
 import Receipt from './components/Receipt';
@@ -19,7 +18,7 @@ const App: React.FC = () => {
   });
   
   useEffect(() => {
-    // Note: Logging UI removed as requested for production cleanup
+    // Logging UI removed for production
     printerService.setOnDisconnect(() => {
       console.log("App detected printer disconnect");
       setPrinterStatus(prev => ({
@@ -115,12 +114,10 @@ const App: React.FC = () => {
     }
 
     try {
-      // Pass calculated totals to printer service
       await printerService.printReceipt(cart, subTotal, tax, totalAmount);
       setCart([]); 
       setAppState(AppState.SCANNING);
-      // Removed alert to make it smoother, or keep if preferred. Keeping for feedback.
-      // alert("印刷が完了しました！"); 
+      alert("印刷が完了しました！");
     } catch (e: any) {
       console.error(e);
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));

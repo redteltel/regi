@@ -1,4 +1,3 @@
-
 import { CartItem } from '../types';
 
 // ESC/POS Commands
@@ -25,7 +24,7 @@ export class PrinterService {
   log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
   // ----------------------------------------
-  // Connection Methods
+  // Connection Methods (Compatible with App.tsx)
   // ----------------------------------------
   
   async connect(): Promise<any> {
@@ -108,7 +107,6 @@ export class PrinterService {
         binary += String.fromCharCode(this.buffer[i]);
       }
       const base64data = btoa(binary);
-      // RawBT Intent Scheme
       const intentUrl = "intent:base64," + base64data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
       
       this.buffer = [];
@@ -165,18 +163,12 @@ export class PrinterService {
     
     add(this.encode("--------------------------------\n"));
     
-    // Calculation Breakdown
+    // Total Breakdown
     add(ALIGN_RIGHT);
-    
-    // Subtotal
     add(this.encode(`小計: Y${subTotal.toLocaleString()}\n`));
-    
-    // Tax
     add(this.encode(`(内消費税10%): Y${tax.toLocaleString()}\n`));
-    
     add([LF]);
-    
-    // Total
+
     add(EMPHASIS_ON);
     add(SIZE_DOUBLE);
     add(this.encode(`合計: Y${total.toLocaleString()}\n`));
@@ -189,7 +181,7 @@ export class PrinterService {
     add(this.encode(`Date: ${new Date().toLocaleString()}\n`));
     add(this.encode("毎度ありがとうございます!\n"));
     
-    // Feed and Cut (or simply feed)
+    // Feed and Cut
     add([LF, LF, LF, LF]);
 
     // Send to buffer -> RawBT
