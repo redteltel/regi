@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
@@ -14,72 +13,84 @@ const cleanJsonString = (text: string): string => {
   return cleaned;
 };
 
+// Retry utility
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const extractPartNumber = async (base64Image: string): Promise<ScannedResult | null> => {
-  // Retrieve API Key at runtime (function execution time)
-  // This prevents the "Uncaught ApiError" during module import if the key is empty.
+  // Retrieve API Key at runtime
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
-    console.error("Gemini API Key is missing. Please check your .env file or environment variables.");
+    console.error("Gemini API Key is missing.");
     throw new Error("Gemini API Key is not configured.");
   }
 
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
+  const ai = new GoogleGenAI({ apiKey });
+  const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
 
-    const responseSchema = {
-      type: Type.OBJECT,
-      properties: {
-        partNumber: {
-          type: Type.STRING,
-          description: "The alphanumeric product code, model number, or SKU found in the image.",
-        },
-        confidence: {
-          type: Type.NUMBER,
-          description: "Confidence score between 0 and 1.",
-        },
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      partNumber: {
+        type: Type.STRING,
+        description: "The alphanumeric product code, model number, or SKU found in the image. Ignore purely numeric barcodes if an alphanumeric code exists.",
       },
-      required: ["partNumber"],
-    };
-
-    const result = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: cleanBase64,
-            },
-          },
-          {
-            text: "Extract the main product part number (品番) or SKU from this image. Return just the code.",
-          },
-        ],
+      confidence: {
+        type: Type.NUMBER,
+        description: "Confidence score between 0 and 1.",
       },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        temperature: 0.1,
-      },
-    });
+    },
+    required: ["partNumber"],
+  };
 
-    const rawText = result.text;
-    if (!rawText) return null;
+  // Retry logic: Try up to 2 times
+  let attempts = 0;
+  const maxAttempts = 2;
 
-    const jsonText = cleanJsonString(rawText);
-    
+  while (attempts < maxAttempts) {
     try {
-      const data = JSON.parse(jsonText) as ScannedResult;
-      return data;
-    } catch (parseError) {
-      console.error("JSON Parse Error", parseError);
-      throw new Error("Failed to parse AI response.");
-    }
+      const result = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'image/jpeg', // API accepts 'image/jpeg' for generic image data
+                data: cleanBase64,
+              },
+            },
+            {
+              text: "Extract the main product model number (品番) from this image. Return just the code in JSON.",
+            },
+          ],
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: responseSchema,
+          temperature: 0.1,
+        },
+      });
 
-  } catch (error: any) {
-    console.error("Gemini Vision Error:", error);
-    throw error;
+      const rawText = result.text;
+      if (!rawText) throw new Error("Empty response from AI");
+
+      const jsonText = cleanJsonString(rawText);
+      const data = JSON.parse(jsonText) as ScannedResult;
+      
+      return data;
+
+    } catch (error: any) {
+      attempts++;
+      console.warn(`Gemini API Attempt ${attempts} failed:`, error);
+      
+      if (attempts >= maxAttempts) {
+        console.error("Gemini Vision Error after retries:", error);
+        throw error;
+      }
+      // Wait 1 second before retrying
+      await wait(1000);
+    }
   }
+
+  return null;
 };

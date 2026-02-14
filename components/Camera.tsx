@@ -9,9 +9,6 @@ interface CameraProps {
   setIsProcessing: (val: boolean) => void;
 }
 
-// Simple in-memory cache for recent scan results to prevent duplicate processing
-const resultCache = new Map<string, Product | null>();
-
 const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProcessing }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -19,8 +16,9 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
   
-  // Simplified Status UI
+  // Status UI
   const [statusMsg, setStatusMsg] = useState<string>("");
+  const [statusType, setStatusType] = useState<'info' | 'success' | 'error'>('info');
 
   useEffect(() => {
     startCamera();
@@ -33,8 +31,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
-          width: { ideal: 1280 }, // Lower resolution is sufficient for OCR preview
-          height: { ideal: 720 } 
+          width: { ideal: 1920 }, // High input res, downscaled later
+          height: { ideal: 1080 } 
         },
         audio: false,
       });
@@ -45,7 +43,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       setError(null);
     } catch (err) {
       console.error("Camera access error:", err);
-      setError("カメラへのアクセスが拒否されました。");
+      setError("カメラを起動できませんでした。権限を確認してください。");
     }
   };
 
@@ -54,6 +52,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
+  };
+
+  const showStatus = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setStatusMsg(msg);
+    setStatusType(type);
   };
 
   const handleCapture = useCallback(async () => {
@@ -74,12 +77,13 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
 
     if (navigator.vibrate) navigator.vibrate(30);
     setIsProcessing(true);
-    setStatusMsg("解析中...");
+    showStatus("AI解析中...", 'info');
 
     try {
-      // OPTIMIZATION: Resize to max 512px width for faster upload/processing
-      // Gemini Flash model works great with smaller images for text
-      const MAX_WIDTH = 512; 
+      // OPTIMIZATION: 
+      // 1024px is a sweet spot: readable for AI, fast enough to upload.
+      // 512px was too small for complex alphanumeric codes.
+      const MAX_WIDTH = 1024; 
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       
       canvas.width = video.videoWidth * scale;
@@ -90,47 +94,50 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // OPTIMIZATION: Use WebP with 0.4 quality for minimal payload size
-      const base64 = canvas.toDataURL('image/webp', 0.4);
-
-      // Check cache to see if we processed this exact image recently (unlikely but good for rapid taps)
-      // Note: hashing base64 is expensive, so we just proceed to AI for now, 
-      // but rely on `isProcessing` flag to prevent concurrent requests.
+      // OPTIMIZATION: Use WebP with 0.6 quality (balanced)
+      // 0.4 was too aggressive causing artifacts on text
+      const base64 = canvas.toDataURL('image/webp', 0.6);
 
       const result = await extractPartNumber(base64);
       
       if (result && result.partNumber) {
-        // Local search is now instant due to sheetService caching
+        showStatus("データ照合中...", 'info');
+        // Local search is fast due to sheetService caching
         const product = await searchProduct(result.partNumber);
         
         if (product) {
           if (navigator.vibrate) navigator.vibrate([50, 50]);
           onProductFound(product);
-          setStatusMsg(`✅ ${product.name}`);
-          // Short delay to show success before resetting
+          showStatus(`✅ ${product.name}`, 'success');
+          
           setTimeout(() => {
              setIsProcessing(false);
              setStatusMsg("");
-          }, 800);
+          }, 1200);
           return; 
         } else {
-          setStatusMsg("⚠️ 未登録商品");
+          showStatus(`⚠️ 未登録: ${result.partNumber}`, 'error');
           if (navigator.vibrate) navigator.vibrate(200);
         }
       } else {
-        setStatusMsg("⚠️ 読取不可");
+        showStatus("⚠️ 文字が読み取れません", 'error');
       }
     } catch (e: any) {
       console.error("Scan Error:", e);
-      setStatusMsg("エラー");
+      showStatus("接続エラー。再試行してください", 'error');
     } finally {
-      // Ensure we unblock UI if we didn't return early
+      // Reset if not successful found (successful found handles its own reset)
       setTimeout(() => {
         setIsProcessing(false);
-        setStatusMsg("");
+        // Don't clear error messages immediately so user can read them
+        if (statusType !== 'error') {
+            setStatusMsg("");
+        } else {
+            setTimeout(() => setStatusMsg(""), 2000);
+        }
       }, 1500);
     }
-  }, [isProcessing, onProductFound, setIsProcessing]);
+  }, [isProcessing, onProductFound, setIsProcessing, statusType]);
 
   return (
     <div className="flex flex-col w-full h-full bg-surface pb-20">
@@ -139,7 +146,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           <p>{error}</p>
         </div>
       ) : (
-        <div className="relative w-full h-[30vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
+        <div className="relative w-full h-[35vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
           <video
             ref={videoRef}
             autoPlay
@@ -152,22 +159,31 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
             className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-200 z-50 ${flash ? 'opacity-80' : 'opacity-0'}`}
           />
           
-          {/* Minimal Status Overlay */}
-          <div className="absolute top-4 left-0 right-0 z-30 flex justify-center pointer-events-none px-4">
+          {/* Status Overlay */}
+          <div className="absolute top-6 left-0 right-0 z-30 flex justify-center pointer-events-none px-4">
              {statusMsg && (
-               <div className="bg-black/70 backdrop-blur-md text-white py-1.5 px-4 rounded-full font-bold text-sm shadow-lg border border-white/10 animate-fade-in">
+               <div className={`
+                 backdrop-blur-md text-white py-2 px-6 rounded-full font-bold text-sm shadow-lg border border-white/10 animate-fade-in
+                 ${statusType === 'error' ? 'bg-red-500/80' : statusType === 'success' ? 'bg-green-500/80' : 'bg-black/70'}
+               `}>
                  {statusMsg}
                </div>
              )}
           </div>
 
-          {/* Clean Guide Frame */}
+          {/* Guide Frame */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-64 h-16 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
-                枠に合わせてください
+            <div className="w-72 h-20 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
+              <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
+                品番を枠内に大きく写してください
               </div>
               <div className="absolute top-1/2 left-4 right-4 h-px bg-red-500/50"></div>
+              
+              {/* Corner markers */}
+              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white"></div>
+              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white"></div>
+              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white"></div>
+              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-white"></div>
             </div>
           </div>
         </div>
@@ -191,7 +207,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
              </svg>
           ) : (
             <div className="w-20 h-20 rounded-full bg-white/20 pointer-events-none backdrop-blur-sm flex items-center justify-center">
-                 <div className="w-16 h-16 rounded-full bg-white opacity-80"></div>
+                 <div className="w-16 h-16 rounded-full bg-white opacity-80 shadow-inner"></div>
             </div>
           )}
         </button>
@@ -199,7 +215,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         <div className="text-center space-y-1">
             <h3 className="text-xl font-bold text-onSurface">Scan Label</h3>
             <p className="text-gray-400 text-sm">
-              Press button to analyze
+              {isProcessing ? 'AI Processing...' : 'Press to Analyze'}
             </p>
         </div>
       </div>
