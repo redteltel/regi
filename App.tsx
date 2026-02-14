@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Download, ChevronLeft, X, Home } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -20,7 +20,7 @@ const App: React.FC = () => {
   });
   
   useEffect(() => {
-    // Logging UI removed for production
+    // Ensure no debug logs appear in UI
     printerService.setOnDisconnect(() => {
       console.log("App detected printer disconnect");
       setPrinterStatus(prev => ({
@@ -31,9 +31,9 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // Tax Calculation Logic
+  // Tax Calculation Logic: 10% Floor
   const subTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const tax = Math.floor(subTotal * 0.1); // 10% consumption tax
+  const tax = Math.floor(subTotal * 0.1); 
   const totalAmount = subTotal + tax;
 
   const handleConnectBluetooth = async () => {
@@ -96,7 +96,7 @@ const App: React.FC = () => {
     }).filter(item => item.quantity > 0));
   };
 
-  // Printing Logic - Simplified (No alerts, stay on screen)
+  // Printing Logic - MP-B20 (RawBT)
   const handlePrint = async () => {
     if (cart.length === 0) return;
     
@@ -118,8 +118,6 @@ const App: React.FC = () => {
 
     try {
       await printerService.printReceipt(cart, subTotal, tax, totalAmount);
-      // UX Improvement: No alert, just stay on page.
-      // The RawBT intent will handle the feedback.
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
       console.error(e);
@@ -128,7 +126,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Reset Logic - Clear cart and go back to Scan
   const handleFinish = () => {
     if (window.confirm("現在のカートをクリアしてトップに戻りますか？")) {
       setCart([]);
@@ -136,15 +133,17 @@ const App: React.FC = () => {
     }
   };
 
-  // Improved PDF Generation using html2canvas to avoid font issues (mojibake)
-  const handleDownloadPDF = async () => {
+  // PDF Export via Web Share API (Google Drive support)
+  const handleSharePDF = async () => {
     const element = document.getElementById('receipt-preview');
     if (!element) return;
 
+    if (navigator.vibrate) navigator.vibrate(50);
+
     try {
-      // 1. Capture the component as a high-res image
+      // 1. Capture content as image
       const canvas = await html2canvas(element, { 
-        scale: 2, // Increase scale for better quality
+        scale: 2, 
         useCORS: true, 
         logging: false,
         backgroundColor: '#ffffff'
@@ -152,7 +151,8 @@ const App: React.FC = () => {
       
       const imgData = canvas.toDataURL('image/png');
       
-      // 2. Initialize PDF (Portrait)
+      // 2. Generate PDF
+      // @ts-ignore
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -162,16 +162,33 @@ const App: React.FC = () => {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      // 3. Add image to PDF
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
-      // 4. Save
       const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
-      pdf.save(`Receipt_Panaland_${dateStr}.pdf`);
+      const filename = `Receipt_Panaland_${dateStr}.pdf`;
+      
+      // 3. Create File object
+      const blob = pdf.output('blob');
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      // 4. Invoke System Share Sheet (Web Share API)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'パナランドヨシダ 領収書',
+          text: `領収書 (${dateStr}) を送信します。`,
+        });
+      } else {
+        // Fallback for non-supported browsers
+        pdf.save(filename);
+        alert('PDFをダウンロードしました。\nGoogleドライブへは「ファイル」アプリからアップロードしてください。');
+      }
       
     } catch (e: any) {
-      console.error("PDF Generation failed:", e);
-      alert("PDF生成に失敗しました。");
+      console.error("PDF Export failed:", e);
+      if (e.name !== 'AbortError') { // Ignore user cancel
+         alert("PDF保存に失敗しました。");
+      }
     }
   };
 
@@ -272,7 +289,7 @@ const App: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-4 pb-32">
                <Receipt items={cart} subTotal={subTotal} tax={tax} total={totalAmount} />
                <div className="text-center text-gray-400 text-xs mt-4">
-                 内容をご確認の上、印刷してください。
+                 内容をご確認の上、印刷または共有してください。
                </div>
             </div>
 
@@ -318,11 +335,11 @@ const App: React.FC = () => {
 
               <div className="flex gap-3">
                   <button 
-                    onClick={handleDownloadPDF}
+                    onClick={handleSharePDF}
                     className="flex-1 bg-gray-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
                   >
-                    <Download size={20} />
-                    PDF
+                    <Share size={20} />
+                    PDF共有
                   </button>
 
                   <button 
