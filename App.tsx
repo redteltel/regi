@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal, RefreshCw, HelpCircle, Cable } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -17,14 +18,10 @@ const App: React.FC = () => {
     characteristic: null,
   });
   
-  const [logs, setLogs] = useState<string[]>([]);
-  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-99), msg]);
-
   useEffect(() => {
-    printerService.setLogger(addLog);
+    // Note: Logging UI removed as requested for production cleanup
     printerService.setOnDisconnect(() => {
       console.log("App detected printer disconnect");
-      addLog("Status: Disconnected");
       setPrinterStatus(prev => ({
         ...prev,
         isConnected: false,
@@ -33,11 +30,13 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  // Tax Calculation Logic
+  const subTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const tax = Math.floor(subTotal * 0.1); // 10% consumption tax
+  const totalAmount = subTotal + tax;
 
   const handleConnectBluetooth = async () => {
     try {
-      setLogs([]); 
       const device = await printerService.connectBluetooth();
       const dispName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : 'MP-B20');
       
@@ -55,7 +54,6 @@ const App: React.FC = () => {
 
   const handleConnectUsb = async () => {
     try {
-      setLogs([]); 
       const name = await printerService.connectUsb();
       setPrinterStatus({
         isConnected: true,
@@ -72,10 +70,7 @@ const App: React.FC = () => {
   const handleConnError = (e: any) => {
     console.error(e);
     const msg = e.message || "Unknown error";
-    if (msg.includes("cancelled")) {
-        addLog("⚠️ Cancelled");
-    } else {
-        addLog(`Error: ${msg}`);
+    if (!msg.includes("cancelled")) {
         alert(`接続エラー:\n${msg}`);
     }
   };
@@ -106,7 +101,6 @@ const App: React.FC = () => {
     let isReady = printerStatus.isConnected && printerService.isConnected();
 
     if (!isReady && printerStatus.type === 'BLUETOOTH') {
-       addLog("Auto-reconnecting BT...");
        const restored = await printerService.restoreBluetoothConnection();
        if (restored) {
          setPrinterStatus(prev => ({ ...prev, isConnected: true }));
@@ -121,10 +115,12 @@ const App: React.FC = () => {
     }
 
     try {
-      await printerService.printReceipt(cart, cartTotal);
+      // Pass calculated totals to printer service
+      await printerService.printReceipt(cart, subTotal, tax, totalAmount);
       setCart([]); 
       setAppState(AppState.SCANNING);
-      alert("印刷が完了しました！");
+      // Removed alert to make it smoother, or keep if preferred. Keeping for feedback.
+      // alert("印刷が完了しました！"); 
     } catch (e: any) {
       console.error(e);
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));
@@ -179,9 +175,17 @@ const App: React.FC = () => {
                 ))}
                 
                 <div className="mt-8 bg-surface p-4 rounded-xl border border-gray-800">
-                  <div className="flex justify-between items-center text-lg font-bold">
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Subtotal</span>
+                    <span>¥{subTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Tax (10%)</span>
+                    <span>¥{tax.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-700">
                     <span>Total</span>
-                    <span className="text-primary">¥{cartTotal.toLocaleString()}</span>
+                    <span className="text-primary">¥{totalAmount.toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -205,7 +209,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4">
-               <Receipt items={cart} total={cartTotal} />
+               <Receipt items={cart} subTotal={subTotal} tax={tax} total={totalAmount} />
             </div>
 
             <div className="w-full shrink-0 bg-white p-4 pb-8 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-20">
@@ -256,23 +260,6 @@ const App: React.FC = () => {
                 <Printer size={20} />
                 Print Receipt
               </button>
-
-              <div className="mt-4 bg-black p-3 rounded-lg border border-gray-800 shadow-inner">
-                <div className="text-gray-400 text-xs mb-2 border-b border-gray-800 pb-1 flex justify-between">
-                    <span>System Logs</span>
-                    <span className="text-[10px]">MP-B20 Protocol</span>
-                </div>
-
-                <div className="text-green-400 font-mono text-xs h-32 overflow-y-auto mb-2">
-                  <div className="flex flex-col gap-0.5">
-                    {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
-                    {logs.slice().reverse().map((log, i) => (
-                      <div key={i} className="break-all border-b border-gray-800/50 pb-0.5 hover:bg-gray-900">{log}</div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
             </div>
           </div>
         );

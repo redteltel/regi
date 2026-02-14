@@ -25,11 +25,8 @@ export class PrinterService {
   log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
   // ----------------------------------------
-  // Connection Methods (Compatible with App.tsx)
+  // Connection Methods
   // ----------------------------------------
-
-  // RawBT uses intents, so no persistent physical connection is maintained by JS.
-  // We mock the connection flow to satisfy App.tsx logic.
   
   async connect(): Promise<any> {
     return new Promise((resolve) => {
@@ -68,7 +65,6 @@ export class PrinterService {
   }
 
   isConnected(): boolean {
-    // For RawBT, we are always "ready" to send an intent
     return true;
   }
 
@@ -112,6 +108,7 @@ export class PrinterService {
         binary += String.fromCharCode(this.buffer[i]);
       }
       const base64data = btoa(binary);
+      // RawBT Intent Scheme
       const intentUrl = "intent:base64," + base64data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
       
       this.buffer = [];
@@ -127,13 +124,10 @@ export class PrinterService {
   // ----------------------------------------
 
   private encode(text: string): Uint8Array {
-    // Assuming the printer handles Shift_JIS or UTF-8. 
-    // Since we are using RawBT, it often handles encoding conversion if configured,
-    // but sending raw bytes is safest.
     return new TextEncoder().encode(text);
   }
 
-  async printReceipt(items: CartItem[], total: number) {
+  async printReceipt(items: CartItem[], subTotal: number, tax: number, total: number) {
     this.log("Generating Receipt...");
     
     const cmds: number[] = [];
@@ -149,10 +143,10 @@ export class PrinterService {
     add([ESC, AT]); // Initialize
     add(ALIGN_CENTER);
     add(SIZE_DOUBLE);
-    add(this.encode("RECEIPT\n"));
+    add(this.encode("パナランドヨシダ\n"));
     
     add(SIZE_NORMAL);
-    add(this.encode("PixelPOS Store\n"));
+    add(this.encode("領収書\n"));
     add(this.encode("--------------------------------\n"));
     add([LF]);
     
@@ -171,11 +165,21 @@ export class PrinterService {
     
     add(this.encode("--------------------------------\n"));
     
+    // Calculation Breakdown
+    add(ALIGN_RIGHT);
+    
+    // Subtotal
+    add(this.encode(`小計: Y${subTotal.toLocaleString()}\n`));
+    
+    // Tax
+    add(this.encode(`(内消費税10%): Y${tax.toLocaleString()}\n`));
+    
+    add([LF]);
+    
     // Total
     add(EMPHASIS_ON);
     add(SIZE_DOUBLE);
-    add(ALIGN_RIGHT);
-    add(this.encode(`TOTAL: Y${total.toLocaleString()}\n`));
+    add(this.encode(`合計: Y${total.toLocaleString()}\n`));
     add(EMPHASIS_OFF);
     add(SIZE_NORMAL);
     
@@ -183,7 +187,7 @@ export class PrinterService {
     add(ALIGN_CENTER);
     add([LF]);
     add(this.encode(`Date: ${new Date().toLocaleString()}\n`));
-    add(this.encode("Thank you!\n"));
+    add(this.encode("毎度ありがとうございます!\n"));
     
     // Feed and Cut (or simply feed)
     add([LF, LF, LF, LF]);
