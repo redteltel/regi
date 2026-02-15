@@ -1,5 +1,5 @@
 {
-  "name": "PixelPOS - MP-B20 Scanner",
+  "name": "PixelPOS - レジ",
   "description": "OCR scanner and receipt printer app for Google Pixel 9a using Gemini API and Web Bluetooth.",
   "requestFramePermissions": [
     "camera"
