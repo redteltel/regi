@@ -14,9 +14,10 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   
   // Receipt Mode State
-  const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL'>('RECEIPT');
+  const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL' | 'INVOICE'>('RECEIPT');
   const [recipientName, setRecipientName] = useState('');
   const [proviso, setProviso] = useState('');
+  const [paymentDeadline, setPaymentDeadline] = useState('');
 
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>({
     isConnected: false,
@@ -155,7 +156,8 @@ const App: React.FC = () => {
           totalAmount,
           receiptMode,
           recipientName,
-          proviso
+          proviso,
+          paymentDeadline
       );
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
@@ -172,6 +174,7 @@ const App: React.FC = () => {
       setReceiptMode('RECEIPT');
       setRecipientName('');
       setProviso('');
+      setPaymentDeadline('');
       setAppState(AppState.SCANNING);
     }
   };
@@ -222,9 +225,15 @@ const App: React.FC = () => {
                       now.getMinutes().toString().padStart(2, '0') +
                       now.getSeconds().toString().padStart(2, '0');
                       
-      const typeStr = receiptMode === 'FORMAL' ? 'FormalReceipt' : 'Receipt';
+      const typeStr = receiptMode === 'FORMAL' ? 'FormalReceipt' : receiptMode === 'INVOICE' ? 'Invoice' : 'Receipt';
       const filename = `${typeStr}_Panaland_${dateStr}.pdf`;
       
+      const titleMap = {
+          'RECEIPT': 'レシート',
+          'FORMAL': '領収書',
+          'INVOICE': '請求書'
+      };
+
       // 3. Create File object
       const blob = pdf.output('blob');
       const file = new File([blob], filename, { type: 'application/pdf' });
@@ -234,8 +243,8 @@ const App: React.FC = () => {
         try {
             await navigator.share({
               files: [file],
-              title: receiptMode === 'FORMAL' ? 'パナランドヨシダ 領収書' : 'パナランドヨシダ レシート',
-              text: `${receiptMode === 'FORMAL' ? '領収書' : 'レシート'} (${dateStr}) を送信します。`,
+              title: `パナランドヨシダ ${titleMap[receiptMode]}`,
+              text: `${titleMap[receiptMode]} (${dateStr}) を送信します。`,
             });
         } catch (shareError: any) {
             if (shareError.name !== 'AbortError') {
@@ -403,6 +412,15 @@ const App: React.FC = () => {
                {/* Mode Switcher */}
                <div className="flex bg-gray-200 p-1 rounded-lg mb-4">
                   <button
+                    onClick={() => setReceiptMode('INVOICE')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                      receiptMode === 'INVOICE' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    <FileText size={16} />
+                    請求書
+                  </button>
+                  <button
                     onClick={() => setReceiptMode('RECEIPT')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
                       receiptMode === 'RECEIPT' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
@@ -422,8 +440,8 @@ const App: React.FC = () => {
                   </button>
                </div>
 
-               {/* Formal Receipt Inputs */}
-               {receiptMode === 'FORMAL' && (
+               {/* Inputs (Invoice & Formal) */}
+               {(receiptMode === 'FORMAL' || receiptMode === 'INVOICE') && (
                  <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-blue-100 space-y-3">
                     <div>
                       <label className="block text-xs font-bold text-gray-500 mb-1">宛名 (Recipient)</label>
@@ -435,16 +453,30 @@ const App: React.FC = () => {
                         className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">但し書き (Proviso)</label>
-                      <input 
-                        type="text" 
-                        value={proviso}
-                        onChange={(e) => setProviso(e.target.value)}
-                        placeholder="例：お品代として"
-                        className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
-                      />
-                    </div>
+                    {receiptMode === 'FORMAL' && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">但し書き (Proviso)</label>
+                          <input 
+                            type="text" 
+                            value={proviso}
+                            onChange={(e) => setProviso(e.target.value)}
+                            placeholder="例：お品代として"
+                            className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                    )}
+                    {receiptMode === 'INVOICE' && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">お支払期限 (Deadline)</label>
+                          <input 
+                            type="text" 
+                            value={paymentDeadline}
+                            onChange={(e) => setPaymentDeadline(e.target.value)}
+                            placeholder="例：2023年10月末日"
+                            className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                    )}
                  </div>
                )}
 
@@ -457,6 +489,7 @@ const App: React.FC = () => {
                  mode={receiptMode}
                  recipientName={recipientName}
                  proviso={proviso}
+                 paymentDeadline={paymentDeadline}
                />
                
                <div className="text-center text-gray-400 text-xs mt-4">

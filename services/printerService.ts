@@ -120,9 +120,10 @@ export class PrinterService {
       subTotal: number, 
       tax: number, 
       total: number,
-      mode: 'RECEIPT' | 'FORMAL' = 'RECEIPT',
+      mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' = 'RECEIPT',
       recipientName: string = '',
-      proviso: string = ''
+      proviso: string = '',
+      paymentDeadline: string = ''
   ) {
     this.log("Generating Receipt...");
     
@@ -143,6 +144,8 @@ export class PrinterService {
     add(SIZE_DOUBLE);
     if (mode === 'FORMAL') {
         add(this.encode("領 収 証\n"));
+    } else if (mode === 'INVOICE') {
+        add(this.encode("請 求 書\n"));
     } else {
         add(this.encode("領収書 (レシート)\n"));
     }
@@ -154,12 +157,17 @@ export class PrinterService {
     add(this.encode(`${new Date().toLocaleString()}\n`));
     add([LF]);
 
-    // Formal Details (Recipient, Total, Proviso)
-    if (mode === 'FORMAL') {
+    // Formal/Invoice Details (Recipient, Total, Proviso)
+    if (mode === 'FORMAL' || mode === 'INVOICE') {
         add(ALIGN_LEFT);
         add(this.encode(`${recipientName || "          "} 様\n`));
         add([LF]);
         
+        if (mode === 'INVOICE') {
+             add(ALIGN_RIGHT);
+             add(this.encode("下記の通りご請求申し上げます。\n"));
+        }
+
         add(ALIGN_CENTER);
         add(SIZE_DOUBLE);
         add(EMPHASIS_ON);
@@ -168,10 +176,18 @@ export class PrinterService {
         add(SIZE_NORMAL);
         add([LF]);
         
-        add(ALIGN_LEFT);
-        add(this.encode(`但  ${proviso || "お品代"}として\n`));
-        add(this.encode("上記正に領収いたしました\n"));
-        add([LF]);
+        if (mode === 'FORMAL') {
+            add(ALIGN_LEFT);
+            add(this.encode(`但  ${proviso || "お品代"}として\n`));
+            add(this.encode("上記正に領収いたしました\n"));
+            add([LF]);
+        }
+        
+        if (mode === 'INVOICE' && paymentDeadline) {
+             add(ALIGN_RIGHT);
+             add(this.encode(`お支払期限: ${paymentDeadline}\n`));
+             add([LF]);
+        }
     }
 
     add(ALIGN_CENTER);
@@ -216,6 +232,18 @@ export class PrinterService {
         add(SIZE_NORMAL);
     }
     add([LF]);
+
+    // Invoice Bank Info
+    if (mode === 'INVOICE') {
+        add(ALIGN_LEFT);
+        add(EMPHASIS_ON);
+        add(this.encode("[お振込先]\n"));
+        add(EMPHASIS_OFF);
+        add(this.encode("天草信用金庫 瀬戸橋支店\n"));
+        add(this.encode("普通口座 0088477\n"));
+        add(this.encode("ﾌｸｼﾏ ｶｽﾞﾋｺ\n"));
+        add([LF]);
+    }
     
     // Footer: Store Info
     add(ALIGN_CENTER);
@@ -237,7 +265,11 @@ export class PrinterService {
     }
 
     add([LF]);
-    add(this.encode("毎度ありがとうございます!\n"));
+    if (mode === 'INVOICE') {
+         add(this.encode("ご請求書を送付いたします。\n"));
+    } else {
+         add(this.encode("毎度ありがとうございます!\n"));
+    }
     
     // Feed and Cut
     add([LF, LF, LF, LF]);
