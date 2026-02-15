@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -12,6 +12,12 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [laborCost, setLaborCost] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Receipt Mode State
+  const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL'>('RECEIPT');
+  const [recipientName, setRecipientName] = useState('');
+  const [proviso, setProviso] = useState('');
+
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>({
     isConnected: false,
     type: null,
@@ -31,6 +37,17 @@ const App: React.FC = () => {
       }));
     });
   }, []);
+
+  // Update proviso default when entering preview
+  useEffect(() => {
+    if (appState === AppState.PREVIEW && !proviso) {
+        if (cart.length > 0) {
+            setProviso('お品代として');
+        } else if (laborCost > 0) {
+            setProviso('工賃として');
+        }
+    }
+  }, [appState, cart.length, laborCost]);
 
   // Tax Calculation Logic: 
   // Subtotal = Items Total + Labor Cost
@@ -130,8 +147,16 @@ const App: React.FC = () => {
     }
 
     try {
-      // Pass laborCost to printer service
-      await printerService.printReceipt(cart, laborCost, subTotal, tax, totalAmount);
+      await printerService.printReceipt(
+          cart, 
+          laborCost, 
+          subTotal, 
+          tax, 
+          totalAmount,
+          receiptMode,
+          recipientName,
+          proviso
+      );
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
       console.error(e);
@@ -144,6 +169,9 @@ const App: React.FC = () => {
     if (window.confirm("現在のカートをクリアしてトップに戻りますか？")) {
       setCart([]);
       setLaborCost(0);
+      setReceiptMode('RECEIPT');
+      setRecipientName('');
+      setProviso('');
       setAppState(AppState.SCANNING);
     }
   };
@@ -185,7 +213,7 @@ const App: React.FC = () => {
       
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
-      // Generate filename with timestamp: Receipt_Panaland_YYYYMMDD_HHMMSS.pdf
+      // Generate filename
       const now = new Date();
       const dateStr = now.getFullYear() +
                       (now.getMonth() + 1).toString().padStart(2, '0') +
@@ -194,7 +222,8 @@ const App: React.FC = () => {
                       now.getMinutes().toString().padStart(2, '0') +
                       now.getSeconds().toString().padStart(2, '0');
                       
-      const filename = `Receipt_Panaland_${dateStr}.pdf`;
+      const typeStr = receiptMode === 'FORMAL' ? 'FormalReceipt' : 'Receipt';
+      const filename = `${typeStr}_Panaland_${dateStr}.pdf`;
       
       // 3. Create File object
       const blob = pdf.output('blob');
@@ -205,17 +234,15 @@ const App: React.FC = () => {
         try {
             await navigator.share({
               files: [file],
-              title: 'パナランドヨシダ 領収書',
-              text: `領収書 (${dateStr}) を送信します。`,
+              title: receiptMode === 'FORMAL' ? 'パナランドヨシダ 領収書' : 'パナランドヨシダ レシート',
+              text: `${receiptMode === 'FORMAL' ? '領収書' : 'レシート'} (${dateStr}) を送信します。`,
             });
         } catch (shareError: any) {
             if (shareError.name !== 'AbortError') {
-                // If share fails, fallback to save
                 pdf.save(filename);
             }
         }
       } else {
-        // Fallback for non-supported browsers
         pdf.save(filename);
       }
       
@@ -243,7 +270,6 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-bold mb-6 text-primary">Cart ({cart.length})</h2>
             
             <div className="space-y-4">
-                {/* Products List or Empty Placeholder */}
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-800 rounded-xl bg-surface/50">
                     <ShoppingCart className="w-10 h-10 mb-3 opacity-40 text-gray-500" />
@@ -262,8 +288,6 @@ const App: React.FC = () => {
                       <div className="flex-1">
                         <h3 className="font-semibold text-onSurface">{item.name}</h3>
                         <p className="text-xs text-gray-400">{item.partNumber}</p>
-                        
-                        {/* Editable Price Input */}
                         <div className="flex items-center gap-2 mt-2">
                           <span className="text-gray-400 text-sm">@</span>
                           <div className="relative">
@@ -280,7 +304,6 @@ const App: React.FC = () => {
                               />
                           </div>
                         </div>
-
                       </div>
                       <div className="flex items-center gap-3 bg-surface rounded-lg p-1 border border-gray-800">
                         <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-gray-800 rounded-md">
@@ -295,7 +318,6 @@ const App: React.FC = () => {
                   ))
                 )}
 
-                {/* Labor Cost Input - ALWAYS VISIBLE */}
                 <div className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm border-l-4 border-secondary">
                   <div className="flex items-center gap-2">
                     <Wrench size={20} className="text-secondary" />
@@ -319,7 +341,6 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 
-                {/* Summary Card - ALWAYS VISIBLE */}
                 <div className="mt-8 bg-surface p-4 rounded-xl border border-gray-800">
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
                     <span>Items Total</span>
@@ -359,7 +380,6 @@ const App: React.FC = () => {
       case AppState.PREVIEW:
         return (
           <div className="flex flex-col h-[100dvh] bg-gray-100 text-black overflow-hidden">
-            {/* Header - Fixed Top */}
             <div className="w-full flex justify-between items-center px-4 py-4 shrink-0 bg-white shadow-sm z-20">
               <button 
                 onClick={() => setAppState(AppState.LIST)} 
@@ -380,15 +400,74 @@ const App: React.FC = () => {
             
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-4 pb-32">
-               <Receipt items={cart} laborCost={laborCost} subTotal={subTotal} tax={tax} total={totalAmount} />
+               {/* Mode Switcher */}
+               <div className="flex bg-gray-200 p-1 rounded-lg mb-4">
+                  <button
+                    onClick={() => setReceiptMode('RECEIPT')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                      receiptMode === 'RECEIPT' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    <ReceiptIcon size={16} />
+                    レシート
+                  </button>
+                  <button
+                    onClick={() => setReceiptMode('FORMAL')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                      receiptMode === 'FORMAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    <FileText size={16} />
+                    領収書
+                  </button>
+               </div>
+
+               {/* Formal Receipt Inputs */}
+               {receiptMode === 'FORMAL' && (
+                 <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-blue-100 space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">宛名 (Recipient)</label>
+                      <input 
+                        type="text" 
+                        value={recipientName}
+                        onChange={(e) => setRecipientName(e.target.value)}
+                        placeholder="例：上様、〇〇株式会社"
+                        className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">但し書き (Proviso)</label>
+                      <input 
+                        type="text" 
+                        value={proviso}
+                        onChange={(e) => setProviso(e.target.value)}
+                        placeholder="例：お品代として"
+                        className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                 </div>
+               )}
+
+               <Receipt 
+                 items={cart} 
+                 laborCost={laborCost} 
+                 subTotal={subTotal} 
+                 tax={tax} 
+                 total={totalAmount}
+                 mode={receiptMode}
+                 recipientName={recipientName}
+                 proviso={proviso}
+               />
+               
                <div className="text-center text-gray-400 text-xs mt-4">
-                 内容をご確認の上、印刷または共有してください。
+                 {receiptMode === 'FORMAL' && totalAmount >= 50000 
+                    ? "※ 5万円以上のため印紙枠を表示しています" 
+                    : "内容をご確認の上、印刷または共有してください。"}
                </div>
             </div>
 
-            {/* Sticky Footer - Always Visible */}
+            {/* Footer */}
             <div className="w-full shrink-0 bg-white p-4 pb-10 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-30 sticky bottom-0">
-              
               {!printerStatus.isConnected ? (
                 <div className="flex flex-col gap-2 mb-3">
                     <button 
@@ -483,7 +562,6 @@ const App: React.FC = () => {
       </div>
 
       {appState !== AppState.PREVIEW && (
-        // INCREASED PADDING BOTTOM TO 28 (approx 7rem/112px) TO RAISE BUTTONS HIGHER
         <div className="bg-surface border-t border-gray-800 flex items-center justify-around px-6 pt-4 pb-28 shrink-0 z-20">
           <button 
             onClick={() => setAppState(AppState.SCANNING)}

@@ -12,6 +12,7 @@ const EMPHASIS_ON = [ESC, 0x45, 1];
 const EMPHASIS_OFF = [ESC, 0x45, 0];
 const SIZE_NORMAL = [GS, 0x21, 0x00];
 const SIZE_DOUBLE = [GS, 0x21, 0x11];
+const SIZE_LARGE = [GS, 0x21, 0x11]; 
 
 export class PrinterService {
   public onLog: ((msg: string) => void) | null = null;
@@ -23,10 +24,6 @@ export class PrinterService {
   setOnDisconnect(callback: () => void) { this.onDisconnect = callback; }
   log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
-  // ----------------------------------------
-  // Connection Methods (Compatible with App.tsx)
-  // ----------------------------------------
-  
   async connect(): Promise<any> {
     return new Promise((resolve) => {
       this.buffer = [];
@@ -71,10 +68,6 @@ export class PrinterService {
     return true;
   }
 
-  // ----------------------------------------
-  // Data Handling
-  // ----------------------------------------
-
   async print(data: any) {
     let bytes: Uint8Array;
     if (data instanceof Uint8Array) {
@@ -117,15 +110,20 @@ export class PrinterService {
     }
   }
 
-  // ----------------------------------------
-  // Receipt Generation (ESC/POS)
-  // ----------------------------------------
-
   private encode(text: string): Uint8Array {
     return new TextEncoder().encode(text);
   }
 
-  async printReceipt(items: CartItem[], laborCost: number, subTotal: number, tax: number, total: number) {
+  async printReceipt(
+      items: CartItem[], 
+      laborCost: number, 
+      subTotal: number, 
+      tax: number, 
+      total: number,
+      mode: 'RECEIPT' | 'FORMAL' = 'RECEIPT',
+      recipientName: string = '',
+      proviso: string = ''
+  ) {
     this.log("Generating Receipt...");
     
     const cmds: number[] = [];
@@ -140,13 +138,44 @@ export class PrinterService {
     // Header
     add([ESC, AT]); // Initialize
     add(ALIGN_CENTER);
-    add(SIZE_DOUBLE);
-    add(this.encode("パナランドヨシダ\n"));
     
+    // Title
+    add(SIZE_DOUBLE);
+    if (mode === 'FORMAL') {
+        add(this.encode("領 収 証\n"));
+    } else {
+        add(this.encode("領収書 (レシート)\n"));
+    }
     add(SIZE_NORMAL);
-    add(this.encode("領収書\n"));
-    add(this.encode("--------------------------------\n"));
     add([LF]);
+
+    // Date
+    add(ALIGN_RIGHT);
+    add(this.encode(`${new Date().toLocaleString()}\n`));
+    add([LF]);
+
+    // Formal Details (Recipient, Total, Proviso)
+    if (mode === 'FORMAL') {
+        add(ALIGN_LEFT);
+        add(this.encode(`${recipientName || "          "} 様\n`));
+        add([LF]);
+        
+        add(ALIGN_CENTER);
+        add(SIZE_DOUBLE);
+        add(EMPHASIS_ON);
+        add(this.encode(`Y${total.toLocaleString()}-\n`));
+        add(EMPHASIS_OFF);
+        add(SIZE_NORMAL);
+        add([LF]);
+        
+        add(ALIGN_LEFT);
+        add(this.encode(`但  ${proviso || "お品代"}として\n`));
+        add(this.encode("上記正に領収いたしました\n"));
+        add([LF]);
+    }
+
+    add(ALIGN_CENTER);
+    add(this.encode("--------------------------------\n"));
     
     // Items
     add(ALIGN_LEFT);
@@ -155,7 +184,6 @@ export class PrinterService {
         const line = `${item.quantity} x Y${item.price.toLocaleString()}`;
         const totalStr = `Y${(item.price * item.quantity).toLocaleString()}`;
         
-        // Simple padding calculation (assuming font A 32 chars width)
         const spaces = 32 - (line.length + totalStr.length); 
         const padding = spaces > 0 ? " ".repeat(spaces) : " ";
         add(this.encode(`${line}${padding}${totalStr}\n`));
@@ -163,31 +191,52 @@ export class PrinterService {
     
     // Labor Cost
     if (laborCost > 0) {
-        const line = "工賃 (Labor)";
+        add(this.encode("工賃 (Labor)\n"));
+        const line = "1 x " + laborCost.toLocaleString();
         const totalStr = `Y${laborCost.toLocaleString()}`;
         const spaces = 32 - (line.length + totalStr.length);
         const padding = spaces > 0 ? " ".repeat(spaces) : " ";
         add(this.encode(`${line}${padding}${totalStr}\n`));
     }
 
+    add(ALIGN_CENTER);
     add(this.encode("--------------------------------\n"));
     
     // Total Breakdown
     add(ALIGN_RIGHT);
     add(this.encode(`小計: Y${subTotal.toLocaleString()}\n`));
     add(this.encode(`(内消費税10%): Y${tax.toLocaleString()}\n`));
-    add([LF]);
-
-    add(EMPHASIS_ON);
-    add(SIZE_DOUBLE);
-    add(this.encode(`合計: Y${total.toLocaleString()}\n`));
-    add(EMPHASIS_OFF);
-    add(SIZE_NORMAL);
     
-    // Footer
-    add(ALIGN_CENTER);
+    if (mode === 'RECEIPT') {
+        add([LF]);
+        add(EMPHASIS_ON);
+        add(SIZE_DOUBLE);
+        add(this.encode(`合計: Y${total.toLocaleString()}\n`));
+        add(EMPHASIS_OFF);
+        add(SIZE_NORMAL);
+    }
     add([LF]);
-    add(this.encode(`Date: ${new Date().toLocaleString()}\n`));
+    
+    // Footer: Store Info
+    add(ALIGN_CENTER);
+    add(EMPHASIS_ON);
+    add(this.encode("パナランドヨシダ\n"));
+    add(EMPHASIS_OFF);
+    add(this.encode("〒863-0015\n熊本県天草市旭町43\n"));
+    add(this.encode("電話: 0969-24-0218\n"));
+    add(this.encode("登録番号: T6810624772686\n"));
+    
+    // Revenue Stamp Placeholder for Formal Receipt > 50000
+    if (mode === 'FORMAL' && total >= 50000) {
+        add([LF]);
+        add(ALIGN_RIGHT);
+        add(this.encode("----------\n"));
+        add(this.encode("| 収入印紙 |\n"));
+        add(this.encode("----------\n"));
+        add(ALIGN_CENTER);
+    }
+
+    add([LF]);
     add(this.encode("毎度ありがとうございます!\n"));
     
     // Feed and Cut
