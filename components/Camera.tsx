@@ -80,8 +80,6 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       stopCamera();
 
       // Strategy: Try Environment camera first with minimal constraints
-      // Do NOT request specific resolution initially to avoid "OverconstrainedError" 
-      // which sometimes masquerades as permission issues on Pixel devices.
       let mediaStream: MediaStream;
       
       try {
@@ -92,7 +90,6 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       } catch (err: any) {
         console.warn("Environment camera failed, trying fallback...", err);
         // Fallback: Request ANY video camera
-        // This is crucial if 'environment' is not strictly identified by the driver
         mediaStream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: false
@@ -108,7 +105,6 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        // Explicitly call play() and handle the promise
         try {
             await videoRef.current.play();
         } catch (playErr) {
@@ -205,7 +201,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     showStatus("AI解析中...", 'info');
 
     try {
-      const MAX_WIDTH = 1024; 
+      // Improved: Use JPEG with higher quality (0.85) for better OCR accuracy
+      const MAX_WIDTH = 1280; // Slightly larger for better detail
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       
       canvas.width = video.videoWidth * scale;
@@ -215,7 +212,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       if (!ctx) throw new Error("Canvas context error");
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64 = canvas.toDataURL('image/webp', 0.6);
+      const base64 = canvas.toDataURL('image/jpeg', 0.85);
 
       const result = await extractPartNumber(base64);
       
@@ -259,15 +256,16 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         }
 
       } else {
-        showStatus("⚠️ 文字が読み取れません", 'error');
+        // More descriptive error message for user
+        showStatus("品番を読み取れませんでした。\n商品を枠内に大きく写してください。", 'error');
         setTimeout(() => {
             setIsProcessing(false);
             setStatusMsg("");
-        }, 1500);
+        }, 2000);
       }
     } catch (e: any) {
       console.error("Scan Error:", e);
-      showStatus("エラーが発生しました", 'error');
+      showStatus("エラーが発生しました。\n再試行してください。", 'error');
       setTimeout(() => {
         setIsProcessing(false);
         setStatusMsg("");

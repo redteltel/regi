@@ -26,6 +26,8 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
   }
 
   const ai = new GoogleGenAI({ apiKey });
+  
+  // Normalize base64 string
   const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
 
   const responseSchema = {
@@ -33,7 +35,7 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
     properties: {
       partNumber: {
         type: Type.STRING,
-        description: "The alphanumeric product code, model number, or SKU found in the image. Ignore purely numeric barcodes if an alphanumeric code exists.",
+        description: "The alphanumeric product model number (品番) found in the image. e.g., NA-LX129EL, BQ-CC23. Ignore barcodes and price labels.",
       },
       confidence: {
         type: Type.NUMBER,
@@ -55,19 +57,19 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
           parts: [
             {
               inlineData: {
-                mimeType: 'image/jpeg', // API accepts 'image/jpeg' for generic image data
+                mimeType: 'image/jpeg', // Camera.tsx now ensures this is sent as jpeg compatible data
                 data: cleanBase64,
               },
             },
             {
-              text: "Extract the main product model number (品番) from this image. Return just the code in JSON.",
+              text: "Extract the main product model number (品番) from this image. It is usually an alphanumeric code (e.g., NA-LX129EL). Ignore pure barcodes. Return JSON.",
             },
           ],
         },
         config: {
           responseMimeType: "application/json",
           responseSchema: responseSchema,
-          temperature: 0.1,
+          temperature: 0.0, // Low temperature for deterministic OCR
         },
       });
 
@@ -84,8 +86,8 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
       console.warn(`Gemini API Attempt ${attempts} failed:`, error);
       
       if (attempts >= maxAttempts) {
-        console.error("Gemini Vision Error after retries:", error);
-        throw error;
+        // Return null instead of throwing to allow the UI to show "Cannot read" instead of "Error"
+        return null;
       }
       // Wait 1 second before retrying
       await wait(1000);
