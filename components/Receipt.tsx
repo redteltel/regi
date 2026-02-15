@@ -29,7 +29,7 @@ const Receipt: React.FC<ReceiptProps> = ({
 
   const getTitle = () => {
       switch(mode) {
-          case 'ESTIMATION': return '御 見 積 書 (Estimation)';
+          case 'ESTIMATION': return '御 見 積 書';
           case 'INVOICE': return '請 求 書';
           case 'FORMAL': return '領 収 証';
           default: return '領収書 (レシート)';
@@ -179,13 +179,15 @@ const Receipt: React.FC<ReceiptProps> = ({
         </div>
 
         {/* Electronic Seal (Inkan) */}
-        {/* Assumes seal.jpg exists in public/assets/ folder */}
-        <img 
-            src="./assets/seal.jpg" 
-            onError={(e) => e.currentTarget.style.display = 'none'}
-            className="absolute bottom-0 right-2 w-20 h-20 mix-blend-multiply opacity-80 object-contain z-0 pointer-events-none transform rotate-[-3deg]"
-            alt="印" 
-        />
+        <div className="absolute bottom-0 right-2 w-24 h-24 z-0 pointer-events-none transform rotate-[-3deg]">
+            <img 
+                src="./assets/seal.jpg" 
+                onError={(e) => e.currentTarget.style.display = 'none'}
+                className="w-full h-full object-contain opacity-85"
+                style={{ mixBlendMode: 'multiply' }} 
+                alt="印" 
+            />
+        </div>
 
         {/* Revenue Stamp Box */}
         {needsStamp && (

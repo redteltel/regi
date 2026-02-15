@@ -1,8 +1,10 @@
 import { CartItem } from '../types';
+import Encoding from 'encoding-japanese';
 
 // ESC/POS Commands
 const ESC = 0x1B;
 const GS = 0x1D;
+const FS = 0x1C;
 const AT = 0x40; // Initialize
 const LF = 0x0A; // Line Feed
 const ALIGN_CENTER = [ESC, 0x61, 1];
@@ -13,6 +15,11 @@ const EMPHASIS_OFF = [ESC, 0x45, 0];
 const SIZE_NORMAL = [GS, 0x21, 0x00];
 const SIZE_DOUBLE = [GS, 0x21, 0x11];
 const SIZE_LARGE = [GS, 0x21, 0x11]; 
+
+// MP-B20 / Japanese Specific
+const KANJI_MODE_ON = [FS, 0x26]; // FS & - Select Kanji character mode
+const JIS_CODE_SYSTEM = [FS, 0x43, 0x01]; // FS C 1 - Select Shift-JIS code system
+const COUNTRY_JAPAN = [ESC, 0x52, 0x08]; // ESC R 8 - Select international character set (Japan)
 
 export class PrinterService {
   public onLog: ((msg: string) => void) | null = null;
@@ -77,6 +84,7 @@ export class PrinterService {
     } else if (Array.isArray(data)) {
       bytes = new Uint8Array(data);
     } else {
+      // Default fallback if string passed directly (should not happen with new printReceipt)
       bytes = new TextEncoder().encode(String(data));
     }
     
@@ -100,6 +108,8 @@ export class PrinterService {
         binary += String.fromCharCode(this.buffer[i]);
       }
       const base64data = btoa(binary);
+      // RawBT Intent: Pass raw base64 data. 
+      // The content inside base64 is already Shift_JIS encoded by printReceipt.
       const intentUrl = "intent:base64," + base64data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
       
       this.buffer = [];
@@ -110,8 +120,17 @@ export class PrinterService {
     }
   }
 
-  private encode(text: string): Uint8Array {
-    return new TextEncoder().encode(text);
+  /**
+   * Encode string to Shift_JIS bytes for MP-B20
+   */
+  private encode(text: string): number[] {
+    // Convert UNICODE string to Shift_JIS byte array
+    const sjisData = Encoding.convert(text, {
+      to: 'SJIS',
+      from: 'UNICODE',
+      type: 'array'
+    });
+    return sjisData;
   }
 
   async printReceipt(
@@ -125,19 +144,19 @@ export class PrinterService {
       proviso: string = '',
       paymentDeadline: string = ''
   ) {
-    this.log("Generating Receipt...");
+    this.log("Generating Receipt (Shift_JIS)...");
     
     const cmds: number[] = [];
-    const add = (data: number[] | Uint8Array) => {
-        if (data instanceof Uint8Array) {
-            data.forEach(b => cmds.push(b));
-        } else {
-            cmds.push(...data);
-        }
+    const add = (data: number[]) => {
+        cmds.push(...data);
     };
     
-    // Header
+    // Header & Initialization for Japanese
     add([ESC, AT]); // Initialize
+    add(COUNTRY_JAPAN); // ESC R 8
+    add(KANJI_MODE_ON); // FS & (Enable Kanji)
+    add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
+    
     add(ALIGN_CENTER);
     
     // Title
@@ -176,7 +195,7 @@ export class PrinterService {
         add(ALIGN_CENTER);
         add(SIZE_DOUBLE);
         add(EMPHASIS_ON);
-        add(this.encode(`Y${total.toLocaleString()}-\n`));
+        add(this.encode(`¥${total.toLocaleString()}-\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
         add([LF]);
@@ -210,10 +229,17 @@ export class PrinterService {
     add(ALIGN_LEFT);
     for (const item of items) {
         add(this.encode(`${item.name}\n`));
-        const line = `${item.quantity} x Y${item.price.toLocaleString()}`;
-        const totalStr = `Y${(item.price * item.quantity).toLocaleString()}`;
+        const line = `${item.quantity} x ¥${item.price.toLocaleString()}`;
+        const totalStr = `¥${(item.price * item.quantity).toLocaleString()}`;
         
-        const spaces = 32 - (line.length + totalStr.length); 
+        // Calculate visual width for alignment (approximate for Shift_JIS)
+        // 1 byte char = 1, 2 byte char = 2 spaces
+        let lineLen = 0;
+        for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
+        let totalLen = 0;
+        for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
+
+        const spaces = 32 - (lineLen + totalLen); 
         const padding = spaces > 0 ? " ".repeat(spaces) : " ";
         add(this.encode(`${line}${padding}${totalStr}\n`));
     }
@@ -222,8 +248,14 @@ export class PrinterService {
     if (laborCost > 0) {
         add(this.encode("工賃 (Labor)\n"));
         const line = "1 x " + laborCost.toLocaleString();
-        const totalStr = `Y${laborCost.toLocaleString()}`;
-        const spaces = 32 - (line.length + totalStr.length);
+        const totalStr = `¥${laborCost.toLocaleString()}`;
+        
+        let lineLen = 0;
+        for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
+        let totalLen = 0;
+        for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
+
+        const spaces = 32 - (lineLen + totalLen);
         const padding = spaces > 0 ? " ".repeat(spaces) : " ";
         add(this.encode(`${line}${padding}${totalStr}\n`));
     }
@@ -233,14 +265,14 @@ export class PrinterService {
     
     // Total Breakdown
     add(ALIGN_RIGHT);
-    add(this.encode(`小計: Y${subTotal.toLocaleString()}\n`));
-    add(this.encode(`(内消費税10%): Y${tax.toLocaleString()}\n`));
+    add(this.encode(`小計: ¥${subTotal.toLocaleString()}\n`));
+    add(this.encode(`(内消費税10%): ¥${tax.toLocaleString()}\n`));
     
     if (mode === 'RECEIPT') {
         add([LF]);
         add(EMPHASIS_ON);
         add(SIZE_DOUBLE);
-        add(this.encode(`合計: Y${total.toLocaleString()}\n`));
+        add(this.encode(`合計: ¥${total.toLocaleString()}\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
     }

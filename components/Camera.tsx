@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { extractPartNumber } from '../services/geminiService';
 import { searchProduct } from '../services/sheetService';
 import { Product } from '../types';
-import { Plus, X, AlertCircle } from 'lucide-react';
+import { Plus, X, AlertCircle, RefreshCw, CameraOff, Lock } from 'lucide-react';
 
 interface CameraProps {
   onProductFound: (product: Product) => void;
@@ -13,6 +13,7 @@ interface CameraProps {
 const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProcessing }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null); // Ref for immediate cleanup access
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -27,38 +28,112 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   const [scannedCode, setScannedCode] = useState<string>("");
 
   useEffect(() => {
-    startCamera();
-    return () => stopCamera();
+    let isMounted = true;
+
+    // Check for Secure Context (HTTPS or Localhost)
+    if (!window.isSecureContext) {
+       setError("カメラを使用するにはHTTPS接続、またはlocalhostが必要です。\n(現在の接続: 非セキュア)");
+       return;
+    }
+
+    const initCamera = async () => {
+      await startCamera(isMounted);
+    };
+    initCamera();
+
+    return () => {
+      isMounted = false;
+      stopCamera();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startCamera = async () => {
+  const getMediaStream = async (constraints: MediaStreamConstraints): Promise<MediaStream> => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("NOT_SUPPORTED");
+      }
+      return await navigator.mediaDevices.getUserMedia(constraints);
+  };
+
+  const startCamera = async (isMounted: boolean) => {
+    setError(null);
+    if (!isMounted) return;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError("お使いのブラウザはカメラ機能をサポートしていないか、安全なコンテキスト(HTTPS)で実行されていません。");
+      return;
+    }
+
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1920 }, 
-          height: { ideal: 1080 } 
-        },
-        audio: false,
-      });
+      // 1. Try Environment (Simplest constraints first to trigger permission)
+      // Removing 'ideal' resolution constraints initially to avoid OverconstrainedError or Permission weirdness
+      let mediaStream: MediaStream;
+      try {
+        mediaStream = await getMediaStream({
+            video: { facingMode: 'environment' },
+            audio: false,
+        });
+      } catch (e1: any) {
+        console.warn("Env Camera failed, retrying with fallback...", e1);
+        // 2. Try Generic Video (User or Env)
+        mediaStream = await getMediaStream({
+            video: true,
+            audio: false
+        });
+      }
+
+      if (!isMounted) {
+         // Cleanup if unmounted during await
+         mediaStream.getTracks().forEach(t => t.stop());
+         return;
+      }
+
+      streamRef.current = mediaStream;
       setStream(mediaStream);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Wait for video to be ready to play
+        videoRef.current.onloadedmetadata = () => {
+           videoRef.current?.play().catch(e => console.error("Play error:", e));
+        };
       }
-      setError(null);
-    } catch (err) {
-      console.error("Camera access error:", err);
-      // More friendly error for common permission issues
-      setError("カメラを使用できません。ブラウザの権限設定を確認してください。");
+    } catch (err: any) {
+      if (!isMounted) return;
+      console.error("Camera access final error:", err);
+      
+      const errName = err.name || '';
+      const errMsg = err.message || String(err);
+
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError' || errMsg.includes('Permission denied')) {
+        setError("カメラのアクセスが拒否されました。\n\n【解決策】\n1. ブラウザのアドレスバーの鍵アイコン等をタップ\n2. 「サイトの設定」または「権限」を選択\n3. カメラを「許可」に変更\n4. ページを再読み込み");
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+        setError("カメラデバイスが見つかりません。");
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
+        setError("カメラにアクセスできません。\n他のアプリ（Zoom, ライトなど）がカメラを使用していないか確認してください。");
+      } else if (errName === 'NOT_SUPPORTED') {
+         setError("このブラウザはカメラをサポートしていません。ChromeまたはSafariを使用してください。");
+      } else {
+        setError(`カメラエラー: ${errMsg}`);
+      }
     }
   };
 
   const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    setStream(null);
+  };
+
+  const handleRetry = () => {
+      stopCamera();
+      setError(null);
+      // Small delay to ensure hardware release
+      setTimeout(() => {
+          startCamera(true);
+      }, 500);
   };
 
   const showStatus = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -93,7 +168,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   };
 
   const handleCapture = useCallback(async () => {
-    if (isProcessing || showCandidateDialog) return;
+    if (isProcessing || showCandidateDialog || error) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -153,7 +228,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           showStatus("候補が見つかりました", 'info');
 
         } else {
-          // No Match, No Candidates -> Add as New immediately (or could show dialog, but prompt prefers speed)
+          // No Match, No Candidates -> Add as New immediately
           if (navigator.vibrate) navigator.vibrate([30, 100, 30]);
           
           const newProduct: Product = {
@@ -187,7 +262,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         setStatusMsg("");
       }, 1500);
     }
-  }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing]);
+  }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing, error]);
 
   return (
     <div className="flex flex-col w-full h-full bg-surface pb-20 relative">
@@ -241,8 +316,25 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       )}
 
       {error ? (
-        <div className="h-40 flex items-center justify-center text-red-400 p-4 text-center bg-gray-900">
-          <p>{error}</p>
+        <div className="h-full flex flex-col items-center justify-center text-red-300 p-8 text-center bg-surface gap-6">
+          <div className="w-20 h-20 bg-red-900/30 rounded-full flex items-center justify-center">
+              {error.includes('HTTPS') ? (
+                  <Lock size={40} className="text-red-500" />
+              ) : (
+                  <CameraOff size={40} className="text-red-500" />
+              )}
+          </div>
+          <div>
+            <h3 className="text-lg font-bold mb-2">カメラエラー</h3>
+            <p className="text-sm text-gray-400 leading-relaxed whitespace-pre-wrap">{error}</p>
+          </div>
+          <button 
+            onClick={handleRetry}
+            className="px-6 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white font-bold flex items-center gap-2 hover:bg-gray-700 active:scale-95 transition-all"
+          >
+            <RefreshCw size={18} />
+            再試行 (Retry)
+          </button>
         </div>
       ) : (
         <div className="relative w-full h-[35vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
@@ -292,11 +384,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 bg-surface">
         <button
           onClick={handleCapture}
-          disabled={isProcessing || showCandidateDialog}
+          disabled={isProcessing || showCandidateDialog || !!error}
           className={`
             relative w-24 h-24 rounded-full border-4 border-surface ring-4 ring-primary/20 flex items-center justify-center
             transition-all duration-200 shadow-2xl
-            ${isProcessing ? 'bg-gray-700 scale-95 opacity-80 cursor-not-allowed' : 'bg-primary hover:bg-primary/90 active:scale-90 active:bg-white'}
+            ${(isProcessing || !!error) ? 'bg-gray-700 scale-95 opacity-80 cursor-not-allowed' : 'bg-primary hover:bg-primary/90 active:scale-90 active:bg-white'}
           `}
         >
           {isProcessing ? (
@@ -314,7 +406,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         <div className="text-center space-y-1">
             <h3 className="text-xl font-bold text-onSurface">Scan Label</h3>
             <p className="text-gray-400 text-sm">
-              {isProcessing ? 'AI Processing...' : 'Press to Analyze'}
+              {isProcessing ? 'AI Processing...' : error ? 'Camera Error' : 'Press to Analyze'}
             </p>
         </div>
       </div>
