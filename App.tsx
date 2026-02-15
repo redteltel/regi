@@ -3,13 +3,14 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2 } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [laborCost, setLaborCost] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>({
     isConnected: false,
@@ -31,8 +32,11 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // Tax Calculation Logic: 10% Floor
-  const subTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  // Tax Calculation Logic: 
+  // Subtotal = Items Total + Labor Cost
+  // Tax = floor(Subtotal * 10%)
+  const itemsTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const subTotal = itemsTotal + laborCost;
   const tax = Math.floor(subTotal * 0.1); 
   const totalAmount = subTotal + tax;
 
@@ -98,7 +102,7 @@ const App: React.FC = () => {
 
   // Printing Logic - MP-B20 (RawBT)
   const handlePrint = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 && laborCost === 0) return;
     
     let isReady = printerStatus.isConnected && printerService.isConnected();
 
@@ -117,7 +121,8 @@ const App: React.FC = () => {
     }
 
     try {
-      await printerService.printReceipt(cart, subTotal, tax, totalAmount);
+      // Pass laborCost to printer service
+      await printerService.printReceipt(cart, laborCost, subTotal, tax, totalAmount);
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
       console.error(e);
@@ -129,6 +134,7 @@ const App: React.FC = () => {
   const handleFinish = () => {
     if (window.confirm("現在のカートをクリアしてトップに戻りますか？")) {
       setCart([]);
+      setLaborCost(0);
       setAppState(AppState.SCANNING);
     }
   };
@@ -226,7 +232,9 @@ const App: React.FC = () => {
         return (
           <div className="flex-1 p-4 pb-24 overflow-y-auto">
             <h2 className="text-2xl font-bold mb-6 text-primary">Cart ({cart.length})</h2>
-            {cart.length === 0 ? (
+            
+            {/* Products List */}
+            {cart.length === 0 && laborCost === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-500">
                 <ShoppingCart className="w-12 h-12 mb-4 opacity-50" />
                 <p>Your cart is empty.</p>
@@ -257,9 +265,41 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ))}
+
+                {/* Labor Cost Input */}
+                <div className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm border-l-4 border-secondary">
+                  <div className="flex items-center gap-2">
+                    <Wrench size={20} className="text-secondary" />
+                    <span className="font-semibold text-onSurface">工賃 (Labor)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">¥</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={laborCost === 0 ? '' : laborCost}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setLaborCost(isNaN(val) ? 0 : Math.max(0, val));
+                      }}
+                      placeholder="0"
+                      className="w-24 bg-surface text-right text-white font-mono text-lg border border-gray-700 rounded-lg p-2 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    />
+                  </div>
+                </div>
                 
+                {/* Summary Card */}
                 <div className="mt-8 bg-surface p-4 rounded-xl border border-gray-800">
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Items Total</span>
+                    <span>¥{itemsTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Labor Cost</span>
+                    <span>¥{laborCost.toLocaleString()}</span>
+                  </div>
+                  <div className="border-t border-gray-800 my-2"></div>
+                   <div className="flex justify-between items-center text-sm mb-2 text-gray-300 font-medium">
                     <span>Subtotal</span>
                     <span>¥{subTotal.toLocaleString()}</span>
                   </div>
@@ -307,7 +347,7 @@ const App: React.FC = () => {
             
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-4 pb-32">
-               <Receipt items={cart} subTotal={subTotal} tax={tax} total={totalAmount} />
+               <Receipt items={cart} laborCost={laborCost} subTotal={subTotal} tax={tax} total={totalAmount} />
                <div className="text-center text-gray-400 text-xs mt-4">
                  内容をご確認の上、印刷または共有してください。
                </div>
@@ -410,7 +450,8 @@ const App: React.FC = () => {
       </div>
 
       {appState !== AppState.PREVIEW && (
-        <div className="bg-surface border-t border-gray-800 flex items-center justify-around px-6 pt-4 pb-16 shrink-0 z-20">
+        // INCREASED PADDING BOTTOM TO 28 (approx 7rem/112px) TO RAISE BUTTONS HIGHER
+        <div className="bg-surface border-t border-gray-800 flex items-center justify-around px-6 pt-4 pb-28 shrink-0 z-20">
           <button 
             onClick={() => setAppState(AppState.SCANNING)}
             className={`flex flex-col items-center gap-1 p-2 transition-colors ${appState === AppState.SCANNING ? 'text-primary' : 'text-gray-500'}`}
@@ -425,9 +466,9 @@ const App: React.FC = () => {
           >
             <div className="relative">
               <ShoppingCart size={24} />
-              {cart.length > 0 && (
+              {(cart.length > 0 || laborCost > 0) && (
                 <span className="absolute -top-1 -right-2 bg-secondary text-[#000] text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
-                  {cart.length}
+                  {cart.length + (laborCost > 0 ? 1 : 0)}
                 </span>
               )}
             </div>

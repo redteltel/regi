@@ -3,12 +3,13 @@ import { CartItem } from '../types';
 
 interface ReceiptProps {
   items: CartItem[];
+  laborCost: number;
   subTotal: number;
   tax: number;
   total: number;
 }
 
-const Receipt: React.FC<ReceiptProps> = ({ items, subTotal, tax, total }) => {
+const Receipt: React.FC<ReceiptProps> = ({ items, laborCost, subTotal, tax, total }) => {
   return (
     <div id="receipt-preview" className="bg-white text-black p-6 rounded-sm shadow-xl max-w-sm mx-auto font-mono text-sm leading-relaxed mb-4 border-t-8 border-gray-200">
       <div className="text-center mb-6">
@@ -30,6 +31,12 @@ const Receipt: React.FC<ReceiptProps> = ({ items, subTotal, tax, total }) => {
       </div>
 
       <div className="border-t border-dashed border-gray-400 pt-4 mb-6 space-y-2">
+        {laborCost > 0 && (
+          <div className="flex justify-between text-gray-600">
+            <span>工賃</span>
+            <span>¥{laborCost.toLocaleString()}</span>
+          </div>
+        )}
         <div className="flex justify-between text-gray-600">
           <span>小計</span>
           <span>¥{subTotal.toLocaleString()}</span>

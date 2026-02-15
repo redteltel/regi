@@ -125,7 +125,7 @@ export class PrinterService {
     return new TextEncoder().encode(text);
   }
 
-  async printReceipt(items: CartItem[], subTotal: number, tax: number, total: number) {
+  async printReceipt(items: CartItem[], laborCost: number, subTotal: number, tax: number, total: number) {
     this.log("Generating Receipt...");
     
     const cmds: number[] = [];
@@ -161,6 +161,15 @@ export class PrinterService {
         add(this.encode(`${line}${padding}${totalStr}\n`));
     }
     
+    // Labor Cost
+    if (laborCost > 0) {
+        const line = "工賃 (Labor)";
+        const totalStr = `Y${laborCost.toLocaleString()}`;
+        const spaces = 32 - (line.length + totalStr.length);
+        const padding = spaces > 0 ? " ".repeat(spaces) : " ";
+        add(this.encode(`${line}${padding}${totalStr}\n`));
+    }
+
     add(this.encode("--------------------------------\n"));
     
     // Total Breakdown
