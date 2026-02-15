@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench, FileText, Receipt as ReceiptIcon } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench, FileText, Receipt as ReceiptIcon, Calculator } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -14,7 +14,7 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   
   // Receipt Mode State
-  const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL' | 'INVOICE'>('RECEIPT');
+  const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION'>('RECEIPT');
   const [recipientName, setRecipientName] = useState('');
   const [proviso, setProviso] = useState('');
   const [paymentDeadline, setPaymentDeadline] = useState('');
@@ -225,14 +225,16 @@ const App: React.FC = () => {
                       now.getMinutes().toString().padStart(2, '0') +
                       now.getSeconds().toString().padStart(2, '0');
                       
-      const typeStr = receiptMode === 'FORMAL' ? 'FormalReceipt' : receiptMode === 'INVOICE' ? 'Invoice' : 'Receipt';
+      let typeStr = 'Receipt';
+      let titleMapName = 'レシート';
+
+      switch (receiptMode) {
+        case 'FORMAL': typeStr = 'FormalReceipt'; titleMapName = '領収書'; break;
+        case 'INVOICE': typeStr = 'Invoice'; titleMapName = '請求書'; break;
+        case 'ESTIMATION': typeStr = 'Estimation'; titleMapName = '見積書'; break;
+      }
+
       const filename = `${typeStr}_Panaland_${dateStr}.pdf`;
-      
-      const titleMap = {
-          'RECEIPT': 'レシート',
-          'FORMAL': '領収書',
-          'INVOICE': '請求書'
-      };
 
       // 3. Create File object
       const blob = pdf.output('blob');
@@ -243,8 +245,8 @@ const App: React.FC = () => {
         try {
             await navigator.share({
               files: [file],
-              title: `パナランドヨシダ ${titleMap[receiptMode]}`,
-              text: `${titleMap[receiptMode]} (${dateStr}) を送信します。`,
+              title: `パナランドヨシダ ${titleMapName}`,
+              text: `${titleMapName} (${dateStr}) を送信します。`,
             });
         } catch (shareError: any) {
             if (shareError.name !== 'AbortError') {
@@ -409,39 +411,48 @@ const App: React.FC = () => {
             
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-4 pb-32">
-               {/* Mode Switcher */}
-               <div className="flex bg-gray-200 p-1 rounded-lg mb-4">
+               {/* Mode Switcher - Scrollable for mobile */}
+               <div className="flex bg-gray-200 p-1 rounded-lg mb-4 overflow-x-auto no-scrollbar gap-1">
+                  <button
+                    onClick={() => setReceiptMode('ESTIMATION')}
+                    className={`flex-1 min-w-[90px] flex items-center justify-center gap-1 py-2 px-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${
+                      receiptMode === 'ESTIMATION' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    <Calculator size={14} />
+                    見積書
+                  </button>
                   <button
                     onClick={() => setReceiptMode('INVOICE')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                    className={`flex-1 min-w-[90px] flex items-center justify-center gap-1 py-2 px-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${
                       receiptMode === 'INVOICE' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
                     }`}
                   >
-                    <FileText size={16} />
+                    <FileText size={14} />
                     請求書
                   </button>
                   <button
                     onClick={() => setReceiptMode('RECEIPT')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                    className={`flex-1 min-w-[90px] flex items-center justify-center gap-1 py-2 px-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${
                       receiptMode === 'RECEIPT' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
                     }`}
                   >
-                    <ReceiptIcon size={16} />
+                    <ReceiptIcon size={14} />
                     レシート
                   </button>
                   <button
                     onClick={() => setReceiptMode('FORMAL')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                    className={`flex-1 min-w-[90px] flex items-center justify-center gap-1 py-2 px-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${
                       receiptMode === 'FORMAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
                     }`}
                   >
-                    <FileText size={16} />
+                    <FileText size={14} />
                     領収書
                   </button>
                </div>
 
-               {/* Inputs (Invoice & Formal) */}
-               {(receiptMode === 'FORMAL' || receiptMode === 'INVOICE') && (
+               {/* Inputs (Invoice & Formal & Estimation) */}
+               {(receiptMode === 'FORMAL' || receiptMode === 'INVOICE' || receiptMode === 'ESTIMATION') && (
                  <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-blue-100 space-y-3">
                     <div>
                       <label className="block text-xs font-bold text-gray-500 mb-1">宛名 (Recipient)</label>
@@ -477,6 +488,7 @@ const App: React.FC = () => {
                           />
                         </div>
                     )}
+                    {/* Estimation uses automatic 1 month expiration, but we could add manual override here if needed later */}
                  </div>
                )}
 

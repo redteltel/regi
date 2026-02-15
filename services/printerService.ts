@@ -120,7 +120,7 @@ export class PrinterService {
       subTotal: number, 
       tax: number, 
       total: number,
-      mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' = 'RECEIPT',
+      mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION' = 'RECEIPT',
       recipientName: string = '',
       proviso: string = '',
       paymentDeadline: string = ''
@@ -146,6 +146,8 @@ export class PrinterService {
         add(this.encode("領 収 証\n"));
     } else if (mode === 'INVOICE') {
         add(this.encode("請 求 書\n"));
+    } else if (mode === 'ESTIMATION') {
+        add(this.encode("御 見 積 書\n"));
     } else {
         add(this.encode("領収書 (レシート)\n"));
     }
@@ -157,8 +159,8 @@ export class PrinterService {
     add(this.encode(`${new Date().toLocaleString()}\n`));
     add([LF]);
 
-    // Formal/Invoice Details (Recipient, Total, Proviso)
-    if (mode === 'FORMAL' || mode === 'INVOICE') {
+    // Formal/Invoice/Estimation Details (Recipient, Total, Proviso)
+    if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
         add(ALIGN_LEFT);
         add(this.encode(`${recipientName || "          "} 様\n`));
         add([LF]);
@@ -166,6 +168,9 @@ export class PrinterService {
         if (mode === 'INVOICE') {
              add(ALIGN_RIGHT);
              add(this.encode("下記の通りご請求申し上げます。\n"));
+        } else if (mode === 'ESTIMATION') {
+             add(ALIGN_RIGHT);
+             add(this.encode("下記の通り御見積申し上げます。\n"));
         }
 
         add(ALIGN_CENTER);
@@ -186,6 +191,14 @@ export class PrinterService {
         if (mode === 'INVOICE' && paymentDeadline) {
              add(ALIGN_RIGHT);
              add(this.encode(`お支払期限: ${paymentDeadline}\n`));
+             add([LF]);
+        }
+        
+        if (mode === 'ESTIMATION') {
+             add(ALIGN_RIGHT);
+             const d = new Date();
+             d.setMonth(d.getMonth() + 1);
+             add(this.encode(`有効期限: ${d.toLocaleDateString()}\n`));
              add([LF]);
         }
     }
@@ -233,8 +246,8 @@ export class PrinterService {
     }
     add([LF]);
 
-    // Invoice Bank Info
-    if (mode === 'INVOICE') {
+    // Invoice/Estimation Bank Info
+    if (mode === 'INVOICE' || mode === 'ESTIMATION') {
         add(ALIGN_LEFT);
         add(EMPHASIS_ON);
         add(this.encode("[お振込先]\n"));
@@ -254,6 +267,13 @@ export class PrinterService {
     add(this.encode("電話: 0969-24-0218\n"));
     add(this.encode("登録番号: T6810624772686\n"));
     
+    // Simple text marker for seal on thermal printer
+    if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+        add(ALIGN_RIGHT);
+        add(this.encode("(印)\n"));
+        add(ALIGN_CENTER);
+    }
+
     // Revenue Stamp Placeholder for Formal Receipt > 50000
     if (mode === 'FORMAL' && total >= 50000) {
         add([LF]);
@@ -267,6 +287,8 @@ export class PrinterService {
     add([LF]);
     if (mode === 'INVOICE') {
          add(this.encode("ご請求書を送付いたします。\n"));
+    } else if (mode === 'ESTIMATION') {
+         // No specific footer needed for estimation
     } else {
          add(this.encode("毎度ありがとうございます!\n"));
     }
