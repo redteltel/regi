@@ -100,6 +100,15 @@ const App: React.FC = () => {
     }).filter(item => item.quantity > 0));
   };
 
+  const updateItemPrice = (id: string, newPrice: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return { ...item, price: Math.max(0, newPrice) };
+      }
+      return item;
+    }));
+  };
+
   // Printing Logic - MP-B20 (RawBT)
   const handlePrint = async () => {
     if (cart.length === 0 && laborCost === 0) return;
@@ -252,7 +261,25 @@ const App: React.FC = () => {
                     <div className="flex-1">
                       <h3 className="font-semibold text-onSurface">{item.name}</h3>
                       <p className="text-xs text-gray-400">{item.partNumber}</p>
-                      <p className="text-primary font-mono mt-1">¥{item.price.toLocaleString()}</p>
+                      
+                      {/* Editable Price Input */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-gray-400 text-sm">@</span>
+                        <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary font-mono text-sm">¥</span>
+                            <input
+                              type="number"
+                              min="0"
+                              inputMode="numeric"
+                              value={item.price === 0 ? '' : item.price}
+                              placeholder="0"
+                              onChange={(e) => updateItemPrice(item.id, parseInt(e.target.value, 10) || 0)}
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                              className="w-28 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-primary font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                            />
+                        </div>
+                      </div>
+
                     </div>
                     <div className="flex items-center gap-3 bg-surface rounded-lg p-1 border border-gray-800">
                       <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-gray-800 rounded-md">
@@ -277,11 +304,13 @@ const App: React.FC = () => {
                     <input
                       type="number"
                       min="0"
+                      inputMode="numeric"
                       value={laborCost === 0 ? '' : laborCost}
                       onChange={(e) => {
                         const val = parseInt(e.target.value, 10);
                         setLaborCost(isNaN(val) ? 0 : Math.max(0, val));
                       }}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
                       placeholder="0"
                       className="w-24 bg-surface text-right text-white font-mono text-lg border border-gray-700 rounded-lg p-2 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                     />

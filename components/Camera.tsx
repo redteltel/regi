@@ -106,19 +106,31 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         const product = await searchProduct(result.partNumber);
         
         if (product) {
+          // Registered Product Found
           if (navigator.vibrate) navigator.vibrate([50, 50]);
           onProductFound(product);
           showStatus(`✅ ${product.name}`, 'success');
-          
-          setTimeout(() => {
-             setIsProcessing(false);
-             setStatusMsg("");
-          }, 1200);
-          return; 
         } else {
-          showStatus(`⚠️ 未登録: ${result.partNumber}`, 'error');
-          if (navigator.vibrate) navigator.vibrate(200);
+          // Unregistered Product -> Add as new item with 0 price
+          if (navigator.vibrate) navigator.vibrate([30, 100, 30]); // Distinct vibration
+          
+          const newProduct: Product = {
+            id: result.partNumber,
+            partNumber: result.partNumber,
+            name: result.partNumber, // Use part number as name
+            price: 0 // Default to 0 for manual entry
+          };
+          
+          onProductFound(newProduct);
+          showStatus(`🆕 未登録追加: ${result.partNumber}`, 'success');
         }
+
+        setTimeout(() => {
+            setIsProcessing(false);
+            setStatusMsg("");
+        }, 1200);
+        return;
+
       } else {
         showStatus("⚠️ 文字が読み取れません", 'error');
       }
