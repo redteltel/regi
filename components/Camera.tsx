@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { extractPartNumber } from '../services/geminiService';
 import { searchProduct } from '../services/sheetService';
 import { Product } from '../types';
+import { Plus, X, AlertCircle } from 'lucide-react';
 
 interface CameraProps {
   onProductFound: (product: Product) => void;
@@ -20,6 +21,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [statusType, setStatusType] = useState<'info' | 'success' | 'error'>('info');
 
+  // Candidate Dialog State
+  const [showCandidateDialog, setShowCandidateDialog] = useState(false);
+  const [candidates, setCandidates] = useState<Product[]>([]);
+  const [scannedCode, setScannedCode] = useState<string>("");
+
   useEffect(() => {
     startCamera();
     return () => stopCamera();
@@ -31,7 +37,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
-          width: { ideal: 1920 }, // High input res, downscaled later
+          width: { ideal: 1920 }, 
           height: { ideal: 1080 } 
         },
         audio: false,
@@ -43,7 +49,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       setError(null);
     } catch (err) {
       console.error("Camera access error:", err);
-      setError("カメラを起動できませんでした。権限を確認してください。");
+      // More friendly error for common permission issues
+      setError("カメラを使用できません。ブラウザの権限設定を確認してください。");
     }
   };
 
@@ -59,8 +66,34 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     setStatusType(type);
   };
 
+  const handleManualAdd = () => {
+      const newProduct: Product = {
+        id: scannedCode,
+        partNumber: scannedCode,
+        name: scannedCode, // Use part number as name
+        price: 0 // Default to 0 for manual entry
+      };
+      onProductFound(newProduct);
+      showStatus(`🆕 未登録追加: ${scannedCode}`, 'success');
+      handleCloseDialog();
+  };
+
+  const handleSelectCandidate = (product: Product) => {
+      onProductFound(product);
+      showStatus(`✅ ${product.name}`, 'success');
+      handleCloseDialog();
+  };
+
+  const handleCloseDialog = () => {
+      setShowCandidateDialog(false);
+      setCandidates([]);
+      setScannedCode("");
+      setIsProcessing(false);
+      setStatusMsg("");
+  };
+
   const handleCapture = useCallback(async () => {
-    if (isProcessing) return;
+    if (isProcessing || showCandidateDialog) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -80,9 +113,6 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     showStatus("AI解析中...", 'info');
 
     try {
-      // OPTIMIZATION: 
-      // 1024px is a sweet spot: readable for AI, fast enough to upload.
-      // 512px was too small for complex alphanumeric codes.
       const MAX_WIDTH = 1024; 
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       
@@ -93,66 +123,123 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       if (!ctx) throw new Error("Canvas context error");
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // OPTIMIZATION: Use WebP with 0.6 quality (balanced)
-      // 0.4 was too aggressive causing artifacts on text
       const base64 = canvas.toDataURL('image/webp', 0.6);
 
       const result = await extractPartNumber(base64);
       
       if (result && result.partNumber) {
         showStatus("データ照合中...", 'info');
-        // Local search is fast due to sheetService caching
-        const product = await searchProduct(result.partNumber);
         
-        if (product) {
-          // Registered Product Found
+        const searchResult = await searchProduct(result.partNumber);
+        
+        if (searchResult.exact) {
+          // Exact Match -> Add immediately
           if (navigator.vibrate) navigator.vibrate([50, 50]);
-          onProductFound(product);
-          showStatus(`✅ ${product.name}`, 'success');
+          onProductFound(searchResult.exact);
+          showStatus(`✅ ${searchResult.exact.name}`, 'success');
+          
+          setTimeout(() => {
+            setIsProcessing(false);
+            setStatusMsg("");
+          }, 1200);
+
+        } else if (searchResult.candidates.length > 0) {
+          // Candidates Found -> Show Dialog
+          if (navigator.vibrate) navigator.vibrate(50);
+          setScannedCode(result.partNumber);
+          setCandidates(searchResult.candidates);
+          setShowCandidateDialog(true);
+          // Don't reset isProcessing yet, wait for user action
+          showStatus("候補が見つかりました", 'info');
+
         } else {
-          // Unregistered Product -> Add as new item with 0 price
-          if (navigator.vibrate) navigator.vibrate([30, 100, 30]); // Distinct vibration
+          // No Match, No Candidates -> Add as New immediately (or could show dialog, but prompt prefers speed)
+          if (navigator.vibrate) navigator.vibrate([30, 100, 30]);
           
           const newProduct: Product = {
             id: result.partNumber,
             partNumber: result.partNumber,
-            name: result.partNumber, // Use part number as name
-            price: 0 // Default to 0 for manual entry
+            name: result.partNumber,
+            price: 0
           };
           
           onProductFound(newProduct);
           showStatus(`🆕 未登録追加: ${result.partNumber}`, 'success');
-        }
-
-        setTimeout(() => {
+          
+          setTimeout(() => {
             setIsProcessing(false);
             setStatusMsg("");
-        }, 1200);
-        return;
+          }, 1200);
+        }
 
       } else {
         showStatus("⚠️ 文字が読み取れません", 'error');
+        setTimeout(() => {
+            setIsProcessing(false);
+            setStatusMsg("");
+        }, 1500);
       }
     } catch (e: any) {
       console.error("Scan Error:", e);
-      showStatus("接続エラー。再試行してください", 'error');
-    } finally {
-      // Reset if not successful found (successful found handles its own reset)
+      showStatus("エラーが発生しました", 'error');
       setTimeout(() => {
         setIsProcessing(false);
-        // Don't clear error messages immediately so user can read them
-        if (statusType !== 'error') {
-            setStatusMsg("");
-        } else {
-            setTimeout(() => setStatusMsg(""), 2000);
-        }
+        setStatusMsg("");
       }, 1500);
     }
-  }, [isProcessing, onProductFound, setIsProcessing, statusType]);
+  }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-surface pb-20">
+    <div className="flex flex-col w-full h-full bg-surface pb-20 relative">
+      {/* Candidate Selection Dialog */}
+      {showCandidateDialog && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+           <div className="bg-white text-black w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="p-4 bg-gray-100 border-b border-gray-200 flex justify-between items-center">
+                  <div>
+                      <h3 className="font-bold text-lg">もしかして...</h3>
+                      <p className="text-xs text-gray-500">解析: {scannedCode}</p>
+                  </div>
+                  <button onClick={handleCloseDialog} className="p-2 bg-gray-200 rounded-full hover:bg-gray-300">
+                      <X size={20} />
+                  </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {candidates.map(candidate => (
+                      <button 
+                        key={candidate.id}
+                        onClick={() => handleSelectCandidate(candidate)}
+                        className="w-full text-left p-3 rounded-xl border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-all flex justify-between items-center group"
+                      >
+                          <div>
+                              <div className="font-bold text-blue-900 group-hover:text-blue-700">{candidate.partNumber}</div>
+                              <div className="text-sm text-gray-600 truncate max-w-[200px]">{candidate.name}</div>
+                          </div>
+                          <div className="font-mono font-bold text-gray-700">
+                              ¥{candidate.price.toLocaleString()}
+                          </div>
+                      </button>
+                  ))}
+              </div>
+
+              <div className="p-4 border-t border-gray-200 bg-gray-50">
+                  <div className="flex items-start gap-2 mb-3 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                      <AlertCircle size={16} className="shrink-0" />
+                      <p>リストにない場合は、読み取った品番で新規追加します。</p>
+                  </div>
+                  <button 
+                    onClick={handleManualAdd}
+                    className="w-full py-3 bg-gray-800 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-700 active:scale-[0.98] transition-all"
+                  >
+                      <Plus size={18} />
+                      「{scannedCode}」として追加 (¥0)
+                  </button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {error ? (
         <div className="h-40 flex items-center justify-center text-red-400 p-4 text-center bg-gray-900">
           <p>{error}</p>
@@ -168,7 +255,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           />
 
           <div 
-            className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-200 z-50 ${flash ? 'opacity-80' : 'opacity-0'}`}
+            className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-200 z-40 ${flash ? 'opacity-80' : 'opacity-0'}`}
           />
           
           {/* Status Overlay */}
@@ -205,7 +292,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 bg-surface">
         <button
           onClick={handleCapture}
-          disabled={isProcessing}
+          disabled={isProcessing || showCandidateDialog}
           className={`
             relative w-24 h-24 rounded-full border-4 border-surface ring-4 ring-primary/20 flex items-center justify-center
             transition-all duration-200 shadow-2xl
