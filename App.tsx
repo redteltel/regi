@@ -242,58 +242,60 @@ const App: React.FC = () => {
           <div className="flex-1 p-4 pb-24 overflow-y-auto">
             <h2 className="text-2xl font-bold mb-6 text-primary">Cart ({cart.length})</h2>
             
-            {/* Products List */}
-            {cart.length === 0 && laborCost === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <ShoppingCart className="w-12 h-12 mb-4 opacity-50" />
-                <p>Your cart is empty.</p>
-                <button 
-                  onClick={() => setAppState(AppState.SCANNING)}
-                  className="mt-4 px-6 py-2 bg-surface border border-gray-700 rounded-full text-sm"
-                >
-                  Start Scanning
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {cart.map(item => (
-                  <div key={item.id} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-onSurface">{item.name}</h3>
-                      <p className="text-xs text-gray-400">{item.partNumber}</p>
-                      
-                      {/* Editable Price Input */}
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-gray-400 text-sm">@</span>
-                        <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary font-mono text-sm">¥</span>
-                            <input
-                              type="number"
-                              min="0"
-                              inputMode="numeric"
-                              value={item.price === 0 ? '' : item.price}
-                              placeholder="0"
-                              onChange={(e) => updateItemPrice(item.id, parseInt(e.target.value, 10) || 0)}
-                              onClick={(e) => (e.target as HTMLInputElement).select()}
-                              className="w-28 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-primary font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-                            />
-                        </div>
-                      </div>
-
-                    </div>
-                    <div className="flex items-center gap-3 bg-surface rounded-lg p-1 border border-gray-800">
-                      <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-gray-800 rounded-md">
-                        <Minus size={16} />
-                      </button>
-                      <span className="font-mono w-4 text-center">{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-gray-800 rounded-md">
-                        <Plus size={16} />
-                      </button>
-                    </div>
+            <div className="space-y-4">
+                {/* Products List or Empty Placeholder */}
+                {cart.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-800 rounded-xl bg-surface/50">
+                    <ShoppingCart className="w-10 h-10 mb-3 opacity-40 text-gray-500" />
+                    <p className="text-sm font-medium text-gray-400">商品がありません (No items)</p>
+                    <button 
+                      onClick={() => setAppState(AppState.SCANNING)}
+                      className="mt-4 px-5 py-2 bg-gray-800 border border-gray-700 rounded-full text-xs hover:bg-gray-700 transition-colors flex items-center gap-2 text-primary"
+                    >
+                      <Plus size={14} />
+                      商品を追加 (Scan)
+                    </button>
                   </div>
-                ))}
+                ) : (
+                  cart.map(item => (
+                    <div key={item.id} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-onSurface">{item.name}</h3>
+                        <p className="text-xs text-gray-400">{item.partNumber}</p>
+                        
+                        {/* Editable Price Input */}
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-gray-400 text-sm">@</span>
+                          <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary font-mono text-sm">¥</span>
+                              <input
+                                type="number"
+                                min="0"
+                                inputMode="numeric"
+                                value={item.price === 0 ? '' : item.price}
+                                placeholder="0"
+                                onChange={(e) => updateItemPrice(item.id, parseInt(e.target.value, 10) || 0)}
+                                onClick={(e) => (e.target as HTMLInputElement).select()}
+                                className="w-28 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-primary font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                              />
+                          </div>
+                        </div>
 
-                {/* Labor Cost Input */}
+                      </div>
+                      <div className="flex items-center gap-3 bg-surface rounded-lg p-1 border border-gray-800">
+                        <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-gray-800 rounded-md">
+                          <Minus size={16} />
+                        </button>
+                        <span className="font-mono w-4 text-center">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-gray-800 rounded-md">
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+
+                {/* Labor Cost Input - ALWAYS VISIBLE */}
                 <div className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm border-l-4 border-secondary">
                   <div className="flex items-center gap-2">
                     <Wrench size={20} className="text-secondary" />
@@ -317,7 +319,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 
-                {/* Summary Card */}
+                {/* Summary Card - ALWAYS VISIBLE */}
                 <div className="mt-8 bg-surface p-4 rounded-xl border border-gray-800">
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
                     <span>Items Total</span>
@@ -344,12 +346,14 @@ const App: React.FC = () => {
 
                 <button
                   onClick={() => setAppState(AppState.PREVIEW)}
-                  className="w-full mt-6 bg-primary text-onPrimary py-4 rounded-xl font-bold text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                  disabled={totalAmount === 0}
+                  className={`w-full mt-6 py-4 rounded-xl font-bold text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2
+                    ${totalAmount === 0 ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-primary text-onPrimary'}
+                  `}
                 >
                   Proceed to Checkout
                 </button>
-              </div>
-            )}
+            </div>
           </div>
         );
       case AppState.PREVIEW:
