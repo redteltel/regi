@@ -386,7 +386,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-surface text-onSurface overflow-hidden">
+    <div className="h-[100dvh] w-screen flex flex-col bg-surface text-onSurface overflow-hidden">
       {appState !== AppState.PREVIEW && (
         <div className="flex justify-between items-center p-4 bg-surface/80 backdrop-blur-md z-10 shrink-0">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
@@ -410,7 +410,7 @@ const App: React.FC = () => {
       </div>
 
       {appState !== AppState.PREVIEW && (
-        <div className="bg-surface border-t border-gray-800 flex items-center justify-around px-6 pt-3 pb-10 shrink-0 z-20">
+        <div className="bg-surface border-t border-gray-800 flex items-center justify-around px-6 pt-4 pb-16 shrink-0 z-20">
           <button 
             onClick={() => setAppState(AppState.SCANNING)}
             className={`flex flex-col items-center gap-1 p-2 transition-colors ${appState === AppState.SCANNING ? 'text-primary' : 'text-gray-500'}`}
