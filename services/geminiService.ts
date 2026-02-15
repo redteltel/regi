@@ -1,23 +1,27 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// Using gemini-3-flash-preview as recommended for basic text tasks
+// Using gemini-3-flash-preview for speed and efficiency
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 // Helper to strip Markdown code blocks
 const cleanJsonString = (text: string): string => {
   let cleaned = text.trim();
+  // Remove markdown code blocks if present
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '');
   }
   return cleaned;
 };
 
-// Retry utility
+// Robust Regex to find model numbers in raw text if JSON parsing fails
+// Looks for patterns like: NA-LX129EL, MC-NS100K, DL-RQTK50, BQ-CC23
+// Strategy: 1-5 letters, optional hyphen/space, 2+ alphanumeric characters
+const FALLBACK_REGEX = /([A-Z]{1,5}[-\s]?[A-Z0-9]{2,}[A-Z0-9\-]*)(\b|$)/i;
+
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const extractPartNumber = async (base64Image: string): Promise<ScannedResult | null> => {
-  // Retrieve API Key at runtime
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
@@ -35,17 +39,16 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
     properties: {
       partNumber: {
         type: Type.STRING,
-        description: "The alphanumeric product model number (品番) found in the image. e.g., NA-LX129EL, BQ-CC23. Ignore barcodes and price labels.",
+        description: "The product model number (品番). e.g., NA-LX129EL, MC-NS100K. Upper case, keep hyphens.",
       },
       confidence: {
         type: Type.NUMBER,
-        description: "Confidence score between 0 and 1.",
+        description: "Confidence 0-1.",
       },
     },
     required: ["partNumber"],
   };
 
-  // Retry logic: Try up to 2 times
   let attempts = 0;
   const maxAttempts = 2;
 
@@ -57,39 +60,72 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
           parts: [
             {
               inlineData: {
-                mimeType: 'image/jpeg', // Camera.tsx now ensures this is sent as jpeg compatible data
+                mimeType: 'image/jpeg',
                 data: cleanBase64,
               },
             },
             {
-              text: "Extract the main product model number (品番) from this image. It is usually an alphanumeric code (e.g., NA-LX129EL). Ignore pure barcodes. Return JSON.",
+              text: "Find the product model number (品番) in this image. It is usually an alphanumeric code like 'NA-LX129EL' or 'MC-NS100K'. It often starts with letters followed by a hyphen. Ignore barcodes, price labels, and dates.",
             },
           ],
         },
         config: {
           responseMimeType: "application/json",
           responseSchema: responseSchema,
-          temperature: 0.0, // Low temperature for deterministic OCR
+          temperature: 0.0,
         },
       });
 
       const rawText = result.text;
-      if (!rawText) throw new Error("Empty response from AI");
+      if (!rawText) throw new Error("Empty response");
 
-      const jsonText = cleanJsonString(rawText);
-      const data = JSON.parse(jsonText) as ScannedResult;
-      
-      return data;
+      let partNumber = "";
+
+      // 1. Try strict JSON parse
+      try {
+        const jsonText = cleanJsonString(rawText);
+        const data = JSON.parse(jsonText) as ScannedResult;
+        if (data.partNumber) {
+           partNumber = data.partNumber.trim();
+        }
+      } catch (jsonErr) {
+        console.warn("JSON Parse failed, trying regex on raw text", rawText);
+      }
+
+      // 2. Fallback: Regex extraction if JSON failed or returned empty
+      if (!partNumber || partNumber.length < 3) {
+         const match = rawText.match(FALLBACK_REGEX);
+         if (match && match[1]) {
+             partNumber = match[1].trim();
+             console.log("Regex recovered part number:", partNumber);
+         }
+      }
+
+      // 3. Final cleanup and validation
+      if (partNumber) {
+          // Normalize: Upper case
+          partNumber = partNumber.toUpperCase();
+          
+          // Remove trailing hyphens or weird chars
+          partNumber = partNumber.replace(/[^A-Z0-9-]/g, ''); 
+
+          // Sanity check: reasonable length
+          if (partNumber.length >= 3) {
+              return {
+                  partNumber: partNumber,
+                  confidence: 0.9 // Synthetic confidence for fallback
+              };
+          }
+      }
+
+      throw new Error("No valid part number found in response");
 
     } catch (error: any) {
       attempts++;
-      console.warn(`Gemini API Attempt ${attempts} failed:`, error);
-      
+      console.warn(`Attempt ${attempts} failed:`, error);
       if (attempts >= maxAttempts) {
-        // Return null instead of throwing to allow the UI to show "Cannot read" instead of "Error"
-        return null;
+         return null;
       }
-      // Wait 1 second before retrying
       await wait(1000);
     }
   }
