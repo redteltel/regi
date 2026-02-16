@@ -84,7 +84,6 @@ export class PrinterService {
     } else if (Array.isArray(data)) {
       bytes = new Uint8Array(data);
     } else {
-      // Default fallback if string passed directly (should not happen with new printReceipt)
       bytes = new TextEncoder().encode(String(data));
     }
     
@@ -109,7 +108,6 @@ export class PrinterService {
       }
       const base64data = btoa(binary);
       // RawBT Intent: Pass raw base64 data. 
-      // The content inside base64 is already Shift_JIS encoded by printReceipt.
       const intentUrl = "intent:base64," + base64data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
       
       this.buffer = [];
@@ -120,11 +118,7 @@ export class PrinterService {
     }
   }
 
-  /**
-   * Encode string to Shift_JIS bytes for MP-B20
-   */
   private encode(text: string): number[] {
-    // Convert UNICODE string to Shift_JIS byte array
     const sjisData = Encoding.convert(text, {
       to: 'SJIS',
       from: 'UNICODE',
@@ -168,7 +162,6 @@ export class PrinterService {
     } else if (mode === 'ESTIMATION') {
         add(this.encode("御 見 積 書\n"));
     } else {
-        // Changed title to prevent overflow
         add(this.encode("領収書\n"));
     }
     add(SIZE_NORMAL);
@@ -179,7 +172,7 @@ export class PrinterService {
     add(this.encode(`${new Date().toLocaleString()}\n`));
     add([LF]);
 
-    // Formal/Invoice/Estimation Details (Recipient, Total, Proviso)
+    // Formal/Invoice/Estimation Details
     if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
         add(ALIGN_LEFT);
         add(this.encode(`${recipientName || "          "} 様\n`));
@@ -196,7 +189,7 @@ export class PrinterService {
         add(ALIGN_CENTER);
         add(SIZE_DOUBLE);
         add(EMPHASIS_ON);
-        // Changed to use "円" suffix instead of "¥" prefix
+        // Use "円" suffix
         add(this.encode(`${total.toLocaleString()}円\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
@@ -231,12 +224,11 @@ export class PrinterService {
     add(ALIGN_LEFT);
     for (const item of items) {
         add(this.encode(`${item.name}\n`));
-        // Changed to use "円" suffix instead of "¥" prefix
+        // Use "円" suffix
         const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
         const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
         
-        // Calculate visual width for alignment (approximate for Shift_JIS)
-        // 1 byte char = 1, 2 byte char = 2 spaces
+        // Calculate visual width for alignment (Shift_JIS)
         let lineLen = 0;
         for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
         let totalLen = 0;
@@ -251,7 +243,6 @@ export class PrinterService {
     if (laborCost > 0) {
         add(this.encode("工賃 (Labor)\n"));
         const line = "1 x " + laborCost.toLocaleString();
-        // Changed to use "円" suffix instead of "¥" prefix
         const totalStr = `${laborCost.toLocaleString()}円`;
         
         let lineLen = 0;
@@ -269,7 +260,7 @@ export class PrinterService {
     
     // Total Breakdown
     add(ALIGN_RIGHT);
-    // Changed to use "円" suffix instead of "¥" prefix
+    // Use "円" suffix
     add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
     add(this.encode(`(内消費税10%): ${tax.toLocaleString()}円\n`));
     
@@ -277,7 +268,7 @@ export class PrinterService {
         add([LF]);
         add(EMPHASIS_ON);
         add(SIZE_DOUBLE);
-        // Changed to use "円" suffix instead of "¥" prefix
+        // Use "円" suffix
         add(this.encode(`合計: ${total.toLocaleString()}円\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
@@ -305,14 +296,12 @@ export class PrinterService {
     add(this.encode("電話: 0969-24-0218\n"));
     add(this.encode("登録番号: T6810624772686\n"));
     
-    // Simple text marker for seal on thermal printer
     if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
         add(ALIGN_RIGHT);
         add(this.encode("(印)\n"));
         add(ALIGN_CENTER);
     }
 
-    // Revenue Stamp Placeholder for Formal Receipt > 50000
     if (mode === 'FORMAL' && total >= 50000) {
         add([LF]);
         add(ALIGN_RIGHT);
@@ -326,15 +315,13 @@ export class PrinterService {
     if (mode === 'INVOICE') {
          add(this.encode("ご請求書を送付いたします。\n"));
     } else if (mode === 'ESTIMATION') {
-         // No specific footer needed for estimation
+         // No specific footer
     } else {
          add(this.encode("毎度ありがとうございます!\n"));
     }
     
-    // Feed and Cut
     add([LF, LF, LF, LF]);
 
-    // Send to buffer -> RawBT
     await this.print(new Uint8Array(cmds));
   }
 }

@@ -31,7 +31,7 @@ const Receipt: React.FC<ReceiptProps> = ({
       switch(mode) {
           case 'INVOICE': return '請 求 書';
           case 'FORMAL': return '領 収 証';
-          default: return '領収書 (レシート)';
+          default: return '領収書'; // Changed from '領収書 (レシート)'
       }
   };
 
@@ -69,7 +69,7 @@ const Receipt: React.FC<ReceiptProps> = ({
           
           <div className="bg-gray-100 py-3 px-2 text-center mb-2">
             <span className="text-xs mr-2">{mode === 'INVOICE' ? 'ご請求金額' : '金額'}</span>
-            <span className="text-2xl font-bold tracking-wider">¥{total.toLocaleString()}-</span>
+            <span className="text-2xl font-bold tracking-wider">{total.toLocaleString()}円</span>
           </div>
           
           {mode === 'FORMAL' && (
@@ -101,8 +101,8 @@ const Receipt: React.FC<ReceiptProps> = ({
           <div key={item.id} className="flex flex-col">
             <span className="font-bold text-sm">{item.name}</span>
             <div className="flex justify-between text-gray-600 text-xs">
-              <span>{item.quantity} x ¥{item.price.toLocaleString()}</span>
-              <span>¥{(item.price * item.quantity).toLocaleString()}</span>
+              <span>{item.quantity} x {item.price.toLocaleString()}円</span>
+              <span>{(item.price * item.quantity).toLocaleString()}円</span>
             </div>
           </div>
         ))}
@@ -111,8 +111,8 @@ const Receipt: React.FC<ReceiptProps> = ({
           <div className="flex flex-col">
             <span className="font-bold text-sm">工賃 (Labor)</span>
             <div className="flex justify-between text-gray-600 text-xs">
-              <span>1 x ¥{laborCost.toLocaleString()}</span>
-              <span>¥{laborCost.toLocaleString()}</span>
+              <span>1 x {laborCost.toLocaleString()}円</span>
+              <span>{laborCost.toLocaleString()}円</span>
             </div>
           </div>
         )}
@@ -122,17 +122,17 @@ const Receipt: React.FC<ReceiptProps> = ({
       <div className="border-t border-dashed border-gray-400 pt-3 mb-6 space-y-1">
         <div className="flex justify-between text-gray-600">
           <span>小計</span>
-          <span>¥{subTotal.toLocaleString()}</span>
+          <span>{subTotal.toLocaleString()}円</span>
         </div>
         <div className="flex justify-between text-gray-600">
           <span>(内消費税10%)</span>
-          <span>¥{tax.toLocaleString()}</span>
+          <span>{tax.toLocaleString()}円</span>
         </div>
         
         {mode === 'RECEIPT' && (
           <div className="flex justify-between text-xl font-bold border-t border-gray-200 pt-2 mt-2">
             <span>合計</span>
-            <span>¥{total.toLocaleString()}</span>
+            <span>{total.toLocaleString()}円</span>
           </div>
         )}
       </div>
