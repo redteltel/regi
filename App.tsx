@@ -13,8 +13,9 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Discount State
+  // Discount & Cash State
   const [discount, setDiscount] = useState<string>('');
+  const [cashReceived, setCashReceived] = useState<string>('');
 
   // Service Items State
   const [serviceItems, setServiceItems] = useState<Product[]>([]);
@@ -93,6 +94,10 @@ const App: React.FC = () => {
   const subTotal = newBasePrice; // Displayed Subtotal reflects the back-calculated base
   const tax = newTax;
   const totalAmount = finalTotalWithTax;
+
+  // 6. Calculate Change
+  const cashVal = parseInt(cashReceived || '0', 10);
+  const changeVal = cashVal - totalAmount;
 
   const handleConnectBluetooth = async () => {
     try {
@@ -220,6 +225,7 @@ const App: React.FC = () => {
     if (window.confirm("現在のカートをクリアしてトップに戻りますか？")) {
       setCart([]);
       setDiscount('');
+      setCashReceived('');
       setReceiptMode('RECEIPT');
       setRecipientName('');
       setProviso('');
@@ -484,6 +490,30 @@ const App: React.FC = () => {
                             className="w-24 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-red-400 font-mono focus:border-red-500 focus:outline-none transition-all placeholder-gray-600"
                          />
                      </div>
+                  </div>
+                  {/* Cash Received Input */}
+                  <div className="flex justify-between items-center text-sm pt-2 mt-2 border-t border-gray-800/50">
+                     <span className="text-gray-400">預かり (Cash)</span>
+                     <div className="relative">
+                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary font-mono text-xs">¥</span>
+                         <input 
+                            type="number"
+                            inputMode="numeric"
+                            value={cashReceived}
+                            onChange={e => setCashReceived(e.target.value)}
+                            placeholder="0"
+                            className="w-24 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-primary font-mono focus:border-primary focus:outline-none transition-all placeholder-gray-600"
+                         />
+                     </div>
+                  </div>
+                  {/* Change Display */}
+                  <div className="flex justify-between items-center text-lg font-bold pt-2 mt-2 border-t border-gray-700">
+                      <span>おつり (Change)</span>
+                      <span className={`${changeVal < 0 ? 'text-red-400' : 'text-secondary'}`}>
+                          {cashVal > 0 
+                             ? (changeVal >= 0 ? `¥${changeVal.toLocaleString()}` : `不足 ¥${Math.abs(changeVal).toLocaleString()}`) 
+                             : '¥0'}
+                      </span>
                   </div>
                 </div>
 
