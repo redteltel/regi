@@ -168,7 +168,8 @@ export class PrinterService {
     } else if (mode === 'ESTIMATION') {
         add(this.encode("御 見 積 書\n"));
     } else {
-        add(this.encode("領収書 (レシート)\n"));
+        // Changed title to prevent overflow
+        add(this.encode("領収書\n"));
     }
     add(SIZE_NORMAL);
     add([LF]);
@@ -195,7 +196,8 @@ export class PrinterService {
         add(ALIGN_CENTER);
         add(SIZE_DOUBLE);
         add(EMPHASIS_ON);
-        add(this.encode(`¥${total.toLocaleString()}-\n`));
+        // Changed to use "円" suffix instead of "¥" prefix
+        add(this.encode(`${total.toLocaleString()}円\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
         add([LF]);
@@ -229,8 +231,9 @@ export class PrinterService {
     add(ALIGN_LEFT);
     for (const item of items) {
         add(this.encode(`${item.name}\n`));
-        const line = `${item.quantity} x ¥${item.price.toLocaleString()}`;
-        const totalStr = `¥${(item.price * item.quantity).toLocaleString()}`;
+        // Changed to use "円" suffix instead of "¥" prefix
+        const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
+        const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
         
         // Calculate visual width for alignment (approximate for Shift_JIS)
         // 1 byte char = 1, 2 byte char = 2 spaces
@@ -248,7 +251,8 @@ export class PrinterService {
     if (laborCost > 0) {
         add(this.encode("工賃 (Labor)\n"));
         const line = "1 x " + laborCost.toLocaleString();
-        const totalStr = `¥${laborCost.toLocaleString()}`;
+        // Changed to use "円" suffix instead of "¥" prefix
+        const totalStr = `${laborCost.toLocaleString()}円`;
         
         let lineLen = 0;
         for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
@@ -265,14 +269,16 @@ export class PrinterService {
     
     // Total Breakdown
     add(ALIGN_RIGHT);
-    add(this.encode(`小計: ¥${subTotal.toLocaleString()}\n`));
-    add(this.encode(`(内消費税10%): ¥${tax.toLocaleString()}\n`));
+    // Changed to use "円" suffix instead of "¥" prefix
+    add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
+    add(this.encode(`(内消費税10%): ${tax.toLocaleString()}円\n`));
     
     if (mode === 'RECEIPT') {
         add([LF]);
         add(EMPHASIS_ON);
         add(SIZE_DOUBLE);
-        add(this.encode(`合計: ¥${total.toLocaleString()}\n`));
+        // Changed to use "円" suffix instead of "¥" prefix
+        add(this.encode(`合計: ${total.toLocaleString()}円\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
     }
