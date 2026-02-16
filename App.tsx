@@ -17,6 +17,7 @@ const App: React.FC = () => {
   // Discount & Cash State
   const [discount, setDiscount] = useState<string>('');
   const [cashReceived, setCashReceived] = useState<string>('');
+  const [isCashManuallyEdited, setIsCashManuallyEdited] = useState(false);
 
   // Service Items State
   const [serviceItems, setServiceItems] = useState<Product[]>([]);
@@ -95,6 +96,14 @@ const App: React.FC = () => {
   const subTotal = newBasePrice; // Displayed Subtotal reflects the back-calculated base
   const tax = newTax;
   const totalAmount = finalTotalWithTax;
+
+  // Auto-sync cashReceived with totalAmount
+  useEffect(() => {
+    if (!isCashManuallyEdited) {
+       // Auto-fill total amount if not manually edited
+       setCashReceived(totalAmount > 0 ? totalAmount.toString() : '');
+    }
+  }, [totalAmount, isCashManuallyEdited]);
 
   // 6. Calculate Change
   const cashVal = parseInt(cashReceived || '0', 10);
@@ -228,6 +237,7 @@ const App: React.FC = () => {
       setCart([]);
       setDiscount('');
       setCashReceived('');
+      setIsCashManuallyEdited(false);
       setReceiptMode('RECEIPT');
       setRecipientName('');
       setProviso('');
@@ -502,7 +512,10 @@ const App: React.FC = () => {
                             type="number"
                             inputMode="numeric"
                             value={cashReceived}
-                            onChange={e => setCashReceived(e.target.value)}
+                            onChange={e => {
+                                setCashReceived(e.target.value);
+                                setIsCashManuallyEdited(true);
+                            }}
                             placeholder="0"
                             className="w-24 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-primary font-mono focus:border-primary focus:outline-none transition-all placeholder-gray-600"
                          />
