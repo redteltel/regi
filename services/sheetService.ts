@@ -2,7 +2,13 @@ import { Product } from '../types';
 
 // The Google Sheet ID provided by the user
 const SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
+
+// BASE_URL: Used for the main product database (Scan). Defaults to the first sheet.
 const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
+
+// GVIZ_URL: Used for specific sheets like 'ServiceItems'. More reliable for sheet selection by name.
+const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
+
 const SHEET_NAME_SERVICE = 'ServiceItems';
 
 const CACHE_KEY = 'pixelpos_product_db';
@@ -158,9 +164,9 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
-      // Ensure specific sheet encoding. 
       const encodedSheetName = encodeURIComponent(SHEET_NAME_SERVICE);
-      const url = `${BASE_URL}&sheet=${encodedSheetName}&t=${now}`;
+      // Use GVIZ URL to explicitly fetch the named sheet
+      const url = `${GVIZ_URL}&sheet=${encodedSheetName}&t=${now}`;
       
       console.log(`Fetching Service Items from: ${url}`);
       
@@ -191,7 +197,15 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       if (idxName === -1) idxName = 0;
       if (idxPrice === -1) idxPrice = 1;
       // If category is not found, default to 2 if available, otherwise ignore
-      if (idxCategory === -1 && rows[0].length > 2) idxCategory = 2;
+      if (idxCategory === -1 && rows[0].length > 2) {
+          // Find a column that isn't name or price
+          for(let i=0; i<rows[0].length; i++) {
+              if (i !== idxName && i !== idxPrice) {
+                  idxCategory = i;
+                  break;
+              }
+          }
+      }
 
       console.log(`Detected Columns - Name:${idxName}, Price:${idxPrice}, Cat:${idxCategory}`);
 
