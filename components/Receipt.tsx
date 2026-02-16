@@ -3,7 +3,6 @@ import { CartItem } from '../types';
 
 interface ReceiptProps {
   items: CartItem[];
-  laborCost: number;
   subTotal: number;
   tax: number;
   total: number;
@@ -15,7 +14,6 @@ interface ReceiptProps {
 
 const Receipt: React.FC<ReceiptProps> = ({ 
   items, 
-  laborCost, 
   subTotal, 
   tax, 
   total, 
@@ -125,16 +123,6 @@ const Receipt: React.FC<ReceiptProps> = ({
             </div>
           </div>
         ))}
-        
-        {laborCost > 0 && (
-          <div className="flex flex-col">
-            <span className="font-bold text-sm">工賃 (Labor)</span>
-            <div className="flex justify-between text-gray-600 text-xs">
-              <span>1 x {laborCost.toLocaleString()}円</span>
-              <span>{laborCost.toLocaleString()}円</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Totals */}

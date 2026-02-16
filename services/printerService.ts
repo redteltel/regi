@@ -129,7 +129,6 @@ export class PrinterService {
 
   async printReceipt(
       items: CartItem[], 
-      laborCost: number, 
       subTotal: number, 
       tax: number, 
       total: number,
@@ -240,23 +239,6 @@ export class PrinterService {
         add(this.encode(`${line}${padding}${totalStr}\n`));
     }
     
-    // Labor Cost
-    if (laborCost > 0) {
-        add(this.encode("工賃 (Labor)\n"));
-        // [FIX] Use "円" suffix, remove "¥"
-        const line = `1 x ${laborCost.toLocaleString()}円`;
-        const totalStr = `${laborCost.toLocaleString()}円`;
-        
-        let lineLen = 0;
-        for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
-        let totalLen = 0;
-        for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
-
-        const spaces = 32 - (lineLen + totalLen);
-        const padding = spaces > 0 ? " ".repeat(spaces) : " ";
-        add(this.encode(`${line}${padding}${totalStr}\n`));
-    }
-
     add(ALIGN_CENTER);
     add(this.encode("--------------------------------\n"));
     
