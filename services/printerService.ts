@@ -162,6 +162,7 @@ export class PrinterService {
     } else if (mode === 'ESTIMATION') {
         add(this.encode("御 見 積 書\n"));
     } else {
+        // [FIX] Changed from "領収書 (レシート)" to "領収書"
         add(this.encode("領収書\n"));
     }
     add(SIZE_NORMAL);
@@ -189,7 +190,7 @@ export class PrinterService {
         add(ALIGN_CENTER);
         add(SIZE_DOUBLE);
         add(EMPHASIS_ON);
-        // Use "円" suffix
+        // [FIX] Use "円" suffix, remove "¥"
         add(this.encode(`${total.toLocaleString()}円\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
@@ -224,7 +225,7 @@ export class PrinterService {
     add(ALIGN_LEFT);
     for (const item of items) {
         add(this.encode(`${item.name}\n`));
-        // Use "円" suffix
+        // [FIX] Use "円" suffix, remove "¥"
         const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
         const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
         
@@ -242,7 +243,8 @@ export class PrinterService {
     // Labor Cost
     if (laborCost > 0) {
         add(this.encode("工賃 (Labor)\n"));
-        const line = "1 x " + laborCost.toLocaleString();
+        // [FIX] Use "円" suffix, remove "¥"
+        const line = `1 x ${laborCost.toLocaleString()}円`;
         const totalStr = `${laborCost.toLocaleString()}円`;
         
         let lineLen = 0;
@@ -260,7 +262,7 @@ export class PrinterService {
     
     // Total Breakdown
     add(ALIGN_RIGHT);
-    // Use "円" suffix
+    // [FIX] Use "円" suffix, remove "¥"
     add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
     add(this.encode(`(内消費税10%): ${tax.toLocaleString()}円\n`));
     
@@ -268,7 +270,7 @@ export class PrinterService {
         add([LF]);
         add(EMPHASIS_ON);
         add(SIZE_DOUBLE);
-        // Use "円" suffix
+        // [FIX] Use "円" suffix, remove "¥"
         add(this.encode(`合計: ${total.toLocaleString()}円\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);

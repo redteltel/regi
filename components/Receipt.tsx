@@ -7,7 +7,7 @@ interface ReceiptProps {
   subTotal: number;
   tax: number;
   total: number;
-  mode: 'RECEIPT' | 'FORMAL' | 'INVOICE';
+  mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION';
   recipientName: string;
   proviso: string;
   paymentDeadline: string;
@@ -27,11 +27,16 @@ const Receipt: React.FC<ReceiptProps> = ({
   // Revenue stamp only for Formal Receipt >= 50,000
   const needsStamp = mode === 'FORMAL' && total >= 50000;
 
+  // Calculate Expiration Date for Estimation (1 month from now)
+  const expirationDate = new Date();
+  expirationDate.setMonth(expirationDate.getMonth() + 1);
+
   const getTitle = () => {
       switch(mode) {
+          case 'ESTIMATION': return '御 見 積 書';
           case 'INVOICE': return '請 求 書';
           case 'FORMAL': return '領 収 証';
-          default: return '領収書'; // Changed from '領収書 (レシート)'
+          default: return '領収書';
       }
   };
 
@@ -44,6 +49,7 @@ const Receipt: React.FC<ReceiptProps> = ({
           {getTitle()}
         </h2>
         {mode === 'INVOICE' && <p className="text-sm font-bold mb-1 tracking-wide">(INVOICE)</p>}
+        {mode === 'ESTIMATION' && <p className="text-sm font-bold mb-1 tracking-wide">(ESTIMATION)</p>}
         <p className="text-gray-500 text-xs text-right">
           No. {new Date().toISOString().slice(0,10).replace(/-/g,'')}-{new Date().getHours()}{new Date().getMinutes()}
         </p>
@@ -52,8 +58,8 @@ const Receipt: React.FC<ReceiptProps> = ({
         </p>
       </div>
 
-      {/* Recipient & Invoice/Formal Details */}
-      {(mode === 'FORMAL' || mode === 'INVOICE') && (
+      {/* Recipient & Invoice/Formal/Estimation Details */}
+      {(mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') && (
         <div className="mb-6 border-b-2 border-black pb-4">
           <div className="flex justify-between items-end mb-4">
             <span className="text-lg border-b border-black flex-1 mr-2 px-1">
@@ -66,9 +72,16 @@ const Receipt: React.FC<ReceiptProps> = ({
                 下記の通りご請求申し上げます。
               </div>
           )}
+          {mode === 'ESTIMATION' && (
+              <div className="text-right text-xs mb-2">
+                下記の通り御見積申し上げます。
+              </div>
+          )}
           
           <div className="bg-gray-100 py-3 px-2 text-center mb-2">
-            <span className="text-xs mr-2">{mode === 'INVOICE' ? 'ご請求金額' : '金額'}</span>
+            <span className="text-xs mr-2">
+                {mode === 'INVOICE' ? 'ご請求金額' : mode === 'ESTIMATION' ? '御見積金額' : '金額'}
+            </span>
             <span className="text-2xl font-bold tracking-wider">{total.toLocaleString()}円</span>
           </div>
           
@@ -90,12 +103,18 @@ const Receipt: React.FC<ReceiptProps> = ({
                 お支払期限: {paymentDeadline}
             </div>
           )}
+
+          {mode === 'ESTIMATION' && (
+            <div className="text-right text-sm font-bold mt-2 text-gray-700">
+                有効期限: {expirationDate.toLocaleDateString()}
+            </div>
+          )}
         </div>
       )}
 
       {/* Line Items */}
       <div className="space-y-3 mb-4">
-        {(mode === 'FORMAL' || mode === 'INVOICE') && <p className="text-xs text-gray-500 border-b border-dashed pb-1">内訳</p>}
+        {(mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') && <p className="text-xs text-gray-500 border-b border-dashed pb-1">内訳</p>}
         
         {items.map((item) => (
           <div key={item.id} className="flex flex-col">
@@ -137,8 +156,8 @@ const Receipt: React.FC<ReceiptProps> = ({
         )}
       </div>
 
-      {/* Invoice Bank Information */}
-      {mode === 'INVOICE' && (
+      {/* Invoice/Estimation Bank Information */}
+      {(mode === 'INVOICE' || mode === 'ESTIMATION') && (
         <div className="mb-6 p-4 border border-gray-300 rounded bg-gray-50 text-xs">
             <p className="font-bold border-b border-gray-300 mb-2 pb-1 text-gray-700">お振込先</p>
             <div className="space-y-1 font-medium text-gray-800">
@@ -171,7 +190,9 @@ const Receipt: React.FC<ReceiptProps> = ({
       </div>
       
       <div className="text-center text-[10px] text-gray-400 mt-4">
-        {mode === 'INVOICE' ? 'ご請求書を送付いたします。' : '毎度ありがとうございます！'}
+        {mode === 'INVOICE' ? 'ご請求書を送付いたします。' : 
+         mode === 'ESTIMATION' ? 'ご検討のほどお願い申し上げます。' : 
+         '毎度ありがとうございます！'}
       </div>
     </div>
   );

@@ -13,8 +13,8 @@ const App: React.FC = () => {
   const [laborCost, setLaborCost] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Receipt Mode State
-  const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL' | 'INVOICE'>('RECEIPT');
+  // Receipt Mode State (Added ESTIMATION)
+  const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION'>('RECEIPT');
   const [recipientName, setRecipientName] = useState('');
   const [proviso, setProviso] = useState('');
   const [paymentDeadline, setPaymentDeadline] = useState('');
@@ -227,14 +227,20 @@ const App: React.FC = () => {
                       now.getHours().toString().padStart(2, '0') +
                       now.getMinutes().toString().padStart(2, '0') +
                       now.getSeconds().toString().padStart(2, '0');
-                      
-      const typeStr = receiptMode === 'FORMAL' ? 'FormalReceipt' : receiptMode === 'INVOICE' ? 'Invoice' : 'Receipt';
+      
+      // Map for filename
+      let typeStr = 'Receipt';
+      if (receiptMode === 'FORMAL') typeStr = 'FormalReceipt';
+      else if (receiptMode === 'INVOICE') typeStr = 'Invoice';
+      else if (receiptMode === 'ESTIMATION') typeStr = 'Estimation';
+
       const filename = `${typeStr}_Panaland_${dateStr}.pdf`;
       
       const titleMap = {
           'RECEIPT': 'レシート',
           'FORMAL': '領収書',
-          'INVOICE': '請求書'
+          'INVOICE': '請求書',
+          'ESTIMATION': '見積書'
       };
 
       const blob = pdf.output('blob');
@@ -413,6 +419,15 @@ const App: React.FC = () => {
                {/* Mode Switcher */}
                <div className="flex bg-gray-200 p-1 rounded-lg mb-4">
                   <button
+                    onClick={() => setReceiptMode('ESTIMATION')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                      receiptMode === 'ESTIMATION' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    <FileText size={16} />
+                    見積書
+                  </button>
+                  <button
                     onClick={() => setReceiptMode('INVOICE')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
                       receiptMode === 'INVOICE' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
@@ -441,8 +456,8 @@ const App: React.FC = () => {
                   </button>
                </div>
 
-               {/* Inputs (Invoice & Formal) */}
-               {(receiptMode === 'FORMAL' || receiptMode === 'INVOICE') && (
+               {/* Inputs (Invoice, Formal & Estimation) */}
+               {(receiptMode === 'FORMAL' || receiptMode === 'INVOICE' || receiptMode === 'ESTIMATION') && (
                  <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-blue-100 space-y-3">
                     <div>
                       <label className="block text-xs font-bold text-gray-500 mb-1">宛名 (Recipient)</label>
