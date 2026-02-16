@@ -127,11 +127,12 @@ export class PrinterService {
     return sjisData;
   }
 
-  // Convert Base64 Image to ESC/POS Raster Bit Image (GS v 0)
-  private async convertImageToEscPos(base64: string): Promise<number[]> {
+  // Convert Image (URL or Base64) to ESC/POS Raster Bit Image (GS v 0)
+  private async convertImageToEscPos(url: string): Promise<number[]> {
     return new Promise((resolve, reject) => {
         const img = new Image();
-        img.src = base64;
+        img.crossOrigin = "Anonymous"; // Enable CORS for local/remote images
+        img.src = url;
         img.onload = () => {
             // Max width for MP-B20 is usually 384 dots (58mm)
             const MAX_WIDTH = 384;
@@ -217,7 +218,7 @@ export class PrinterService {
       proviso: string = '',
       paymentDeadline: string = '',
       discount: number = 0,
-      logoBase64: string | null = null
+      logoUrl: string | null = null
   ) {
     this.log("Generating Receipt (Shift_JIS)...");
     
@@ -235,10 +236,10 @@ export class PrinterService {
     add(ALIGN_CENTER);
 
     // Print Logo if provided
-    if (logoBase64) {
+    if (logoUrl) {
         try {
-            this.log("Processing logo image...");
-            const imageCmds = await this.convertImageToEscPos(logoBase64);
+            this.log("Processing logo image from: " + logoUrl);
+            const imageCmds = await this.convertImageToEscPos(logoUrl);
             add(ALIGN_CENTER);
             add(imageCmds);
             add([LF]);

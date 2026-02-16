@@ -7,7 +7,7 @@ import { fetchServiceItems } from './services/sheetService';
 import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import { LOGO_BASE64 } from './logoData';
+import { LOGO_URL } from './logoData';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -210,7 +210,7 @@ const App: React.FC = () => {
         proviso,
         paymentDeadline,
         discountVal, // Pass discount
-        LOGO_BASE64  // Pass Logo
+        LOGO_URL     // Pass Logo URL
       );
 
       if (navigator.vibrate) navigator.vibrate([100]);
@@ -644,7 +644,7 @@ const App: React.FC = () => {
                  proviso={proviso}
                  paymentDeadline={paymentDeadline}
                  discount={discountVal}
-                 logo={LOGO_BASE64} // Pass Logo
+                 logo={LOGO_URL} // Pass Logo URL
                />
                
                <div className="text-center text-gray-400 text-xs mt-4">

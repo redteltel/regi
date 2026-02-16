@@ -1,6 +1,10 @@
 
-// Logo data for the receipt
-// Replace the string below with your actual logo Base64 if needed.
-// Ensure the string is enclosed in double quotes " and ends with a semicolon ;
+// Logo image path
+// Please place your 'logo.png' file in the 'public' directory of your project.
+// This path handles the Vite base URL configuration automatically.
 
-export const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAAyCAYAAAAZUD4GAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACYSURBVHhe7dGxAcAgDMCw/v9p32GQkCpS5Y31ZSVI5Ax3t9v9QxIkyC1BgtwSJMgtQYLcEiTILEGCTIIEmQQJMgsSZBIkyCxIkEmQIJMgQWZBgkyCBJkFCTIJEmsWJMgkSJBZkCCTIEFmQYJMggSZBQkyCRJkFiTIJEiQWZAOQYLcEiTILEGCTIIEmQUJMgsS5JYgQW4JEuSWIEFulzwB/k5q4B4AAAAASUVORK5CYII=";
+const BASE = import.meta.env.BASE_URL || '/';
+// Remove trailing slash from BASE if it exists, to avoid double slashes if not careful, 
+// but BASE_URL usually ends with /. 
+// If BASE is '/', result is '/logo.png'. If '/regi/', result is '/regi/logo.png'.
+export const LOGO_URL = `${BASE}logo.png`.replace(/\/\//g, '/');

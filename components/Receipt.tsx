@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CartItem } from '../types';
 
 interface ReceiptProps {
@@ -28,6 +28,7 @@ const Receipt: React.FC<ReceiptProps> = ({
 }) => {
   // Revenue stamp only for Formal Receipt >= 50,000
   const needsStamp = mode === 'FORMAL' && total >= 50000;
+  const [imgError, setImgError] = useState(false);
 
   // Calculate Expiration Date for Estimation (1 month from now)
   const expirationDate = new Date();
@@ -48,10 +49,11 @@ const Receipt: React.FC<ReceiptProps> = ({
       {/* Header */}
       <div className="text-center mb-6">
         {/* Logo Display */}
-        {logo && (
+        {logo && !imgError && (
            <img 
              src={logo} 
              alt="Store Logo" 
+             onError={() => setImgError(true)}
              className="mx-auto mb-4 object-contain"
              style={{ maxWidth: '200px', maxHeight: '100px' }} 
            />
