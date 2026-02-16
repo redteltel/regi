@@ -3,6 +3,7 @@ import { Product } from '../types';
 // The Google Sheet ID provided by the user
 const SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
+const SHEET_NAME_SERVICE = 'ServiceItems';
 
 const CACHE_KEY = 'pixelpos_product_db';
 const TIMESTAMP_KEY = 'pixelpos_db_timestamp';
@@ -143,6 +144,48 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
     return memoryCache;
   }
 };
+
+// Fetch Service Items from the separate "ServiceItems" sheet
+export const fetchServiceItems = async (): Promise<Product[]> => {
+  try {
+      const now = Date.now();
+      const url = `${CSV_URL}&sheet=${SHEET_NAME_SERVICE}&t=${now}`;
+      const res = await fetch(url, { 
+        cache: 'no-store',
+        headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
+      });
+      if (!res.ok) return []; 
+      
+      const text = await res.text();
+      const rows = parseCSV(text);
+      
+      const items: Product[] = [];
+      // Skip Header (Row 0)
+      for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (row.length < 2) continue;
+          
+          // Assume columns: [0] Item Name, [1] Price, [2] Note/Category (optional)
+          const name = row[0];
+          const priceStr = row[1].replace(/[^0-9]/g, '');
+          const price = parseInt(priceStr, 10);
+          const note = row[2] || '';
+
+          if (name && !isNaN(price)) {
+              items.push({
+                  id: `SVC-${i}-${now}`, // Unique temporary ID
+                  partNumber: note || 'SERVICE', 
+                  name: name,
+                  price: price
+              });
+          }
+      }
+      return items;
+  } catch (e) {
+      console.error("Failed to fetch service items", e);
+      return [];
+  }
+}
 
 export interface SearchResult {
   exact: Product | null;

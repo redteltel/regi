@@ -3,7 +3,8 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench, FileText, Receipt as ReceiptIcon } from 'lucide-react';
+import { fetchServiceItems } from './services/sheetService';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench, FileText, Receipt as ReceiptIcon, ListPlus, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -13,7 +14,11 @@ const App: React.FC = () => {
   const [laborCost, setLaborCost] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Receipt Mode State (Added ESTIMATION)
+  // Service Items State
+  const [serviceItems, setServiceItems] = useState<Product[]>([]);
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  
+  // Receipt Mode State (ESTIMATION is at left)
   const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION'>('RECEIPT');
   const [recipientName, setRecipientName] = useState('');
   const [proviso, setProviso] = useState('');
@@ -36,6 +41,12 @@ const App: React.FC = () => {
         isConnected: false,
         type: null
       }));
+    });
+    
+    // Fetch Service Items on mount
+    fetchServiceItems().then(items => {
+        setServiceItems(items);
+        console.log("Loaded service items:", items.length);
     });
   }, []);
 
@@ -124,6 +135,15 @@ const App: React.FC = () => {
       }
       return item;
     }));
+  };
+
+  // Add Service Item Logic
+  const handleAddServiceItem = (item: Product) => {
+      // Create a unique instance to allow multiple additions of same service if needed?
+      // Or just treat as product. treating as product for now.
+      // If ID is same, quantity increases.
+      handleProductFound(item);
+      setShowServiceModal(false);
   };
 
   // Printing Logic - Text Mode with Shift-JIS (via printerService)
@@ -282,8 +302,59 @@ const App: React.FC = () => {
         );
       case AppState.LIST:
         return (
-          <div className="flex-1 p-4 pb-24 overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-6 text-primary">Cart ({cart.length})</h2>
+          <div className="flex-1 p-4 pb-24 overflow-y-auto relative">
+            {/* Service Items Modal */}
+            {showServiceModal && (
+               <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white text-black w-full max-w-sm rounded-xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden animate-in zoom-in-95 duration-200">
+                      <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                          <h3 className="font-bold flex items-center gap-2">
+                              <ListPlus size={18} className="text-blue-600"/>
+                              サービス・固定費を追加
+                          </h3>
+                          <button onClick={() => setShowServiceModal(false)} className="p-2 hover:bg-gray-200 rounded-full">
+                              <X size={20} />
+                          </button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                          {serviceItems.length === 0 ? (
+                              <div className="text-center py-8 text-gray-500 text-sm">
+                                  読み込み中、または項目がありません。<br/>(Sheet: ServiceItems)
+                              </div>
+                          ) : (
+                              serviceItems.map(item => (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => handleAddServiceItem(item)}
+                                    className="w-full text-left p-3 rounded-lg border border-gray-100 hover:bg-blue-50 hover:border-blue-300 active:bg-blue-100 transition-colors flex justify-between items-center group"
+                                  >
+                                      <div>
+                                          <div className="font-bold text-gray-800">{item.name}</div>
+                                          {item.partNumber && item.partNumber !== 'SERVICE' && (
+                                              <div className="text-xs text-gray-500">{item.partNumber}</div>
+                                          )}
+                                      </div>
+                                      <div className="font-mono font-bold text-blue-700">
+                                          ¥{item.price.toLocaleString()}
+                                      </div>
+                                  </button>
+                              ))
+                          )}
+                      </div>
+                  </div>
+               </div>
+            )}
+
+            <div className="flex justify-between items-end mb-4">
+                <h2 className="text-2xl font-bold text-primary">Cart ({cart.length})</h2>
+                <button 
+                  onClick={() => setShowServiceModal(true)}
+                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-secondary text-xs rounded-full flex items-center gap-1.5 transition-colors border border-gray-700"
+                >
+                    <ListPlus size={14} />
+                    サービス項目を追加
+                </button>
+            </div>
             
             <div className="space-y-4">
                 {cart.length === 0 ? (
@@ -416,7 +487,7 @@ const App: React.FC = () => {
             
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-4 pb-32">
-               {/* Mode Switcher */}
+               {/* Mode Switcher - ESTIMATION restored at left */}
                <div className="flex bg-gray-200 p-1 rounded-lg mb-4">
                   <button
                     onClick={() => setReceiptMode('ESTIMATION')}
