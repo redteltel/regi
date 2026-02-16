@@ -2,7 +2,7 @@ import { Product } from '../types';
 
 // The Google Sheet ID provided by the user
 const SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
-const CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
+const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
 const SHEET_NAME_SERVICE = 'ServiceItems';
 
 const CACHE_KEY = 'pixelpos_product_db';
@@ -73,6 +73,13 @@ const parseCSV = (text: string): string[][] => {
   return rows;
 };
 
+// Helper to convert full-width numbers to half-width
+const toHalfWidth = (str: string) => {
+  return str.replace(/[０-９]/g, (s) => {
+    return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+  });
+};
+
 // Load from LocalStorage on startup
 const loadFromLocal = (): Product[] => {
   try {
@@ -102,7 +109,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
   try {
     // Add timestamp to bypass browser/CDN cache
-    const urlWithTimestamp = `${CSV_URL}&t=${now}`;
+    const urlWithTimestamp = `${BASE_URL}&t=${now}`;
     
     // Explicitly set cache to no-store to ensure freshness
     const res = await fetch(urlWithTimestamp, { 
@@ -123,8 +130,10 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
         const partNumber = row[0];
         const name = row[1];
-        const priceStr = row[2].replace(/[^0-9]/g, '');
-        const price = parseInt(priceStr, 10);
+        
+        // Clean price string: Remove non-numeric, handle full-width
+        const priceClean = toHalfWidth(row[2]).replace(/[^0-9]/g, '');
+        const price = parseInt(priceClean, 10);
 
         if (partNumber && !isNaN(price)) {
             products.push({ id: partNumber, partNumber, name, price });
@@ -149,15 +158,25 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
-      // Ensure we target the ServiceItems sheet
-      const url = `${CSV_URL}&sheet=${SHEET_NAME_SERVICE}&t=${now}`;
+      // Ensure specific sheet encoding. Note: 'sheet' parameter works for export?format=csv
+      const encodedSheetName = encodeURIComponent(SHEET_NAME_SERVICE);
+      const url = `${BASE_URL}&sheet=${encodedSheetName}&t=${now}`;
+      
+      console.log(`Fetching Service Items from: ${url}`);
+      
       const res = await fetch(url, { 
         cache: 'no-store',
         headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
       });
-      if (!res.ok) return []; 
+      
+      if (!res.ok) {
+          console.error(`Service fetch failed: ${res.status} ${res.statusText}`);
+          return [];
+      }
       
       const text = await res.text();
+      // console.log("Raw CSV:", text.substring(0, 100) + "..."); // Debugging
+
       const rows = parseCSV(text);
       
       const items: Product[] = [];
@@ -166,11 +185,17 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
           const row = rows[i];
           if (row.length < 2) continue;
           
-          // Columns: [0] Name, [1] Price, [2] Category (optional)
-          const name = row[0];
-          const priceStr = row[1].replace(/[^0-9]/g, '');
-          const price = parseInt(priceStr, 10);
-          const category = row[2] || '';
+          // Expected Columns: [0] Name, [1] Price, [2] Category (optional)
+          const name = row[0]?.trim();
+          
+          // Robust Price Parsing
+          // 1. Convert Full-width to Half-width
+          // 2. Remove commas, "¥", "円" and whitespace
+          let rawPrice = row[1] || "0";
+          rawPrice = toHalfWidth(rawPrice).replace(/[¥,円\s]/g, '');
+          const price = parseInt(rawPrice, 10);
+          
+          const category = row[2]?.trim() || '';
 
           if (name && !isNaN(price)) {
               items.push({
@@ -179,8 +204,12 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
                   name: name,
                   price: price
               });
+          } else {
+              // console.warn(`Skipping invalid row ${i}:`, row);
           }
       }
+      
+      console.log(`Parsed ${items.length} service items.`);
       return items;
   } catch (e) {
       console.error("Failed to fetch service items", e);

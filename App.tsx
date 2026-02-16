@@ -4,7 +4,7 @@ import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
 import { fetchServiceItems } from './services/sheetService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench, FileText, Receipt as ReceiptIcon, ListPlus, X } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -16,6 +16,7 @@ const App: React.FC = () => {
   
   // Service Items State
   const [serviceItems, setServiceItems] = useState<Product[]>([]);
+  const [isServiceLoading, setIsServiceLoading] = useState(false);
   const [showServiceModal, setShowServiceModal] = useState(false);
   
   // Receipt Mode State (ESTIMATION is at left)
@@ -32,6 +33,16 @@ const App: React.FC = () => {
     characteristic: null,
   });
   
+  const loadServiceItems = async () => {
+      setIsServiceLoading(true);
+      try {
+          const items = await fetchServiceItems();
+          setServiceItems(items);
+      } finally {
+          setIsServiceLoading(false);
+      }
+  };
+
   useEffect(() => {
     // Ensure no debug logs appear in UI
     printerService.setOnDisconnect(() => {
@@ -44,10 +55,7 @@ const App: React.FC = () => {
     });
     
     // Fetch Service Items on mount
-    fetchServiceItems().then(items => {
-        setServiceItems(items);
-        console.log("Loaded service items:", items.length);
-    });
+    loadServiceItems();
   }, []);
 
   // Update proviso default when entering preview
@@ -309,14 +317,28 @@ const App: React.FC = () => {
                               <ListPlus size={18} className="text-blue-600"/>
                               サービス・固定費を追加
                           </h3>
-                          <button onClick={() => setShowServiceModal(false)} className="p-2 hover:bg-gray-200 rounded-full">
-                              <X size={20} />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button 
+                                onClick={loadServiceItems} 
+                                className={`p-2 hover:bg-gray-200 rounded-full ${isServiceLoading ? 'animate-spin' : ''}`}
+                            >
+                                <RefreshCw size={18} className="text-gray-500" />
+                            </button>
+                            <button onClick={() => setShowServiceModal(false)} className="p-2 hover:bg-gray-200 rounded-full">
+                                <X size={20} />
+                            </button>
+                          </div>
                       </div>
                       <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                          {serviceItems.length === 0 ? (
+                          {isServiceLoading ? (
+                              <div className="flex justify-center items-center py-8">
+                                <Loader2 className="animate-spin text-blue-500" size={24} />
+                                <span className="ml-2 text-sm text-gray-500">データを読み込み中...</span>
+                              </div>
+                          ) : serviceItems.length === 0 ? (
                               <div className="text-center py-8 text-gray-500 text-sm">
-                                  読み込み中、または項目がありません。<br/>(Sheet: ServiceItems)
+                                  項目が見つかりませんでした。<br/>
+                                  <span className="text-xs text-gray-400">Sheet: ServiceItems が存在するか確認してください</span>
                               </div>
                           ) : (
                               serviceItems.map(item => (
