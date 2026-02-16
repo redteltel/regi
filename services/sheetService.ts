@@ -149,6 +149,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
+      // Ensure we target the ServiceItems sheet
       const url = `${CSV_URL}&sheet=${SHEET_NAME_SERVICE}&t=${now}`;
       const res = await fetch(url, { 
         cache: 'no-store',
@@ -165,16 +166,16 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
           const row = rows[i];
           if (row.length < 2) continue;
           
-          // Assume columns: [0] Item Name, [1] Price, [2] Note/Category (optional)
+          // Columns: [0] Name, [1] Price, [2] Category (optional)
           const name = row[0];
           const priceStr = row[1].replace(/[^0-9]/g, '');
           const price = parseInt(priceStr, 10);
-          const note = row[2] || '';
+          const category = row[2] || '';
 
           if (name && !isNaN(price)) {
               items.push({
                   id: `SVC-${i}-${now}`, // Unique temporary ID
-                  partNumber: note || 'SERVICE', 
+                  partNumber: category || 'Service', // Use category as partNumber for display
                   name: name,
                   price: price
               });
@@ -212,43 +213,27 @@ export const searchProduct = async (query: string): Promise<SearchResult> => {
   }
 
   // 2. Fuzzy/Candidate Search
-  // Logic: 
-  // - Matches if query is a substring of partNumber (or vice versa)
-  // - OR if Levenshtein distance is small (<= 2 for strings > 4 chars)
-  
   const candidates = db.filter(p => {
       const pNorm = normalize(p.partNumber);
-      
-      // Too short to be meaningful fuzzy match
       if (pNorm.length < 3 || target.length < 3) return false;
-
-      // Substring match (strong candidate)
       if (pNorm.includes(target) || target.includes(pNorm)) return true;
-
-      // Edit distance (typo candidate)
-      // Only check if lengths are somewhat similar
       if (Math.abs(pNorm.length - target.length) <= 2) {
           const dist = levenshtein(pNorm, target);
-          // Allow 1 error for short strings, 2 for longer
           const threshold = target.length > 5 ? 2 : 1;
           if (dist <= threshold) return true;
       }
-
       return false;
   })
-  // Sort candidates: Starts with target > Includes > Edit Distance
   .sort((a, b) => {
       const aNorm = normalize(a.partNumber);
       const bNorm = normalize(b.partNumber);
-      
       const aStarts = aNorm.startsWith(target);
       const bStarts = bNorm.startsWith(target);
       if (aStarts && !bStarts) return -1;
       if (!aStarts && bStarts) return 1;
-
       return 0;
   })
-  .slice(0, 5); // Return top 5 candidates
+  .slice(0, 5); 
   
   return { exact: null, candidates };
 };

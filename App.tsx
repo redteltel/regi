@@ -139,9 +139,6 @@ const App: React.FC = () => {
 
   // Add Service Item Logic
   const handleAddServiceItem = (item: Product) => {
-      // Create a unique instance to allow multiple additions of same service if needed?
-      // Or just treat as product. treating as product for now.
-      // If ID is same, quantity increases.
       handleProductFound(item);
       setShowServiceModal(false);
   };
@@ -330,7 +327,7 @@ const App: React.FC = () => {
                                   >
                                       <div>
                                           <div className="font-bold text-gray-800">{item.name}</div>
-                                          {item.partNumber && item.partNumber !== 'SERVICE' && (
+                                          {item.partNumber && item.partNumber !== 'Service' && (
                                               <div className="text-xs text-gray-500">{item.partNumber}</div>
                                           )}
                                       </div>
@@ -347,6 +344,7 @@ const App: React.FC = () => {
 
             <div className="flex justify-between items-end mb-4">
                 <h2 className="text-2xl font-bold text-primary">Cart ({cart.length})</h2>
+                {/* Floating style or header button */}
                 <button 
                   onClick={() => setShowServiceModal(true)}
                   className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-secondary text-xs rounded-full flex items-center gap-1.5 transition-colors border border-gray-700"
@@ -361,13 +359,22 @@ const App: React.FC = () => {
                   <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-800 rounded-xl bg-surface/50">
                     <ShoppingCart className="w-10 h-10 mb-3 opacity-40 text-gray-500" />
                     <p className="text-sm font-medium text-gray-400">商品がありません (No items)</p>
-                    <button 
-                      onClick={() => setAppState(AppState.SCANNING)}
-                      className="mt-4 px-5 py-2 bg-gray-800 border border-gray-700 rounded-full text-xs hover:bg-gray-700 transition-colors flex items-center gap-2 text-primary"
-                    >
-                      <Plus size={14} />
-                      商品を追加 (Scan)
-                    </button>
+                    <div className="flex gap-2 mt-4">
+                        <button 
+                          onClick={() => setAppState(AppState.SCANNING)}
+                          className="px-5 py-2 bg-gray-800 border border-gray-700 rounded-full text-xs hover:bg-gray-700 transition-colors flex items-center gap-2 text-primary"
+                        >
+                          <Plus size={14} />
+                          商品を追加 (Scan)
+                        </button>
+                        <button 
+                          onClick={() => setShowServiceModal(true)}
+                          className="px-5 py-2 bg-gray-800 border border-gray-700 rounded-full text-xs hover:bg-gray-700 transition-colors flex items-center gap-2 text-secondary"
+                        >
+                          <ListPlus size={14} />
+                          サービス追加
+                        </button>
+                    </div>
                   </div>
                 ) : (
                   cart.map(item => (
