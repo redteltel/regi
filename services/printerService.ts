@@ -127,6 +127,86 @@ export class PrinterService {
     return sjisData;
   }
 
+  // Convert Base64 Image to ESC/POS Raster Bit Image (GS v 0)
+  private async convertImageToEscPos(base64: string): Promise<number[]> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = base64;
+        img.onload = () => {
+            // Max width for MP-B20 is usually 384 dots (58mm)
+            const MAX_WIDTH = 384;
+            let width = img.width;
+            let height = img.height;
+
+            // Resize logic
+            if (width > MAX_WIDTH) {
+                height = Math.floor(height * (MAX_WIDTH / width));
+                width = MAX_WIDTH;
+            }
+            
+            // Ensure width is a multiple of 8
+            if (width % 8 !== 0) {
+                width = Math.floor(width / 8) * 8;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                reject(new Error("Canvas context not available"));
+                return;
+            }
+
+            // Draw white background then image
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            const rasterData: number[] = [];
+
+            // Convert to monochrome (1 bit per pixel)
+            // ESC/POS GS v 0 format:
+            // xL xH yL yH (Little Endian)
+            // x = number of bytes in horizontal direction (width / 8)
+            // y = number of dots in vertical direction
+            
+            const xBytes = width / 8;
+            
+            // Header: GS v 0 m xL xH yL yH
+            rasterData.push(0x1D, 0x76, 0x30, 0x00);
+            rasterData.push(xBytes & 0xFF, (xBytes >> 8) & 0xFF);
+            rasterData.push(height & 0xFF, (height >> 8) & 0xFF);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x += 8) {
+                    let byte = 0;
+                    for (let b = 0; b < 8; b++) {
+                        if (x + b < width) {
+                            const offset = ((y * width) + (x + b)) * 4;
+                            // Luminance formula
+                            const r = data[offset];
+                            const g = data[offset + 1];
+                            const b_val = data[offset + 2];
+                            const brightness = (r * 0.299 + g * 0.587 + b_val * 0.114);
+                            
+                            // If dark enough, set bit to 1
+                            if (brightness < 128) {
+                                byte |= (1 << (7 - b));
+                            }
+                        }
+                    }
+                    rasterData.push(byte);
+                }
+            }
+            resolve(rasterData);
+        };
+        img.onerror = (e) => reject(new Error("Failed to load image for printing"));
+    });
+  }
+
   async printReceipt(
       items: CartItem[], 
       subTotal: number, 
@@ -136,7 +216,8 @@ export class PrinterService {
       recipientName: string = '',
       proviso: string = '',
       paymentDeadline: string = '',
-      discount: number = 0
+      discount: number = 0,
+      logoBase64: string | null = null
   ) {
     this.log("Generating Receipt (Shift_JIS)...");
     
@@ -152,6 +233,19 @@ export class PrinterService {
     add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
     
     add(ALIGN_CENTER);
+
+    // Print Logo if provided
+    if (logoBase64) {
+        try {
+            this.log("Processing logo image...");
+            const imageCmds = await this.convertImageToEscPos(logoBase64);
+            add(ALIGN_CENTER);
+            add(imageCmds);
+            add([LF]);
+        } catch (e) {
+            console.warn("Logo print failed:", e);
+        }
+    }
     
     // Title
     add(SIZE_DOUBLE);

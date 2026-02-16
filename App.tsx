@@ -8,6 +8,10 @@ import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Ca
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
+// Placeholder for the "Pana Land Yoshida" logo. 
+// REPLACE the string below with the actual Base64 string of the uploaded logo.
+const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYAAAAA8CAYAAAC2+14FAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAJySURBVHgB7d1bTuMwFIBh70w7k26lHagL6EY6C+hGumR3A91AOpN2I+1M4jSCAg5JHPv4HOlIReL4x8f2cWwHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgP8u2bZ/LsnwvX13XvQ8h/B5j/O77/uXw+XEcH0MIr+Pz4/F4vT2e7/d7m1K6jiG8lq+2bfsx518l/T7n2yilt/L1er1+H4/Hl8Pnj8fjdQzhdXy+3+/X2+P58XjclFJaYwiv5ats2/al/L+U0scY4/v82fd9K6W0lK+u696GEO4On2/b9vN86brufQjh7vD5tm0/50vXde9DCHf//6/LsnwvX13XvQ8h3B0+37bt5/nSdd37EMLd/v/f55z/N+ffKaW34/PjOH4MIfweY/w+f7uu+xxC+Nn//9u27cu//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPh3y7Ztn8uyfC9fXde9DyH8HmP87vv+5fD5cRwfQviv27b9OOf8q6Tf53wbpTRK6a18vV6v38fj8eXw+ePxeB1DeB2f7/f79fZ4fjweN6WU1hjCa/kq27Z9Kf8vpfQxxvg+f/Z930opLeWr67q3IYS7w+fbtv08X7quex9CuDt8vm3bz/Ol67r3IYS7//+vy7J8L19d170PIdwdPt+27ef50nXde/n/v/3/v885/2/Ov1NKb8fnx3H8GEL4Pcb4ff52Xfc5hPCz//+3bduXf/8BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD8x/0CPgJ52x/fS+QAAAAASUVORK5CYII=";
+
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -208,7 +212,8 @@ const App: React.FC = () => {
         recipientName,
         proviso,
         paymentDeadline,
-        discountVal // Pass discount
+        discountVal, // Pass discount
+        LOGO_BASE64  // Pass Logo
       );
 
       if (navigator.vibrate) navigator.vibrate([100]);
@@ -642,6 +647,7 @@ const App: React.FC = () => {
                  proviso={proviso}
                  paymentDeadline={paymentDeadline}
                  discount={discountVal}
+                 logo={LOGO_BASE64} // Pass Logo
                />
                
                <div className="text-center text-gray-400 text-xs mt-4">

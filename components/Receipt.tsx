@@ -11,6 +11,7 @@ interface ReceiptProps {
   proviso: string;
   paymentDeadline: string;
   discount?: number; // Added discount prop
+  logo?: string | null; // Added logo prop
 }
 
 const Receipt: React.FC<ReceiptProps> = ({ 
@@ -22,7 +23,8 @@ const Receipt: React.FC<ReceiptProps> = ({
   recipientName,
   proviso,
   paymentDeadline,
-  discount = 0
+  discount = 0,
+  logo = null
 }) => {
   // Revenue stamp only for Formal Receipt >= 50,000
   const needsStamp = mode === 'FORMAL' && total >= 50000;
@@ -45,6 +47,16 @@ const Receipt: React.FC<ReceiptProps> = ({
       
       {/* Header */}
       <div className="text-center mb-6">
+        {/* Logo Display */}
+        {logo && (
+           <img 
+             src={logo} 
+             alt="Store Logo" 
+             className="mx-auto mb-4 object-contain"
+             style={{ maxWidth: '200px', maxHeight: '100px' }} 
+           />
+        )}
+        
         <h2 className="text-2xl font-bold mb-2 tracking-widest">
           {getTitle()}
         </h2>
