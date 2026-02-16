@@ -10,6 +10,7 @@ interface ReceiptProps {
   recipientName: string;
   proviso: string;
   paymentDeadline: string;
+  discount?: number; // Added discount prop
 }
 
 const Receipt: React.FC<ReceiptProps> = ({ 
@@ -20,7 +21,8 @@ const Receipt: React.FC<ReceiptProps> = ({
   mode,
   recipientName,
   proviso,
-  paymentDeadline
+  paymentDeadline,
+  discount = 0
 }) => {
   // Revenue stamp only for Formal Receipt >= 50,000
   const needsStamp = mode === 'FORMAL' && total >= 50000;
@@ -127,6 +129,14 @@ const Receipt: React.FC<ReceiptProps> = ({
 
       {/* Totals */}
       <div className="border-t border-dashed border-gray-400 pt-3 mb-6 space-y-1">
+        {/* Discount Line */}
+        {discount > 0 && (
+          <div className="flex justify-between text-gray-600">
+             <span>値引</span>
+             <span>- {discount.toLocaleString()}円</span>
+          </div>
+        )}
+        
         <div className="flex justify-between text-gray-600">
           <span>小計</span>
           <span>{subTotal.toLocaleString()}円</span>
@@ -151,7 +161,6 @@ const Receipt: React.FC<ReceiptProps> = ({
             <div className="space-y-1 font-medium text-gray-800">
                 <p>天草信用金庫　瀬戸橋支店</p>
                 <p>普通口座　００８８４７７</p>
-                {/* [FIX] Changed from half-width "ﾌｸｼﾏ ｶｽﾞﾋｺ" to full-width "フクシマ カズヒコ" */}
                 <p>フクシマ カズヒコ</p>
             </div>
         </div>

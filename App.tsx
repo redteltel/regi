@@ -13,6 +13,9 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
+  // Discount State
+  const [discount, setDiscount] = useState<string>('');
+
   // Service Items State
   const [serviceItems, setServiceItems] = useState<Product[]>([]);
   const [isServiceLoading, setIsServiceLoading] = useState(false);
@@ -66,12 +69,30 @@ const App: React.FC = () => {
     }
   }, [appState, cart.length]);
 
-  // Tax Calculation Logic (Confirmed): 
-  // Total = floor(Subtotal * 1.10)
+  // --- Calculation Logic (Revised for Discount) ---
+  // 1. Calculate Items Total (Tax Exclusive Sum)
   const itemsTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const subTotal = itemsTotal;
-  const totalAmount = Math.floor(subTotal * 1.10);
-  const tax = totalAmount - subTotal;
+
+  // 2. Calculate Initial Tax-Included Total
+  // (Assuming item prices are tax-exclusive base prices, standard tax is 10%)
+  const initialTotalWithTax = Math.floor(itemsTotal * 1.10);
+
+  // 3. Apply Discount
+  const discountVal = parseInt(discount || '0', 10);
+  // Ensure total doesn't go negative
+  const finalTotalWithTax = Math.max(0, initialTotalWithTax - discountVal);
+
+  // 4. Back-calculate New Base Price (Excl. Tax) from the Final Total
+  // Formula: FinalTotal / 1.1 (floored)
+  const newBasePrice = Math.floor(finalTotalWithTax / 1.10);
+
+  // 5. Calculate New Tax
+  const newTax = finalTotalWithTax - newBasePrice;
+
+  // Assignments for UI
+  const subTotal = newBasePrice; // Displayed Subtotal reflects the back-calculated base
+  const tax = newTax;
+  const totalAmount = finalTotalWithTax;
 
   const handleConnectBluetooth = async () => {
     try {
@@ -181,7 +202,8 @@ const App: React.FC = () => {
         receiptMode,
         recipientName,
         proviso,
-        paymentDeadline
+        paymentDeadline,
+        discountVal // Pass discount
       );
 
       if (navigator.vibrate) navigator.vibrate([100]);
@@ -197,6 +219,7 @@ const App: React.FC = () => {
   const handleFinish = () => {
     if (window.confirm("現在のカートをクリアしてトップに戻りますか？")) {
       setCart([]);
+      setDiscount('');
       setReceiptMode('RECEIPT');
       setRecipientName('');
       setProviso('');
@@ -447,13 +470,28 @@ const App: React.FC = () => {
                     <span>Total</span>
                     <span className="text-primary">¥{totalAmount.toLocaleString()}</span>
                   </div>
+                  {/* Discount Input below Total */}
+                  <div className="flex justify-between items-center text-sm pt-2 mt-2 border-t border-gray-800/50">
+                     <span className="text-gray-400">値引 (Discount)</span>
+                     <div className="relative">
+                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-red-400 text-xs">▲</span>
+                         <input 
+                            type="number"
+                            inputMode="numeric"
+                            value={discount}
+                            onChange={e => setDiscount(e.target.value)}
+                            placeholder="0"
+                            className="w-24 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-red-400 font-mono focus:border-red-500 focus:outline-none transition-all placeholder-gray-600"
+                         />
+                     </div>
+                  </div>
                 </div>
 
                 <button
                   onClick={() => setAppState(AppState.PREVIEW)}
-                  disabled={totalAmount === 0}
+                  disabled={totalAmount === 0 && discountVal === 0}
                   className={`w-full mt-6 py-4 rounded-xl font-bold text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2
-                    ${totalAmount === 0 ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-primary text-onPrimary'}
+                    ${(totalAmount === 0 && discountVal === 0) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-primary text-onPrimary'}
                   `}
                 >
                   Proceed to Checkout
@@ -573,6 +611,7 @@ const App: React.FC = () => {
                  recipientName={recipientName}
                  proviso={proviso}
                  paymentDeadline={paymentDeadline}
+                 discount={discountVal}
                />
                
                <div className="text-center text-gray-400 text-xs mt-4">

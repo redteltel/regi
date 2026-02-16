@@ -135,7 +135,8 @@ export class PrinterService {
       mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION' = 'RECEIPT',
       recipientName: string = '',
       proviso: string = '',
-      paymentDeadline: string = ''
+      paymentDeadline: string = '',
+      discount: number = 0
   ) {
     this.log("Generating Receipt (Shift_JIS)...");
     
@@ -244,6 +245,12 @@ export class PrinterService {
     
     // Total Breakdown
     add(ALIGN_RIGHT);
+    
+    // Discount Line
+    if (discount > 0) {
+        add(this.encode(`値引: - ${discount.toLocaleString()}円\n`));
+    }
+    
     // [FIX] Use "円" suffix, remove "¥"
     add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
     add(this.encode(`(内消費税10%): ${tax.toLocaleString()}円\n`));
