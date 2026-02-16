@@ -173,9 +173,9 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const base64 = canvas.toDataURL('image/webp', 0.6);
 
-      // Add timeout for Gemini API call (15s)
+      // Add timeout for Gemini API call (Increased to 45s for stability)
       const timeoutPromise = new Promise<null>((_, reject) => 
-         setTimeout(() => reject(new Error("Timeout")), 15000)
+         setTimeout(() => reject(new Error("Timeout")), 45000)
       );
       
       const result = await Promise.race([
@@ -216,10 +216,17 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       }
     } catch (e: any) {
       console.error("Scan Error:", e);
-      let errMsg = "エラーが発生しました";
-      if (e.message === "Timeout") errMsg = "通信タイムアウト";
+      let errMsg = e.message || "エラーが発生しました";
+      
+      if (errMsg === "Timeout") {
+          errMsg = "通信タイムアウト\n電波の良い場所で再試行してください";
+      } else if (errMsg.includes("fetch") || errMsg.includes("Network")) {
+          errMsg = "通信エラー\n接続状況を確認してください";
+      }
+      
       showStatus(errMsg, 'error');
-      setTimeout(() => { setIsProcessing(false); setStatusMsg(""); }, 1500);
+      // Show error message for 4 seconds so user can read it
+      setTimeout(() => { setIsProcessing(false); setStatusMsg(""); }, 4000);
     }
   }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing, error]);
 

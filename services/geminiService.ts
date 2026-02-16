@@ -43,9 +43,9 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
     required: ["partNumber"],
   };
 
-  // Retry logic: Try up to 2 times
+  // Retry logic: Try up to 3 times (Enhanced Stability)
   let attempts = 0;
-  const maxAttempts = 2;
+  const maxAttempts = 3;
 
   while (attempts < maxAttempts) {
     try {
@@ -85,10 +85,12 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
       
       if (attempts >= maxAttempts) {
         console.error("Gemini Vision Error after retries:", error);
-        throw error;
+        // Return a user-friendly error message for the UI to display
+        throw new Error("電波の良い場所でもう一度お試しください。");
       }
-      // Wait 1 second before retrying
-      await wait(1000);
+      
+      // Exponential Backoff: Wait longer between retries (2s, 3s...)
+      await wait(1000 + (attempts * 1000));
     }
   }
 
