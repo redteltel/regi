@@ -285,7 +285,8 @@ export class PrinterService {
         add(EMPHASIS_OFF);
         add(this.encode("天草信用金庫 瀬戸橋支店\n"));
         add(this.encode("普通口座 0088477\n"));
-        add(this.encode("ﾌｸｼﾏ ｶｽﾞﾋｺ\n"));
+        // [FIX] Changed from half-width "ﾌｸｼﾏ ｶｽﾞﾋｺ" to full-width "フクシマ カズヒコ"
+        add(this.encode("フクシマ カズヒコ\n"));
         add([LF]);
     }
     

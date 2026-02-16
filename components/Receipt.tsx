@@ -163,7 +163,8 @@ const Receipt: React.FC<ReceiptProps> = ({
             <div className="space-y-1 font-medium text-gray-800">
                 <p>天草信用金庫　瀬戸橋支店</p>
                 <p>普通口座　００８８４７７</p>
-                <p>ﾌｸｼﾏ ｶｽﾞﾋｺ</p>
+                {/* [FIX] Changed from half-width "ﾌｸｼﾏ ｶｽﾞﾋｺ" to full-width "フクシマ カズヒコ" */}
+                <p>フクシマ カズヒコ</p>
             </div>
         </div>
       )}
