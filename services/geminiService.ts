@@ -1,10 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// Strictly remove any whitespace or newlines from the API key to prevent "String contains non ISO-8859-1 code point" errors.
-const apiKey = (process.env.API_KEY || '').replace(/[\r\n\s]/g, '');
-const ai = new GoogleGenAI({ apiKey: apiKey });
-
 // Using gemini-3-flash-preview as recommended for basic text tasks
 const MODEL_NAME = 'gemini-3-flash-preview';
 
@@ -17,62 +13,84 @@ const cleanJsonString = (text: string): string => {
   return cleaned;
 };
 
+// Retry utility
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const extractPartNumber = async (base64Image: string): Promise<ScannedResult | null> => {
-  try {
-    const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
+  // Retrieve API Key at runtime
+  const apiKey = process.env.API_KEY;
 
-    const responseSchema = {
-      type: Type.OBJECT,
-      properties: {
-        partNumber: {
-          type: Type.STRING,
-          description: "The alphanumeric product code, model number, or SKU found in the image.",
-        },
-        confidence: {
-          type: Type.NUMBER,
-          description: "Confidence score between 0 and 1.",
-        },
-      },
-      required: ["partNumber"],
-    };
-
-    const result = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: cleanBase64,
-            },
-          },
-          {
-            text: "Extract the main product part number (品番) or SKU from this image. Return just the code.",
-          },
-        ],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        temperature: 0.1,
-      },
-    });
-
-    const rawText = result.text;
-    if (!rawText) return null;
-
-    const jsonText = cleanJsonString(rawText);
-    
-    try {
-      const data = JSON.parse(jsonText) as ScannedResult;
-      return data;
-    } catch (parseError) {
-      console.error("JSON Parse Error", parseError);
-      throw new Error("Failed to parse AI response.");
-    }
-
-  } catch (error: any) {
-    console.error("Gemini Vision Error:", error);
-    throw error;
+  if (!apiKey) {
+    console.error("Gemini API Key is missing.");
+    throw new Error("Gemini API Key is not configured.");
   }
+
+  const ai = new GoogleGenAI({ apiKey });
+  const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
+
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      partNumber: {
+        type: Type.STRING,
+        description: "The alphanumeric product code, model number, or SKU found in the image. Ignore purely numeric barcodes if an alphanumeric code exists.",
+      },
+      confidence: {
+        type: Type.NUMBER,
+        description: "Confidence score between 0 and 1.",
+      },
+    },
+    required: ["partNumber"],
+  };
+
+  // Retry logic: Try up to 2 times
+  let attempts = 0;
+  const maxAttempts = 2;
+
+  while (attempts < maxAttempts) {
+    try {
+      const result = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'image/jpeg', // API accepts 'image/jpeg' for generic image data
+                data: cleanBase64,
+              },
+            },
+            {
+              text: "Extract the main product model number (品番) from this image. Return just the code in JSON.",
+            },
+          ],
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: responseSchema,
+          temperature: 0.1,
+        },
+      });
+
+      const rawText = result.text;
+      if (!rawText) throw new Error("Empty response from AI");
+
+      const jsonText = cleanJsonString(rawText);
+      const data = JSON.parse(jsonText) as ScannedResult;
+      
+      return data;
+
+    } catch (error: any) {
+      attempts++;
+      console.warn(`Gemini API Attempt ${attempts} failed:`, error);
+      
+      if (attempts >= maxAttempts) {
+        console.error("Gemini Vision Error after retries:", error);
+        throw error;
+      }
+      // Wait 1 second before retrying
+      await wait(1000);
+    }
+  }
+
+  return null;
 };

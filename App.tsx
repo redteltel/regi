@@ -3,66 +3,97 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Trash2, Printer, Plus, Minus, AlertTriangle, BellRing, Terminal, RefreshCw } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, Wrench, FileText, Receipt as ReceiptIcon } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [laborCost, setLaborCost] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Receipt Mode State
+  const [receiptMode, setReceiptMode] = useState<'RECEIPT' | 'FORMAL' | 'INVOICE'>('RECEIPT');
+  const [recipientName, setRecipientName] = useState('');
+  const [proviso, setProviso] = useState('');
+  const [paymentDeadline, setPaymentDeadline] = useState('');
+
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>({
     isConnected: false,
+    type: null,
     name: null,
     device: null,
     characteristic: null,
   });
   
-  // Debug logs - Increased to 99 to capture full UUID lists
-  const [logs, setLogs] = useState<string[]>([]);
-  const addLog = (msg: string) => setLogs(prev => [...prev.slice(-99), msg]);
-
   useEffect(() => {
-    printerService.setLogger(addLog);
+    // Ensure no debug logs appear in UI
     printerService.setOnDisconnect(() => {
       console.log("App detected printer disconnect");
-      addLog("Status: Disconnected");
       setPrinterStatus(prev => ({
         ...prev,
         isConnected: false,
+        type: null
       }));
     });
   }, []);
 
-  const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  // Update proviso default when entering preview
+  useEffect(() => {
+    if (appState === AppState.PREVIEW && !proviso) {
+        if (cart.length > 0) {
+            setProviso('お品代として');
+        } else if (laborCost > 0) {
+            setProviso('工賃として');
+        }
+    }
+  }, [appState, cart.length, laborCost]);
 
-  const handleConnectPrinter = async () => {
+  // Tax Calculation Logic (Confirmed): 
+  // Total = floor(Subtotal * 1.10)
+  const itemsTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const subTotal = itemsTotal + laborCost;
+  const totalAmount = Math.floor(subTotal * 1.10);
+  const tax = totalAmount - subTotal;
+
+  const handleConnectBluetooth = async () => {
     try {
-      setLogs([]); 
-      const device = await printerService.connect();
+      const device = await printerService.connectBluetooth();
       const dispName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : 'MP-B20');
       
       setPrinterStatus({
         isConnected: true,
+        type: 'BLUETOOTH',
         name: dispName,
         device: device,
         characteristic: null
       });
     } catch (e: any) {
-      console.error(e);
-      const msg = e.message || "Unknown error";
-      addLog(`Error: ${msg}`);
-      if (!msg.includes("User cancelled")) {
-        alert(`接続エラー:\n${msg}\n\nペアリングの問題が続く場合は、AndroidのBluetooth設定からMP-B20を削除(ペアリング解除)してからやり直してください。`);
-      }
+      handleConnError(e);
     }
   };
 
-  const handleRetryDiscovery = async () => {
+  const handleConnectUsb = async () => {
     try {
-      addLog("Manual Retry triggered...");
-      await printerService.retryDiscovery();
-      alert("再検索が完了しました。");
+      const name = await printerService.connectUsb();
+      setPrinterStatus({
+        isConnected: true,
+        type: 'USB',
+        name: name,
+        device: null,
+        characteristic: null
+      });
     } catch (e: any) {
-      addLog(`Retry Error: ${e.message}`);
+      handleConnError(e);
+    }
+  };
+
+  const handleConnError = (e: any) => {
+    console.error(e);
+    const msg = e.message || "Unknown error";
+    if (!msg.includes("cancelled")) {
+        alert(`接続エラー:\n${msg}`);
     }
   };
 
@@ -86,14 +117,23 @@ const App: React.FC = () => {
     }).filter(item => item.quantity > 0));
   };
 
+  const updateItemPrice = (id: string, newPrice: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return { ...item, price: Math.max(0, newPrice) };
+      }
+      return item;
+    }));
+  };
+
+  // Printing Logic - Text Mode with Shift-JIS (via printerService)
   const handlePrint = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 && laborCost === 0) return;
     
     let isReady = printerStatus.isConnected && printerService.isConnected();
 
-    if (!isReady) {
-       addLog("Auto-reconnecting...");
-       const restored = await printerService.restoreConnection();
+    if (!isReady && printerStatus.type === 'BLUETOOTH') {
+       const restored = await printerService.restoreBluetoothConnection();
        if (restored) {
          setPrinterStatus(prev => ({ ...prev, isConnected: true }));
          isReady = true;
@@ -101,20 +141,126 @@ const App: React.FC = () => {
     }
 
     if (!isReady) {
-      alert("プリンタと接続されていません。\n下の「Connect Printer」ボタンを押して再接続してください。");
-      setPrinterStatus(prev => ({ ...prev, isConnected: false }));
+      alert("プリンタと接続されていません。再接続してください。");
+      setPrinterStatus(prev => ({ ...prev, isConnected: false, type: null }));
       return; 
     }
 
+    setIsProcessing(true);
+    if (navigator.vibrate) navigator.vibrate(50);
+
     try {
-      await printerService.printReceipt(cart, cartTotal);
-      setCart([]); 
-      setAppState(AppState.SCANNING);
-      alert("印刷が完了しました！");
+      // Use the new Shift-JIS specific receipt generation in PrinterService
+      await printerService.printReceipt(
+        cart,
+        laborCost,
+        subTotal,
+        tax,
+        totalAmount,
+        receiptMode,
+        recipientName,
+        proviso,
+        paymentDeadline
+      );
+
+      if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
       console.error(e);
       setPrinterStatus(prev => ({ ...prev, isConnected: false }));
-      alert(`印刷エラー:\n${e.message}\n\n再接続してから試してください。`);
+      alert(`印刷エラー:\n${e.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleFinish = () => {
+    if (window.confirm("現在のカートをクリアしてトップに戻りますか？")) {
+      setCart([]);
+      setLaborCost(0);
+      setReceiptMode('RECEIPT');
+      setRecipientName('');
+      setProviso('');
+      setPaymentDeadline('');
+      setAppState(AppState.SCANNING);
+    }
+  };
+
+  // PDF Export via Web Share API
+  const handleSharePDF = async () => {
+    if (isProcessing) return;
+
+    const element = document.getElementById('receipt-preview');
+    if (!element) {
+      alert("プレビューの取得に失敗しました。");
+      return;
+    }
+
+    setIsProcessing(true);
+    if (navigator.vibrate) navigator.vibrate(50);
+
+    try {
+      const canvas = await html2canvas(element, { 
+        scale: 2, 
+        useCORS: true, 
+        logging: false, 
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      
+      // @ts-ignore
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+      });
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      const now = new Date();
+      const dateStr = now.getFullYear() +
+                      (now.getMonth() + 1).toString().padStart(2, '0') +
+                      now.getDate().toString().padStart(2, '0') + '_' +
+                      now.getHours().toString().padStart(2, '0') +
+                      now.getMinutes().toString().padStart(2, '0') +
+                      now.getSeconds().toString().padStart(2, '0');
+                      
+      const typeStr = receiptMode === 'FORMAL' ? 'FormalReceipt' : receiptMode === 'INVOICE' ? 'Invoice' : 'Receipt';
+      const filename = `${typeStr}_Panaland_${dateStr}.pdf`;
+      
+      const titleMap = {
+          'RECEIPT': 'レシート',
+          'FORMAL': '領収書',
+          'INVOICE': '請求書'
+      };
+
+      const blob = pdf.output('blob');
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+              files: [file],
+              title: `パナランドヨシダ ${titleMap[receiptMode]}`,
+              text: `${titleMap[receiptMode]} (${dateStr}) を送信します。`,
+            });
+        } catch (shareError: any) {
+            if (shareError.name !== 'AbortError') {
+                pdf.save(filename);
+            }
+        }
+      } else {
+        pdf.save(filename);
+      }
+      
+    } catch (e: any) {
+      console.error("PDF Export failed:", e);
+      alert(`PDF作成に失敗しました: ${e.message}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -132,144 +278,293 @@ const App: React.FC = () => {
         return (
           <div className="flex-1 p-4 pb-24 overflow-y-auto">
             <h2 className="text-2xl font-bold mb-6 text-primary">Cart ({cart.length})</h2>
-            {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <ShoppingCart className="w-12 h-12 mb-4 opacity-50" />
-                <p>Your cart is empty.</p>
-                <button 
-                  onClick={() => setAppState(AppState.SCANNING)}
-                  className="mt-4 px-6 py-2 bg-surface border border-gray-700 rounded-full text-sm"
-                >
-                  Start Scanning
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {cart.map(item => (
-                  <div key={item.id} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-onSurface">{item.name}</h3>
-                      <p className="text-xs text-gray-400">{item.partNumber}</p>
-                      <p className="text-primary font-mono mt-1">¥{item.price.toLocaleString()}</p>
-                    </div>
-                    <div className="flex items-center gap-3 bg-surface rounded-lg p-1 border border-gray-800">
-                      <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-gray-800 rounded-md">
-                        <Minus size={16} />
-                      </button>
-                      <span className="font-mono w-4 text-center">{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-gray-800 rounded-md">
-                        <Plus size={16} />
-                      </button>
-                    </div>
+            
+            <div className="space-y-4">
+                {cart.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-800 rounded-xl bg-surface/50">
+                    <ShoppingCart className="w-10 h-10 mb-3 opacity-40 text-gray-500" />
+                    <p className="text-sm font-medium text-gray-400">商品がありません (No items)</p>
+                    <button 
+                      onClick={() => setAppState(AppState.SCANNING)}
+                      className="mt-4 px-5 py-2 bg-gray-800 border border-gray-700 rounded-full text-xs hover:bg-gray-700 transition-colors flex items-center gap-2 text-primary"
+                    >
+                      <Plus size={14} />
+                      商品を追加 (Scan)
+                    </button>
                   </div>
-                ))}
+                ) : (
+                  cart.map(item => (
+                    <div key={item.id} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-onSurface">{item.name}</h3>
+                        <p className="text-xs text-gray-400">{item.partNumber}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-gray-400 text-sm">@</span>
+                          <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary font-mono text-sm">¥</span>
+                              <input
+                                type="number"
+                                min="0"
+                                inputMode="numeric"
+                                value={item.price === 0 ? '' : item.price}
+                                placeholder="0"
+                                onChange={(e) => updateItemPrice(item.id, parseInt(e.target.value, 10) || 0)}
+                                onClick={(e) => (e.target as HTMLInputElement).select()}
+                                className="w-28 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-primary font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                              />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 bg-surface rounded-lg p-1 border border-gray-800">
+                        <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-gray-800 rounded-md">
+                          <Minus size={16} />
+                        </button>
+                        <span className="font-mono w-4 text-center">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-gray-800 rounded-md">
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+
+                <div className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm border-l-4 border-secondary">
+                  <div className="flex items-center gap-2">
+                    <Wrench size={20} className="text-secondary" />
+                    <span className="font-semibold text-onSurface">工賃 (Labor)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">¥</span>
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      value={laborCost === 0 ? '' : laborCost}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setLaborCost(isNaN(val) ? 0 : Math.max(0, val));
+                      }}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                      placeholder="0"
+                      className="w-24 bg-surface text-right text-white font-mono text-lg border border-gray-700 rounded-lg p-2 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    />
+                  </div>
+                </div>
                 
                 <div className="mt-8 bg-surface p-4 rounded-xl border border-gray-800">
-                  <div className="flex justify-between items-center text-lg font-bold">
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Items Total</span>
+                    <span>¥{itemsTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Labor Cost</span>
+                    <span>¥{laborCost.toLocaleString()}</span>
+                  </div>
+                  <div className="border-t border-gray-800 my-2"></div>
+                   <div className="flex justify-between items-center text-sm mb-2 text-gray-300 font-medium">
+                    <span>Subtotal</span>
+                    <span>¥{subTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Tax (10%)</span>
+                    <span>¥{tax.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-700">
                     <span>Total</span>
-                    <span className="text-primary">¥{cartTotal.toLocaleString()}</span>
+                    <span className="text-primary">¥{totalAmount.toLocaleString()}</span>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setAppState(AppState.PREVIEW)}
-                  className="w-full mt-6 bg-primary text-onPrimary py-4 rounded-xl font-bold text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                  disabled={totalAmount === 0}
+                  className={`w-full mt-6 py-4 rounded-xl font-bold text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2
+                    ${totalAmount === 0 ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-primary text-onPrimary'}
+                  `}
                 >
                   Proceed to Checkout
                 </button>
-              </div>
-            )}
+            </div>
           </div>
         );
       case AppState.PREVIEW:
         return (
-          <div className="flex-1 flex flex-col min-h-0 bg-gray-100 text-black">
-            {/* Header */}
-            <div className="w-full flex justify-between items-center px-4 py-4 shrink-0 bg-white shadow-sm z-10">
-              <button onClick={() => setAppState(AppState.LIST)} className="text-blue-600 font-medium">Back</button>
-              <h2 className="font-bold">Preview</h2>
-              <div className="w-8"></div>
+          <div className="flex flex-col h-[100dvh] bg-gray-100 text-black overflow-hidden">
+            <div className="w-full flex justify-between items-center px-4 py-4 shrink-0 bg-white shadow-sm z-20">
+              <button 
+                onClick={() => setAppState(AppState.LIST)} 
+                className="flex items-center text-blue-600 font-medium active:opacity-60"
+              >
+                <ChevronLeft size={20} />
+                修正
+              </button>
+              <h2 className="font-bold">プレビュー</h2>
+              <button 
+                onClick={handleFinish} 
+                className="flex items-center gap-1 text-gray-600 font-medium active:opacity-60 bg-gray-100 px-3 py-1.5 rounded-full"
+              >
+                <Home size={16} />
+                <span className="text-xs">完了</span>
+              </button>
             </div>
             
-            {/* Scrollable Receipt Area */}
-            <div className="flex-1 overflow-y-auto p-4">
-               <Receipt items={cart} total={cartTotal} />
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-4 pb-32">
+               {/* Mode Switcher */}
+               <div className="flex bg-gray-200 p-1 rounded-lg mb-4">
+                  <button
+                    onClick={() => setReceiptMode('INVOICE')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                      receiptMode === 'INVOICE' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    <FileText size={16} />
+                    請求書
+                  </button>
+                  <button
+                    onClick={() => setReceiptMode('RECEIPT')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                      receiptMode === 'RECEIPT' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    <ReceiptIcon size={16} />
+                    レシート
+                  </button>
+                  <button
+                    onClick={() => setReceiptMode('FORMAL')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-bold transition-all ${
+                      receiptMode === 'FORMAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    <FileText size={16} />
+                    領収書
+                  </button>
+               </div>
+
+               {/* Inputs (Invoice & Formal) */}
+               {(receiptMode === 'FORMAL' || receiptMode === 'INVOICE') && (
+                 <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-blue-100 space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">宛名 (Recipient)</label>
+                      <input 
+                        type="text" 
+                        value={recipientName}
+                        onChange={(e) => setRecipientName(e.target.value)}
+                        placeholder="例：上様、〇〇株式会社"
+                        className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    {receiptMode === 'FORMAL' && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">但し書き (Proviso)</label>
+                          <input 
+                            type="text" 
+                            value={proviso}
+                            onChange={(e) => setProviso(e.target.value)}
+                            placeholder="例：お品代として"
+                            className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                    )}
+                    {receiptMode === 'INVOICE' && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">お支払期限 (Deadline)</label>
+                          <input 
+                            type="text" 
+                            value={paymentDeadline}
+                            onChange={(e) => setPaymentDeadline(e.target.value)}
+                            placeholder="例：2023年10月末日"
+                            className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                    )}
+                 </div>
+               )}
+
+               <Receipt 
+                 items={cart} 
+                 laborCost={laborCost} 
+                 subTotal={subTotal} 
+                 tax={tax} 
+                 total={totalAmount}
+                 mode={receiptMode}
+                 recipientName={recipientName}
+                 proviso={proviso}
+                 paymentDeadline={paymentDeadline}
+               />
+               
+               <div className="text-center text-gray-400 text-xs mt-4">
+                 {receiptMode === 'FORMAL' && totalAmount >= 50000 
+                    ? "※ 5万円以上のため印紙枠を表示しています" 
+                    : "内容をご確認の上、印刷または共有してください。"}
+               </div>
             </div>
 
-            {/* Fixed Bottom Controls */}
-            <div className="w-full shrink-0 bg-white p-4 pb-8 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-20">
-              {/* Connection Status Helper */}
-              {!printerStatus.isConnected && (
-                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-xs mb-3 flex items-start gap-2">
-                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-bold">プリンタ未接続</p>
-                    <p>下の黒いボタンを押して接続してください。</p>
-                  </div>
-                </div>
-              )}
-
+            {/* Footer */}
+            <div className="w-full shrink-0 bg-white p-4 pb-10 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-30 sticky bottom-0">
               {!printerStatus.isConnected ? (
-                <button 
-                  onClick={handleConnectPrinter}
-                  className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl mb-3"
-                >
-                  <Bluetooth size={20} />
-                  Connect Printer
-                </button>
+                <div className="flex flex-col gap-2 mb-3">
+                    <button 
+                      onClick={handleConnectBluetooth}
+                      className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]"
+                    >
+                      <Bluetooth size={20} />
+                      Bluetooth接続
+                    </button>
+                    <div className="flex items-center gap-2 text-xs text-gray-400 justify-center">
+                        <span className="h-px w-12 bg-gray-300"></span>
+                        OR
+                        <span className="h-px w-12 bg-gray-300"></span>
+                    </div>
+                    <button 
+                      onClick={handleConnectUsb}
+                      className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]"
+                    >
+                      <Cable size={20} />
+                      USB接続
+                    </button>
+                </div>
               ) : (
                 <div 
-                  className="w-full bg-green-50 border border-green-200 text-green-700 py-3 rounded-xl font-medium flex items-center justify-center gap-2 mb-3 cursor-pointer"
+                  className="w-full bg-green-50 border border-green-200 text-green-700 py-2 rounded-xl font-medium flex items-center justify-center gap-2 mb-3 cursor-pointer text-sm"
                   onClick={() => {
                      if(window.confirm("プリンタを切断しますか？")) {
                         printerService.disconnect();
-                        setPrinterStatus(prev => ({ ...prev, isConnected: false }));
+                        setPrinterStatus(prev => ({ ...prev, isConnected: false, type: null }));
                      }
                   }}
                 >
-                  <Bluetooth size={18} /> 
+                  {printerStatus.type === 'USB' ? <Cable size={16} /> : <Bluetooth size={16} />}
                   Connected to {printerStatus.name}
                 </div>
               )}
 
-              <button 
-                onClick={handlePrint}
-                className={`w-full py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
-                  !printerStatus.isConnected ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-blue-600 text-white'
-                }`}
-              >
-                <Printer size={20} />
-                Print Receipt
-              </button>
+              <div className="flex gap-3">
+                  <button 
+                    onClick={handleSharePDF}
+                    disabled={isProcessing}
+                    className={`flex-1 bg-gray-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
+                      isProcessing ? 'opacity-70 cursor-wait' : ''
+                    }`}
+                  >
+                    {isProcessing ? (
+                        <Loader2 className="animate-spin" size={20} />
+                    ) : (
+                        <Share size={20} />
+                    )}
+                    {isProcessing ? '生成中' : 'PDF共有'}
+                  </button>
 
-              {/* Enhanced Debug Log (h-64, text-xs) */}
-              <div className="mt-4 bg-black p-3 rounded-lg border border-gray-800 shadow-inner">
-                {/* Status Indicator */}
-                <div className="text-gray-400 text-xs mb-2 border-b border-gray-800 pb-1">
-                    System Logs (Service Discovery)
-                </div>
-
-                <div className="text-green-400 font-mono text-xs h-40 overflow-y-auto mb-2">
-                  <div className="flex flex-col gap-0.5">
-                    {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
-                    {logs.slice().reverse().map((log, i) => (
-                      <div key={i} className="break-all border-b border-gray-800/50 pb-0.5 hover:bg-gray-900">{log}</div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Retry Button */}
-                {printerStatus.isConnected && (
-                    <button 
-                        onClick={handleRetryDiscovery}
-                        className="w-full bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 rounded border border-gray-600 flex items-center justify-center gap-2"
-                    >
-                        <RefreshCw size={12} />
-                        Retry Discovery (サービス再検索)
-                    </button>
-                )}
+                  <button 
+                    onClick={handlePrint}
+                    className={`flex-[2] py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
+                      !printerStatus.isConnected ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-blue-600 text-white'
+                    }`}
+                  >
+                    <Printer size={20} />
+                    印刷
+                  </button>
               </div>
-
             </div>
           </div>
         );
@@ -277,21 +572,20 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-surface text-onSurface overflow-hidden">
+    <div className="h-[100dvh] w-screen flex flex-col bg-surface text-onSurface overflow-hidden">
       {appState !== AppState.PREVIEW && (
         <div className="flex justify-between items-center p-4 bg-surface/80 backdrop-blur-md z-10 shrink-0">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             PixelPOS
           </h1>
           <button 
-            onClick={printerStatus.isConnected ? () => {} : handleConnectPrinter}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
               printerStatus.isConnected 
                 ? 'bg-green-500/10 border-green-500/50 text-green-300' 
                 : 'bg-gray-800 border-gray-700 text-gray-400'
             }`}
           >
-            <Bluetooth size={12} />
+            {printerStatus.type === 'USB' ? <Cable size={12} /> : <Bluetooth size={12} />}
             {printerStatus.isConnected ? 'Ready' : 'No Printer'}
           </button>
         </div>
@@ -302,7 +596,7 @@ const App: React.FC = () => {
       </div>
 
       {appState !== AppState.PREVIEW && (
-        <div className="h-20 bg-surface border-t border-gray-800 flex items-center justify-around px-6 pb-2 shrink-0 z-20">
+        <div className="bg-surface border-t border-gray-800 flex items-center justify-around px-6 pt-4 pb-28 shrink-0 z-20">
           <button 
             onClick={() => setAppState(AppState.SCANNING)}
             className={`flex flex-col items-center gap-1 p-2 transition-colors ${appState === AppState.SCANNING ? 'text-primary' : 'text-gray-500'}`}
@@ -317,9 +611,9 @@ const App: React.FC = () => {
           >
             <div className="relative">
               <ShoppingCart size={24} />
-              {cart.length > 0 && (
+              {(cart.length > 0 || laborCost > 0) && (
                 <span className="absolute -top-1 -right-2 bg-secondary text-[#000] text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
-                  {cart.length}
+                  {cart.length + (laborCost > 0 ? 1 : 0)}
                 </span>
               )}
             </div>

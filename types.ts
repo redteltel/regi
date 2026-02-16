@@ -1,3 +1,4 @@
+
 export interface Product {
   id: string;
   partNumber: string;
@@ -17,8 +18,9 @@ export enum AppState {
 
 export interface PrinterStatus {
   isConnected: boolean;
+  type: 'BLUETOOTH' | 'USB' | null;
   name: string | null;
-  device: BluetoothDevice | null;
+  device: BluetoothDevice | any | null;
   characteristic: BluetoothRemoteGATTCharacteristic | null;
 }
 
@@ -27,10 +29,40 @@ export type ScannedResult = {
   confidence: number;
 };
 
-// Web Bluetooth API Type Declarations
+// Web Bluetooth & Serial API Type Declarations
 declare global {
   interface Navigator {
     bluetooth: Bluetooth;
+    serial: Serial;
+  }
+
+  interface Serial extends EventTarget {
+    requestPort(options?: SerialPortRequestOptions): Promise<SerialPort>;
+  }
+
+  interface SerialPortRequestOptions {
+    filters?: SerialPortFilter[];
+  }
+
+  interface SerialPortFilter {
+    usbVendorId?: number;
+    usbProductId?: number;
+  }
+
+  interface SerialPort extends EventTarget {
+    open(options: SerialOptions): Promise<void>;
+    close(): Promise<void>;
+    writable: WritableStream;
+    getInfo(): { usbVendorId?: number; usbProductId?: number };
+  }
+
+  interface SerialOptions {
+    baudRate: number;
+    dataBits?: number;
+    stopBits?: number;
+    parity?: 'none' | 'even' | 'odd';
+    bufferSize?: number;
+    flowControl?: 'none' | 'hardware';
   }
 
   interface Bluetooth {

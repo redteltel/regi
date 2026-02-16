@@ -1,8 +1,10 @@
 import { CartItem } from '../types';
+import Encoding from 'encoding-japanese';
 
 // ESC/POS Commands
 const ESC = 0x1B;
 const GS = 0x1D;
+const FS = 0x1C;
 const AT = 0x40; // Initialize
 const LF = 0x0A; // Line Feed
 const ALIGN_CENTER = [ESC, 0x61, 1];
@@ -12,315 +14,322 @@ const EMPHASIS_ON = [ESC, 0x45, 1];
 const EMPHASIS_OFF = [ESC, 0x45, 0];
 const SIZE_NORMAL = [GS, 0x21, 0x00];
 const SIZE_DOUBLE = [GS, 0x21, 0x11];
+const SIZE_LARGE = [GS, 0x21, 0x11]; 
 
-// PRIORITY TARGETS for MP-B20 (SII / Microchip)
-const SII_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
-const SII_WRITE_UUID_1 = "49535343-1e4d-4bd9-ba61-802d64c64e01";
-const SII_WRITE_UUID_2 = "49535343-8841-43f4-a8d4-ecbe34729bb3";
+// MP-B20 / Japanese Specific
+const KANJI_MODE_ON = [FS, 0x26]; // FS & - Select Kanji character mode
+const JIS_CODE_SYSTEM = [FS, 0x43, 0x01]; // FS C 1 - Select Shift-JIS code system
+const COUNTRY_JAPAN = [ESC, 0x52, 0x08]; // ESC R 8 - Select international character set (Japan)
 
 export class PrinterService {
-  private device: BluetoothDevice | null = null;
-  private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
-  private onDisconnectCallback: (() => void) | null = null;
-  private logger: ((msg: string) => void) | null = null;
-  private intentionalDisconnect = false;
+  public onLog: ((msg: string) => void) | null = null;
+  public onDisconnect: (() => void) | null = null;
+  private buffer: number[] = [];
+  private timer: any = null;
 
-  setLogger(callback: (msg: string) => void) {
-    this.logger = callback;
-  }
+  setLogger(logger: (msg: string) => void) { this.onLog = logger; }
+  setOnDisconnect(callback: () => void) { this.onDisconnect = callback; }
+  log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
-  private log(msg: string) {
-    console.log(`[Printer] ${msg}`);
-    if (this.logger) this.logger(msg);
-  }
-
-  setOnDisconnect(callback: () => void) {
-    this.onDisconnectCallback = callback;
-  }
-
-  private handleDisconnect = () => {
-    this.log("Disconnected via GATT event");
-    this.characteristic = null;
-
-    if (!this.intentionalDisconnect) {
-        this.log("⚠️ Unexpected disconnect. Attempting Keep-Alive reconnect...");
-        // Simple exponential backoff or immediate retry could go here.
-        // For now, we notify the UI, but we could also try to auto-reconnect silently.
-        // Given Web Bluetooth limitations, silent reconnect often fails without user gesture,
-        // but we can try if the device object is still valid.
-        this.restoreConnection().then(success => {
-            if (success) this.log("✅ Auto-reconnected!");
-            else this.log("❌ Auto-reconnect failed.");
-        });
-    }
-
-    if (this.onDisconnectCallback) {
-      this.onDisconnectCallback();
-    }
-  };
-
-  async connect(): Promise<BluetoothDevice> {
-    this.intentionalDisconnect = false;
-    try {
-      this.log("Requesting Device (Accept ALL)...");
-      
-      const device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [
-            SII_SERVICE_UUID,
-            "000018f0-0000-1000-8000-00805f9b34fb", // Standard SII
-            0x18f0, 0x1800, 0x1801, 0x180A, 0xFF00, 0xFF02 // Generics
-        ] 
-      });
-
-      if (this.device) {
-        this.device.removeEventListener('gattserverdisconnected', this.handleDisconnect);
-      }
-
-      this.device = device;
-      this.device.addEventListener('gattserverdisconnected', this.handleDisconnect);
-
-      const displayName = device.name || (device.id ? `ID:${device.id.slice(0,5)}` : "Unknown Device");
-      this.log(`Selected: ${displayName}`);
-
-      this.log("Connecting GATT...");
-      const server = await device.gatt?.connect();
-      if (!server) throw new Error("GATT Connect failed");
-      this.log("Connected. Starting Discovery Loop...");
-
-      // DYNAMIC DISCOVERY LOOP (Keep-Alive & Retry)
-      // Instead of a static wait, we poll for services.
-      await this.pollForServices(server);
-
-      return device;
-    } catch (error: any) {
-      this.log(`Conn Error: ${error.message || error}`);
-      console.error(error);
-      throw error;
-    }
-  }
-
-  async retryDiscovery() {
-      if (!this.device || !this.device.gatt?.connected) {
-          // Try to reconnect the socket if allowed
-          if (this.device) {
-             this.log("Socket closed. Reconnecting...");
-             await this.device.gatt?.connect();
-          } else {
-             throw new Error("Device not connected. Please connect first.");
+  async connect(): Promise<any> {
+    return new Promise((resolve) => {
+      this.buffer = [];
+      this.log("SUCCESS: RawBT Link Ready!");
+      const mockDevice = {
+        name: "MP-B20 (RawBT)",
+        id: "rawbt-intent",
+        gatt: {
+          connected: true,
+          connect: async () => mockDevice.gatt,
+          disconnect: () => { 
+            this.log("Disconnected.");
+            if (this.onDisconnect) this.onDisconnect(); 
           }
-      }
-      this.log("Manual Retry triggered...");
-      if (this.device.gatt) {
-          await this.pollForServices(this.device.gatt);
-      }
-  }
-
-  private async pollForServices(server: BluetoothRemoteGATTServer) {
-      const MAX_ATTEMPTS = 10;
-      const INTERVAL_MS = 3000;
-      let targetChar: BluetoothRemoteGATTCharacteristic | null = null;
-
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-          // 1. Keep-Alive Check
-          if (!server.connected) {
-              this.log(`⚠️ Connection dropped (Attempt ${attempt}). Reconnecting...`);
-              try {
-                  await server.connect();
-                  this.log("✅ Reconnected.");
-              } catch (e) {
-                  this.log("❌ Reconnect failed. Retrying...");
-                  await new Promise(r => setTimeout(r, 1000));
-                  continue;
-              }
-          }
-
-          this.log(`Searching services (Attempt ${attempt}/${MAX_ATTEMPTS})...`);
-
-          try {
-              // 2. Fetch All Services
-              // Using plural getPrimaryServices() to get the full list
-              const services = await server.getPrimaryServices();
-              this.log(`> Found ${services.length} services.`);
-
-              if (services.length > 0) {
-                  // 3. Prioritize SII UUID
-                  const siiService = services.find(s => s.uuid === SII_SERVICE_UUID);
-                  if (siiService) {
-                      this.log(">>> Found SII MP-B20 Service!");
-                      targetChar = await this.findWritableChar(siiService, true);
-                      if (targetChar) break;
-                  }
-
-                  // 4. Fallback to other services
-                  if (!targetChar) {
-                      for (const service of services) {
-                          if (service.uuid === SII_SERVICE_UUID) continue; // Already checked
-                          this.log(`> Checking generic svc: ${service.uuid.slice(0,8)}...`);
-                          targetChar = await this.findWritableChar(service, false);
-                          if (targetChar) break;
-                      }
-                  }
-              }
-          } catch (e: any) {
-              this.log(`> Discovery partial fail: ${e.message}`);
-          }
-
-          if (targetChar) break;
-
-          if (attempt < MAX_ATTEMPTS) {
-              this.log(`> No writable char yet. Waiting ${INTERVAL_MS/1000}s...`);
-              await new Promise(r => setTimeout(r, INTERVAL_MS));
-          }
-      }
-
-      if (!targetChar) {
-          this.log("CRITICAL: Discovery timeout. No writable characteristic found.");
-          throw new Error("Service discovery failed after retries.");
-      }
-
-      this.characteristic = targetChar;
-      this.log(`Bound to: ${this.characteristic.uuid.slice(0,8)}...`);
-      await this.sendWakeup();
-  }
-
-  private async findWritableChar(service: BluetoothRemoteGATTService, isPriority: boolean): Promise<BluetoothRemoteGATTCharacteristic | null> {
-      try {
-          const chars = await service.getCharacteristics();
-          for (const char of chars) {
-              const props = char.properties;
-              const isWritable = props.write || props.writeWithoutResponse;
-              
-              if (isWritable) {
-                  if (isPriority) {
-                       // If we are in the SII service, look for the specific Write UUIDs first
-                       if (char.uuid === SII_WRITE_UUID_1 || char.uuid === SII_WRITE_UUID_2) {
-                           this.log(">>> MATCH: SII Write Characteristic!");
-                           return char;
-                       }
-                  }
-                  // Return first writable if we are desperate or just scanning
-                  this.log(`> Candidate found: ${char.uuid.slice(0,8)}`);
-                  return char;
-              }
-          }
-      } catch (e) {
-          this.log(`> Access denied to service ${service.uuid.slice(0,8)}`);
-      }
-      return null;
-  }
-
-  private async sendWakeup() {
-      if (!this.characteristic) return;
-      try {
-          this.log("Sending wakeup byte...");
-          const nullByte = new Uint8Array([0x00]);
-          if (this.characteristic.properties.writeWithoutResponse) {
-              await this.characteristic.writeValueWithoutResponse(nullByte);
-          } else {
-              await this.characteristic.writeValue(nullByte);
-          }
-          this.log("Wakeup OK.");
-      } catch (e) {
-          this.log(`Wakeup warning: ${e}`);
-      }
-  }
-
-  async restoreConnection(): Promise<boolean> {
-    if (!this.device) return false;
-    if (this.device.gatt?.connected && this.characteristic) return true;
-    try {
-        this.log("Restoring connection...");
-        const server = await this.device.gatt?.connect();
-        if (server) {
-             // If we reconnected, we might need to re-bind the characteristic if it was invalidated
-             if (!this.characteristic) {
-                 await this.pollForServices(server);
-             }
-             return true;
         }
-        return false;
-    } catch { return false; }
+      };
+      resolve(mockDevice);
+    });
+  }
+
+  async connectBluetooth(): Promise<any> {
+    this.log("Initializing RawBT Link (BT Mode)...");
+    return this.connect();
+  }
+
+  async connectUsb(): Promise<string> {
+    this.log("Initializing RawBT Link (USB Mode)...");
+    await this.connect();
+    return "MP-B20 (RawBT)";
   }
 
   disconnect() {
-    this.intentionalDisconnect = true;
-    if (this.device) {
-      this.device.removeEventListener('gattserverdisconnected', this.handleDisconnect);
-      if (this.device.gatt?.connected) {
-        this.device.gatt.disconnect();
-      }
-    }
-    this.device = null;
-    this.characteristic = null;
     this.log("Disconnected.");
+    if (this.onDisconnect) this.onDisconnect();
   }
 
   isConnected(): boolean {
-    return !!(this.device && this.device.gatt?.connected && this.characteristic);
+    return true;
   }
 
-  private encode(text: string): Uint8Array {
-    const encoder = new TextEncoder(); 
-    return encoder.encode(text);
+  async restoreBluetoothConnection(): Promise<boolean> {
+    return true;
   }
 
-  private async writeCommand(data: number[] | Uint8Array) {
-    if (!this.characteristic) throw new Error("Printer not connected");
-    const array = Array.isArray(data) ? new Uint8Array(data) : data;
-    const canWriteNoResp = this.characteristic.properties.writeWithoutResponse;
-    const CHUNK_SIZE = 20; 
+  async print(data: any) {
+    let bytes: Uint8Array;
+    if (data instanceof Uint8Array) {
+      bytes = data;
+    } else if (data && data.buffer) {
+      bytes = new Uint8Array(data.buffer);
+    } else if (Array.isArray(data)) {
+      bytes = new Uint8Array(data);
+    } else {
+      // Default fallback if string passed directly (should not happen with new printReceipt)
+      bytes = new TextEncoder().encode(String(data));
+    }
+    
+    for(let i=0; i<bytes.length; i++) {
+       this.buffer.push(bytes[i]);
+    }
+    this.log("Buffering data... " + this.buffer.length + " bytes");
+    
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.flush();
+    }, 1500);
+  }
 
-    for (let i = 0; i < array.length; i += CHUNK_SIZE) {
-      const chunk = array.slice(i, i + CHUNK_SIZE);
-      try {
-        if (canWriteNoResp) {
-            await this.characteristic.writeValueWithoutResponse(chunk);
-        } else {
-            await this.characteristic.writeValue(chunk);
-        }
-      } catch (e) {
-          await new Promise(r => setTimeout(r, 50));
-          try { await this.characteristic.writeValue(chunk); } catch (err) { throw err; }
+  flush() {
+    if (this.buffer.length === 0) return;
+    this.log("Finalizing receipt for RawBT...");
+    try {
+      let binary = '';
+      for (let i = 0; i < this.buffer.length; i++) {
+        binary += String.fromCharCode(this.buffer[i]);
       }
-      await new Promise(r => setTimeout(r, 20));
+      const base64data = btoa(binary);
+      // RawBT Intent: Pass raw base64 data. 
+      // The content inside base64 is already Shift_JIS encoded by printReceipt.
+      const intentUrl = "intent:base64," + base64data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
+      
+      this.buffer = [];
+      window.location.href = intentUrl;
+      this.log("SUCCESS: Receipt sent via RawBT!");
+    } catch (e: any) {
+      this.log("Print Error: " + e.message);
     }
   }
 
-  async printReceipt(items: CartItem[], total: number) {
-    if (!this.isConnected()) throw new Error("Printer disconnected");
+  /**
+   * Encode string to Shift_JIS bytes for MP-B20
+   */
+  private encode(text: string): number[] {
+    // Convert UNICODE string to Shift_JIS byte array
+    const sjisData = Encoding.convert(text, {
+      to: 'SJIS',
+      from: 'UNICODE',
+      type: 'array'
+    });
+    return sjisData;
+  }
 
-    this.log("Printing...");
-    await this.writeCommand([ESC, AT]);
-    await this.writeCommand(ALIGN_CENTER);
-    await this.writeCommand(SIZE_DOUBLE);
-    await this.writeCommand(this.encode("RECEIPT\n"));
-    await this.writeCommand(SIZE_NORMAL);
-    await this.writeCommand(this.encode("PixelPOS Store\n"));
-    await this.writeCommand(this.encode("--------------------------------\n"));
-    await this.writeCommand([LF]);
-    await this.writeCommand(ALIGN_LEFT);
-    for (const item of items) {
-        await this.writeCommand(this.encode(`${item.name}\n`));
-        const line = `${item.quantity} x Y${item.price.toLocaleString()}`;
-        const totalStr = `Y${(item.price * item.quantity).toLocaleString()}`;
-        const spaces = 32 - (line.length + totalStr.length);
-        const padding = spaces > 0 ? " ".repeat(spaces) : " ";
-        await this.writeCommand(this.encode(`${line}${padding}${totalStr}\n`));
+  async printReceipt(
+      items: CartItem[], 
+      laborCost: number, 
+      subTotal: number, 
+      tax: number, 
+      total: number,
+      mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION' = 'RECEIPT',
+      recipientName: string = '',
+      proviso: string = '',
+      paymentDeadline: string = ''
+  ) {
+    this.log("Generating Receipt (Shift_JIS)...");
+    
+    const cmds: number[] = [];
+    const add = (data: number[]) => {
+        cmds.push(...data);
+    };
+    
+    // Header & Initialization for Japanese
+    add([ESC, AT]); // Initialize
+    add(COUNTRY_JAPAN); // ESC R 8
+    add(KANJI_MODE_ON); // FS & (Enable Kanji)
+    add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
+    
+    add(ALIGN_CENTER);
+    
+    // Title
+    add(SIZE_DOUBLE);
+    if (mode === 'FORMAL') {
+        add(this.encode("領 収 証\n"));
+    } else if (mode === 'INVOICE') {
+        add(this.encode("請 求 書\n"));
+    } else if (mode === 'ESTIMATION') {
+        add(this.encode("御 見 積 書\n"));
+    } else {
+        add(this.encode("領収書 (レシート)\n"));
     }
-    await this.writeCommand(this.encode("--------------------------------\n"));
-    await this.writeCommand(EMPHASIS_ON);
-    await this.writeCommand(SIZE_DOUBLE);
-    await this.writeCommand(ALIGN_RIGHT);
-    await this.writeCommand(this.encode(`TOTAL: Y${total.toLocaleString()}\n`));
-    await this.writeCommand(EMPHASIS_OFF);
-    await this.writeCommand(SIZE_NORMAL);
-    await this.writeCommand(ALIGN_CENTER);
-    await this.writeCommand([LF]);
-    await this.writeCommand(this.encode(`Date: ${new Date().toLocaleString()}\n`));
-    await this.writeCommand(this.encode("Thank you!\n"));
-    await this.writeCommand([LF, LF, LF, LF]);
-    this.log("Print Done.");
+    add(SIZE_NORMAL);
+    add([LF]);
+
+    // Date
+    add(ALIGN_RIGHT);
+    add(this.encode(`${new Date().toLocaleString()}\n`));
+    add([LF]);
+
+    // Formal/Invoice/Estimation Details (Recipient, Total, Proviso)
+    if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+        add(ALIGN_LEFT);
+        add(this.encode(`${recipientName || "          "} 様\n`));
+        add([LF]);
+        
+        if (mode === 'INVOICE') {
+             add(ALIGN_RIGHT);
+             add(this.encode("下記の通りご請求申し上げます。\n"));
+        } else if (mode === 'ESTIMATION') {
+             add(ALIGN_RIGHT);
+             add(this.encode("下記の通り御見積申し上げます。\n"));
+        }
+
+        add(ALIGN_CENTER);
+        add(SIZE_DOUBLE);
+        add(EMPHASIS_ON);
+        add(this.encode(`¥${total.toLocaleString()}-\n`));
+        add(EMPHASIS_OFF);
+        add(SIZE_NORMAL);
+        add([LF]);
+        
+        if (mode === 'FORMAL') {
+            add(ALIGN_LEFT);
+            add(this.encode(`但  ${proviso || "お品代"}として\n`));
+            add(this.encode("上記正に領収いたしました\n"));
+            add([LF]);
+        }
+        
+        if (mode === 'INVOICE' && paymentDeadline) {
+             add(ALIGN_RIGHT);
+             add(this.encode(`お支払期限: ${paymentDeadline}\n`));
+             add([LF]);
+        }
+        
+        if (mode === 'ESTIMATION') {
+             add(ALIGN_RIGHT);
+             const d = new Date();
+             d.setMonth(d.getMonth() + 1);
+             add(this.encode(`有効期限: ${d.toLocaleDateString()}\n`));
+             add([LF]);
+        }
+    }
+
+    add(ALIGN_CENTER);
+    add(this.encode("--------------------------------\n"));
+    
+    // Items
+    add(ALIGN_LEFT);
+    for (const item of items) {
+        add(this.encode(`${item.name}\n`));
+        const line = `${item.quantity} x ¥${item.price.toLocaleString()}`;
+        const totalStr = `¥${(item.price * item.quantity).toLocaleString()}`;
+        
+        // Calculate visual width for alignment (approximate for Shift_JIS)
+        // 1 byte char = 1, 2 byte char = 2 spaces
+        let lineLen = 0;
+        for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
+        let totalLen = 0;
+        for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
+
+        const spaces = 32 - (lineLen + totalLen); 
+        const padding = spaces > 0 ? " ".repeat(spaces) : " ";
+        add(this.encode(`${line}${padding}${totalStr}\n`));
+    }
+    
+    // Labor Cost
+    if (laborCost > 0) {
+        add(this.encode("工賃 (Labor)\n"));
+        const line = "1 x " + laborCost.toLocaleString();
+        const totalStr = `¥${laborCost.toLocaleString()}`;
+        
+        let lineLen = 0;
+        for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
+        let totalLen = 0;
+        for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
+
+        const spaces = 32 - (lineLen + totalLen);
+        const padding = spaces > 0 ? " ".repeat(spaces) : " ";
+        add(this.encode(`${line}${padding}${totalStr}\n`));
+    }
+
+    add(ALIGN_CENTER);
+    add(this.encode("--------------------------------\n"));
+    
+    // Total Breakdown
+    add(ALIGN_RIGHT);
+    add(this.encode(`小計: ¥${subTotal.toLocaleString()}\n`));
+    add(this.encode(`(内消費税10%): ¥${tax.toLocaleString()}\n`));
+    
+    if (mode === 'RECEIPT') {
+        add([LF]);
+        add(EMPHASIS_ON);
+        add(SIZE_DOUBLE);
+        add(this.encode(`合計: ¥${total.toLocaleString()}\n`));
+        add(EMPHASIS_OFF);
+        add(SIZE_NORMAL);
+    }
+    add([LF]);
+
+    // Invoice/Estimation Bank Info
+    if (mode === 'INVOICE' || mode === 'ESTIMATION') {
+        add(ALIGN_LEFT);
+        add(EMPHASIS_ON);
+        add(this.encode("[お振込先]\n"));
+        add(EMPHASIS_OFF);
+        add(this.encode("天草信用金庫 瀬戸橋支店\n"));
+        add(this.encode("普通口座 0088477\n"));
+        add(this.encode("ﾌｸｼﾏ ｶｽﾞﾋｺ\n"));
+        add([LF]);
+    }
+    
+    // Footer: Store Info
+    add(ALIGN_CENTER);
+    add(EMPHASIS_ON);
+    add(this.encode("パナランドヨシダ\n"));
+    add(EMPHASIS_OFF);
+    add(this.encode("〒863-0015\n熊本県天草市旭町43\n"));
+    add(this.encode("電話: 0969-24-0218\n"));
+    add(this.encode("登録番号: T6810624772686\n"));
+    
+    // Simple text marker for seal on thermal printer
+    if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+        add(ALIGN_RIGHT);
+        add(this.encode("(印)\n"));
+        add(ALIGN_CENTER);
+    }
+
+    // Revenue Stamp Placeholder for Formal Receipt > 50000
+    if (mode === 'FORMAL' && total >= 50000) {
+        add([LF]);
+        add(ALIGN_RIGHT);
+        add(this.encode("----------\n"));
+        add(this.encode("| 収入印紙 |\n"));
+        add(this.encode("----------\n"));
+        add(ALIGN_CENTER);
+    }
+
+    add([LF]);
+    if (mode === 'INVOICE') {
+         add(this.encode("ご請求書を送付いたします。\n"));
+    } else if (mode === 'ESTIMATION') {
+         // No specific footer needed for estimation
+    } else {
+         add(this.encode("毎度ありがとうございます!\n"));
+    }
+    
+    // Feed and Cut
+    add([LF, LF, LF, LF]);
+
+    // Send to buffer -> RawBT
+    await this.print(new Uint8Array(cmds));
   }
 }
 

@@ -1,3 +1,4 @@
+
 // Manually define ImportMetaEnv to avoid "Cannot find type definition file for 'vite/client'" error
 interface ImportMetaEnv {
   readonly VITE_GEMINI_API_KEY: string;
@@ -11,4 +12,12 @@ interface ImportMetaEnv {
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
+}
+
+// Augment the existing ProcessEnv interface from @types/node to include API_KEY
+declare namespace NodeJS {
+  interface ProcessEnv {
+    API_KEY: string;
+    [key: string]: string | undefined;
+  }
 }

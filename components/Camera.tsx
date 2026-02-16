@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { extractPartNumber } from '../services/geminiService';
 import { searchProduct } from '../services/sheetService';
 import { Product } from '../types';
+import { Plus, X, AlertCircle, RefreshCw, CameraOff, Lock } from 'lucide-react';
 
 interface CameraProps {
   onProductFound: (product: Product) => void;
@@ -16,34 +17,87 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
   
-  // UI States for feedback
+  // Status UI
   const [statusMsg, setStatusMsg] = useState<string>("");
-  const [debugMsg, setDebugMsg] = useState<string>("");
+  const [statusType, setStatusType] = useState<'info' | 'success' | 'error'>('info');
+
+  // Candidate Dialog State
+  const [showCandidateDialog, setShowCandidateDialog] = useState(false);
+  const [candidates, setCandidates] = useState<Product[]>([]);
+  const [scannedCode, setScannedCode] = useState<string>("");
 
   useEffect(() => {
-    startCamera();
-    return () => stopCamera();
+    let mounted = true;
+
+    const init = async () => {
+        await startCamera();
+    };
+    init();
+
+    return () => {
+        mounted = false;
+        stopCamera();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startCamera = async () => {
+    // 1. Check for Secure Context (HTTPS or Localhost)
+    // Chrome requires HTTPS for getUserMedia (except localhost)
+    if (window.location.protocol !== 'https:' && 
+        window.location.hostname !== 'localhost' && 
+        window.location.hostname !== '127.0.0.1') {
+         setError("カメラを使用するにはHTTPS接続が必要です。\n(現在の接続: " + window.location.protocol + "//" + window.location.hostname + ")");
+         return;
+    }
+
+    // 2. Check API support
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setError("このブラウザはカメラAPIをサポートしていません。");
+        return;
+    }
+
     try {
+      stopCamera(); // Stop existing if any
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
-          width: { ideal: 1920 },
+          width: { ideal: 1920 }, 
           height: { ideal: 1080 } 
         },
         audio: false,
       });
+      
       setStream(mediaStream);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Explicit play helps on some Android versions if autoplay fails
+        videoRef.current.play().catch(e => console.warn("Video play error:", e));
       }
       setError(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Camera access error:", err);
-      setError("カメラへのアクセスが拒否されました。設定を確認してください。");
+      
+      const name = err.name || 'Unknown';
+      const msg = err.message || '';
+      
+      let userMsg = "カメラを起動できませんでした。";
+
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || msg.includes('Permission denied')) {
+        userMsg = "カメラのアクセスが許可されていません。\nブラウザのアドレスバーの鍵アイコン🔒または設定から、このサイトへのカメラ権限を許可してください。";
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        userMsg = "カメラデバイスが見つかりません。";
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        userMsg = "カメラにアクセスできません。\n他のアプリが使用中の可能性があります。";
+      } else if (name === 'OverconstrainedError') {
+        userMsg = "要求された解像度がサポートされていません。";
+      } else {
+        userMsg = `カメラエラー (${name}): ${msg}`;
+      }
+      
+      setError(userMsg);
     }
   };
 
@@ -54,90 +108,197 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     }
   };
 
+  const handleRetry = () => {
+      setError(null);
+      startCamera();
+  };
+
+  const showStatus = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setStatusMsg(msg);
+    setStatusType(type);
+  };
+
+  const handleManualAdd = () => {
+      const newProduct: Product = {
+        id: scannedCode,
+        partNumber: scannedCode,
+        name: scannedCode, 
+        price: 0 
+      };
+      onProductFound(newProduct);
+      showStatus(`🆕 未登録追加: ${scannedCode}`, 'success');
+      handleCloseDialog();
+  };
+
+  const handleSelectCandidate = (product: Product) => {
+      onProductFound(product);
+      showStatus(`✅ ${product.name}`, 'success');
+      handleCloseDialog();
+  };
+
+  const handleCloseDialog = () => {
+      setShowCandidateDialog(false);
+      setCandidates([]);
+      setScannedCode("");
+      setIsProcessing(false);
+      setStatusMsg("");
+  };
+
   const handleCapture = useCallback(async () => {
-    if (isProcessing) return;
+    if (isProcessing || showCandidateDialog || error) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (!video || !canvas) {
-      setDebugMsg("Error: Video/Canvas ref missing");
-      return;
-    }
+    if (!video || !canvas) return;
+    if (video.readyState !== 4 || video.videoWidth === 0) return;
 
-    if (video.readyState !== 4 || video.videoWidth === 0) {
-      setStatusMsg("カメラ準備中...");
-      setTimeout(() => setStatusMsg(""), 1000);
-      return;
-    }
-
-    // Trigger visual flash
     setFlash(true);
     setTimeout(() => setFlash(false), 200);
 
-    if (navigator.vibrate) navigator.vibrate(50);
+    if (navigator.vibrate) navigator.vibrate(30);
     setIsProcessing(true);
-    setStatusMsg("📸 画像処理中...");
-    setDebugMsg("");
+    showStatus("AI解析中...", 'info');
 
     try {
-      const MAX_WIDTH = 600;
+      const MAX_WIDTH = 1024; 
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       
       canvas.width = video.videoWidth * scale;
       canvas.height = video.videoHeight * scale;
 
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) throw new Error("Canvas context error");
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64 = canvas.toDataURL('image/jpeg', 0.5);
+      const base64 = canvas.toDataURL('image/webp', 0.6);
 
-      setStatusMsg("🤖 AIが品番を解析中...");
-      const result = await extractPartNumber(base64);
+      // Add timeout for Gemini API call (15s)
+      const timeoutPromise = new Promise<null>((_, reject) => 
+         setTimeout(() => reject(new Error("Timeout")), 15000)
+      );
+      
+      const result = await Promise.race([
+          extractPartNumber(base64),
+          timeoutPromise
+      ]) as any;
       
       if (result && result.partNumber) {
-        setStatusMsg(`🔍 検索中: ${result.partNumber}`);
-        const product = await searchProduct(result.partNumber);
+        showStatus("データ照合中...", 'info');
+        const searchResult = await searchProduct(result.partNumber);
         
-        if (product) {
-          setStatusMsg("✅ 商品が見つかりました");
+        if (searchResult.exact) {
           if (navigator.vibrate) navigator.vibrate([50, 50]);
-          onProductFound(product);
-          setTimeout(() => setIsProcessing(false), 500);
-          return; 
+          onProductFound(searchResult.exact);
+          showStatus(`✅ ${searchResult.exact.name}`, 'success');
+          setTimeout(() => { setIsProcessing(false); setStatusMsg(""); }, 1200);
+        } else if (searchResult.candidates.length > 0) {
+          if (navigator.vibrate) navigator.vibrate(50);
+          setScannedCode(result.partNumber);
+          setCandidates(searchResult.candidates);
+          setShowCandidateDialog(true);
+          showStatus("候補が見つかりました", 'info');
         } else {
-          setStatusMsg("⚠️ 商品マスタ未登録");
-          setDebugMsg(`品番 "${result.partNumber}" は検出されましたが、登録されていません。`);
-          if (navigator.vibrate) navigator.vibrate(200);
+          if (navigator.vibrate) navigator.vibrate([30, 100, 30]);
+          const newProduct: Product = {
+            id: result.partNumber,
+            partNumber: result.partNumber,
+            name: result.partNumber,
+            price: 0
+          };
+          onProductFound(newProduct);
+          showStatus(`🆕 未登録追加: ${result.partNumber}`, 'success');
+          setTimeout(() => { setIsProcessing(false); setStatusMsg(""); }, 1200);
         }
       } else {
-        setStatusMsg("⚠️ 品番を読み取れませんでした");
-        setDebugMsg("文字が不鮮明か、品番が含まれていません。");
+        showStatus("⚠️ 文字が読み取れません", 'error');
+        setTimeout(() => { setIsProcessing(false); setStatusMsg(""); }, 1500);
       }
     } catch (e: any) {
-      console.error("Scan Process Error:", e);
-      setStatusMsg("❌ エラー発生");
-      setDebugMsg(e.message || "Unknown error occurred");
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    } finally {
-      setIsProcessing(false);
-      setTimeout(() => {
-        setStatusMsg("");
-        if (!debugMsg) setDebugMsg("");
-      }, 4000);
+      console.error("Scan Error:", e);
+      let errMsg = "エラーが発生しました";
+      if (e.message === "Timeout") errMsg = "通信タイムアウト";
+      showStatus(errMsg, 'error');
+      setTimeout(() => { setIsProcessing(false); setStatusMsg(""); }, 1500);
     }
-  }, [isProcessing, onProductFound, setIsProcessing, debugMsg]);
+  }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing, error]);
+
+  if (error) {
+    return (
+      <div className="flex flex-col w-full h-full bg-surface items-center justify-center p-6 text-center space-y-6">
+          <div className="w-24 h-24 rounded-full bg-red-500/10 flex items-center justify-center animate-pulse">
+              <CameraOff className="text-red-500" size={48} />
+          </div>
+          <div>
+              <h3 className="text-xl font-bold text-white mb-2">カメラエラー</h3>
+              <p className="text-red-300 text-sm whitespace-pre-wrap leading-relaxed max-w-xs mx-auto">
+                  {error}
+              </p>
+          </div>
+          <button 
+              onClick={handleRetry}
+              className="px-8 py-3 bg-primary text-onPrimary rounded-full font-bold flex items-center gap-2 hover:bg-primary/90 transition-transform active:scale-95 shadow-lg"
+          >
+              <RefreshCw size={20} />
+              再読み込み
+          </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col w-full h-full bg-surface pb-20">
-      {error ? (
-        <div className="h-40 flex items-center justify-center text-red-400 p-4 text-center bg-gray-900">
-          <p>{error}</p>
+    <div className="flex flex-col w-full h-full bg-surface pb-20 relative">
+      {/* Candidate Selection Dialog */}
+      {showCandidateDialog && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+           <div className="bg-white text-black w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="p-4 bg-gray-100 border-b border-gray-200 flex justify-between items-center">
+                  <div>
+                      <h3 className="font-bold text-lg">もしかして...</h3>
+                      <p className="text-xs text-gray-500">解析: {scannedCode}</p>
+                  </div>
+                  <button onClick={handleCloseDialog} className="p-2 bg-gray-200 rounded-full hover:bg-gray-300">
+                      <X size={20} />
+                  </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {candidates.map(candidate => (
+                      <button 
+                        key={candidate.id}
+                        onClick={() => handleSelectCandidate(candidate)}
+                        className="w-full text-left p-3 rounded-xl border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-all flex justify-between items-center group"
+                      >
+                          <div>
+                              <div className="font-bold text-blue-900 group-hover:text-blue-700">{candidate.partNumber}</div>
+                              <div className="text-sm text-gray-600 truncate max-w-[200px]">{candidate.name}</div>
+                          </div>
+                          <div className="font-mono font-bold text-gray-700">
+                              ¥{candidate.price.toLocaleString()}
+                          </div>
+                      </button>
+                  ))}
+              </div>
+
+              <div className="p-4 border-t border-gray-200 bg-gray-50">
+                  <div className="flex items-start gap-2 mb-3 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                      <AlertCircle size={16} className="shrink-0" />
+                      <p>リストにない場合は、読み取った品番で新規追加します。</p>
+                  </div>
+                  <button 
+                    onClick={handleManualAdd}
+                    className="w-full py-3 bg-gray-800 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-700 active:scale-[0.98] transition-all"
+                  >
+                      <Plus size={18} />
+                      「{scannedCode}」として追加 (¥0)
+                  </button>
+              </div>
+           </div>
         </div>
-      ) : (
-        /* Reduced to 30vh for better button visibility */
-        <div className="relative w-full h-[30vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
+      )}
+
+      {/* Viewfinder */}
+      <div className="relative w-full h-[35vh] bg-black shrink-0 overflow-hidden rounded-b-3xl shadow-xl">
           <video
             ref={videoRef}
             autoPlay
@@ -146,15 +307,17 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
             className="absolute inset-0 w-full h-full object-cover"
           />
 
-          {/* Flash Effect Overlay */}
           <div 
-            className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-200 z-50 ${flash ? 'opacity-80' : 'opacity-0'}`}
+            className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-200 z-40 ${flash ? 'opacity-80' : 'opacity-0'}`}
           />
           
           {/* Status Overlay */}
-          <div className="absolute top-4 left-0 right-0 z-30 flex flex-col gap-2 items-center pointer-events-none px-4">
+          <div className="absolute top-6 left-0 right-0 z-30 flex justify-center pointer-events-none px-4">
              {statusMsg && (
-               <div className="bg-black/80 backdrop-blur-md text-white py-2 px-4 rounded-full text-center font-bold text-sm shadow-lg animate-fade-in border border-white/10">
+               <div className={`
+                 backdrop-blur-md text-white py-2 px-6 rounded-full font-bold text-sm shadow-lg border border-white/10 animate-fade-in
+                 ${statusType === 'error' ? 'bg-red-500/80' : statusType === 'success' ? 'bg-green-500/80' : 'bg-black/70'}
+               `}>
                  {statusMsg}
                </div>
              )}
@@ -162,28 +325,26 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
 
           {/* Guide Frame */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-64 h-16 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
-                品番をこの枠に合わせてください
+            <div className="w-72 h-20 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
+              <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
+                品番を枠内に大きく写してください
               </div>
               <div className="absolute top-1/2 left-4 right-4 h-px bg-red-500/50"></div>
+              
+              {/* Corner markers */}
+              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white"></div>
+              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white"></div>
+              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white"></div>
+              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-white"></div>
             </div>
           </div>
-          
-           {/* Debug msg */}
-           {debugMsg && (
-             <div className="absolute bottom-4 left-4 right-4 bg-red-900/90 text-white p-2 rounded text-xs font-mono break-all border border-red-500/30">
-               {debugMsg}
-             </div>
-           )}
-        </div>
-      )}
+      </div>
       
-      {/* Controls Area */}
+      {/* Controls */}
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 bg-surface">
         <button
           onClick={handleCapture}
-          disabled={isProcessing}
+          disabled={isProcessing || showCandidateDialog}
           className={`
             relative w-24 h-24 rounded-full border-4 border-surface ring-4 ring-primary/20 flex items-center justify-center
             transition-all duration-200 shadow-2xl
@@ -197,7 +358,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
              </svg>
           ) : (
             <div className="w-20 h-20 rounded-full bg-white/20 pointer-events-none backdrop-blur-sm flex items-center justify-center">
-                 <div className="w-16 h-16 rounded-full bg-white opacity-80"></div>
+                 <div className="w-16 h-16 rounded-full bg-white opacity-80 shadow-inner"></div>
             </div>
           )}
         </button>
@@ -205,7 +366,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         <div className="text-center space-y-1">
             <h3 className="text-xl font-bold text-onSurface">Scan Label</h3>
             <p className="text-gray-400 text-sm">
-              Press button to analyze
+              {isProcessing ? 'AI Processing...' : 'Press to Analyze'}
             </p>
         </div>
       </div>
