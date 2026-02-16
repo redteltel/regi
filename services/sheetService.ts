@@ -158,7 +158,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
-      // Ensure specific sheet encoding. Note: 'sheet' parameter works for export?format=csv
+      // Ensure specific sheet encoding. 
       const encodedSheetName = encodeURIComponent(SHEET_NAME_SERVICE);
       const url = `${BASE_URL}&sheet=${encodedSheetName}&t=${now}`;
       
@@ -175,27 +175,42 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       }
       
       const text = await res.text();
-      // console.log("Raw CSV:", text.substring(0, 100) + "..."); // Debugging
-
       const rows = parseCSV(text);
       
+      if (rows.length < 2) return [];
+
+      // Flexible Header Detection
+      const header = rows[0].map(c => c.toLowerCase());
+      
+      // Look for columns containing keywords
+      let idxName = header.findIndex(h => h.includes('name') || h.includes('品名') || h.includes('項目') || h.includes('item'));
+      let idxPrice = header.findIndex(h => h.includes('price') || h.includes('cost') || h.includes('単価') || h.includes('価格') || h.includes('金額'));
+      let idxCategory = header.findIndex(h => h.includes('category') || h.includes('cat') || h.includes('note') || h.includes('memo') || h.includes('備考') || h.includes('分類'));
+
+      // Defaults if not found (legacy support)
+      if (idxName === -1) idxName = 0;
+      if (idxPrice === -1) idxPrice = 1;
+      // If category is not found, default to 2 if available, otherwise ignore
+      if (idxCategory === -1 && rows[0].length > 2) idxCategory = 2;
+
+      console.log(`Detected Columns - Name:${idxName}, Price:${idxPrice}, Cat:${idxCategory}`);
+
       const items: Product[] = [];
       // Skip Header (Row 0)
       for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
-          if (row.length < 2) continue;
+          // Ensure row has enough columns
+          const maxIdx = Math.max(idxName, idxPrice);
+          if (row.length <= maxIdx) continue;
           
-          // Expected Columns: [0] Name, [1] Price, [2] Category (optional)
-          const name = row[0]?.trim();
+          const name = row[idxName]?.trim();
           
           // Robust Price Parsing
-          // 1. Convert Full-width to Half-width
-          // 2. Remove commas, "¥", "円" and whitespace
-          let rawPrice = row[1] || "0";
+          let rawPrice = row[idxPrice] || "0";
           rawPrice = toHalfWidth(rawPrice).replace(/[¥,円\s]/g, '');
           const price = parseInt(rawPrice, 10);
           
-          const category = row[2]?.trim() || '';
+          const category = (idxCategory !== -1 && row[idxCategory]) ? row[idxCategory].trim() : '';
 
           if (name && !isNaN(price)) {
               items.push({
@@ -204,12 +219,10 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
                   name: name,
                   price: price
               });
-          } else {
-              // console.warn(`Skipping invalid row ${i}:`, row);
           }
       }
       
-      console.log(`Parsed ${items.length} service items.`);
+      console.log(`Parsed ${items.length} service items from sheet '${SHEET_NAME_SERVICE}'.`);
       return items;
   } catch (e) {
       console.error("Failed to fetch service items", e);
