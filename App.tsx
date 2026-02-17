@@ -183,6 +183,7 @@ const App: React.FC = () => {
     setCart(prev => {
         const newCart = [...prev];
         const item = newCart[index];
+        // Only update name, keep existing ID/PartNumber
         newCart[index] = { ...item, name: newName };
         return newCart;
     });
@@ -210,7 +211,7 @@ const App: React.FC = () => {
           
           const confirmRegister = window.confirm(
               `未登録の商品をマスターデータ（品番参照シート）に追加登録しますか？\n` +
-              `対象: ${examples}${more}\n\n` +
+              `対象品番: ${examples}${more}\n\n` +
               `[OK] 登録して会計へ進む\n` +
               `[キャンセル] 登録せずに会計へ進む`
           );
@@ -479,10 +480,10 @@ const App: React.FC = () => {
                   cart.map((item, index) => (
                     <div key={index} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
                       <div className="flex-1">
-                        {/* Part Number (Static, ID) */}
+                        {/* Part Number (Static, ID) - Reverted to text display */}
                         <div className="text-sm font-mono text-secondary mb-1">{item.partNumber}</div>
                         
-                        {/* Product Name (Editable) */}
+                        {/* Product Name (Editable) - Changed to Input */}
                         <div className="mb-2">
                             <input
                               type="text"

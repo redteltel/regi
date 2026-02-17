@@ -10,7 +10,8 @@ const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/expor
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
 
 // GAS Web App URL for logging unknown items directly to the Master Sheet (Product Reference)
-const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwTNFLC9WbUkebBONdw5oQgfZS1SkYtyTS5As4Pk_x4yVAQIyaD_KieZTxTkadwXkWP/exec'; 
+// UPDATED URL per request
+const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyu5qtOa8jxSGPkQigUI5ppm2a14nca6EK9IzYXBnvcuUD8gyv7hrd7LXes6pli8N1B/exec';
 
 const SHEET_NAME_SERVICE = 'ServiceItems';
 
@@ -316,15 +317,16 @@ export const logUnknownItem = async (item: CartItem) => {
 
     try {
         const payload = {
-            // FIX: Explicitly set target sheet name
+            // FIX: Explicitly set target sheet name per instructions
             sheetName: "品番参照", 
 
-            // FIX: Explicitly map the fields as requested
-            // 'id' param -> Part Number (Static value from scan)
-            // 'name' param -> Product Name (Edited value from text box)
-            id: item.partNumber, // Column A: Part Number
-            name: item.name,     // Column B: Edited Product Name
+            // FIX: Explicitly map the fields
+            // id (Column A) -> Part Number
+            // name (Column B) -> Edited Product Name
+            id: item.partNumber, 
+            name: item.name,     
             
+            // Legacy mapping fallback (if GAS script uses these)
             partNumber: item.partNumber,
             price: item.price,
             quantity: item.quantity
@@ -340,7 +342,7 @@ export const logUnknownItem = async (item: CartItem) => {
             },
             body: JSON.stringify(payload)
         });
-        console.log(`Logged unknown item to Master Sheet (Reference): ${item.partNumber}, Name: ${item.name}`);
+        console.log(`Logged unknown item to Master Sheet (品番参照): ${item.partNumber}, Name: ${item.name}`);
     } catch (e) {
         console.error("Failed to log unknown item:", e);
     }
