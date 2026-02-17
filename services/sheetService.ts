@@ -316,6 +316,9 @@ export const logUnknownItem = async (item: CartItem) => {
 
     try {
         const payload = {
+            // FIX: Explicitly set target sheet name
+            sheetName: "品番参照", 
+
             // FIX: Explicitly map the fields as requested
             // 'id' param -> Part Number (from the editable text box)
             // 'name' param -> Product Name (e.g. "スポットライト")
