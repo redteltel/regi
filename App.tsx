@@ -178,6 +178,7 @@ const App: React.FC = () => {
     }));
   };
 
+  // Update both the partNumber and the ID-like reference for display
   const updateItemPartNumber = (id: string, newPartNumber: string) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
@@ -209,7 +210,7 @@ const App: React.FC = () => {
           const more = unknownItems.length > 3 ? '...' : '';
           
           const confirmRegister = window.confirm(
-              `未登録品番（例: ${examples}${more}）が含まれています。\n` +
+              `未登録品番（${examples}${more}）が含まれています。\n` +
               `品番参照シートに追加登録しますか？\n\n` +
               `[OK] 登録して会計へ進む\n` +
               `[キャンセル] 登録せずに会計へ進む`
@@ -480,15 +481,17 @@ const App: React.FC = () => {
                     <div key={item.id} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
                       <div className="flex-1">
                         <h3 className="font-semibold text-onSurface">{item.name}</h3>
-                        {/* Editable Part Number */}
-                        <input
-                          type="text"
-                          value={item.partNumber}
-                          onChange={(e) => updateItemPartNumber(item.id, e.target.value)}
-                          className="w-full bg-transparent text-xs text-gray-400 border-b border-gray-800 focus:border-primary focus:text-primary outline-none transition-colors mb-1 py-0.5"
-                          placeholder="品番"
-                        />
-                        <div className="flex items-center gap-2 mt-2">
+                        {/* Editable Part Number - Replaces static text */}
+                        <div className="mt-1 mb-2">
+                            <input
+                              type="text"
+                              value={item.partNumber}
+                              onChange={(e) => updateItemPartNumber(item.id, e.target.value)}
+                              className="w-full max-w-[180px] bg-transparent text-xs text-gray-300 border-b border-gray-700 focus:border-primary focus:text-primary outline-none transition-colors py-0.5 placeholder-gray-600"
+                              placeholder="品番を入力"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
                           <span className="text-gray-400 text-sm">@</span>
                           <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary font-mono text-sm">¥</span>
