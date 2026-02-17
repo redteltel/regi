@@ -9,9 +9,8 @@ const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/expor
 // GVIZ_URL: Used for specific sheets like 'ServiceItems'. More reliable for sheet selection by name.
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
 
-// ★ここにデプロイしたGASウェブアプリのURLを貼り付けてください★
-// 例: 'https://script.google.com/macros/s/AKfycbx.../exec'
-const GAS_LOG_ENDPOINT = ''; 
+// GAS Web App URL for logging unknown items
+const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwTNFLC9WbUkebBONdw5oQgfZS1SkYtyTS5As4Pk_x4yVAQIyaD_KieZTxTkadwXkWP/exec'; 
 
 const SHEET_NAME_SERVICE = 'ServiceItems';
 
@@ -325,7 +324,6 @@ export const logUnknownItem = async (item: CartItem) => {
 
         // Fire and forget using no-cors to avoid CORS errors with simple GAS setups
         // Note: 'no-cors' means we can't read the response, but it submits the data.
-        // For GAS doPost(e), text/plain is often easier to handle than application/json with CORS preflight.
         await fetch(GAS_LOG_ENDPOINT, {
             method: 'POST',
             mode: 'no-cors', 
