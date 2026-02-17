@@ -210,8 +210,7 @@ const App: React.FC = () => {
           const more = unknownItems.length > 3 ? '...' : '';
           
           const confirmRegister = window.confirm(
-              `未登録品番（${examples}${more}）が含まれています。\n` +
-              `品番参照シートに追加登録しますか？\n\n` +
+              `未登録品番（${examples}${more}）をマスターデータ（品番参照シート）に直接登録しますか？\n\n` +
               `[OK] 登録して会計へ進む\n` +
               `[キャンセル] 登録せずに会計へ進む`
           );

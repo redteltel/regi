@@ -9,7 +9,7 @@ const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/expor
 // GVIZ_URL: Used for specific sheets like 'ServiceItems'. More reliable for sheet selection by name.
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
 
-// GAS Web App URL for logging unknown items (Updated per request)
+// GAS Web App URL for logging unknown items directly to the Master Sheet (Product Reference)
 const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwTNFLC9WbUkebBONdw5oQgfZS1SkYtyTS5As4Pk_x4yVAQIyaD_KieZTxTkadwXkWP/exec'; 
 
 const SHEET_NAME_SERVICE = 'ServiceItems';
@@ -316,7 +316,8 @@ export const logUnknownItem = async (item: CartItem) => {
 
     try {
         const payload = {
-            id: item.partNumber, // Use updated partNumber as ID
+            // CRITICAL: Ensure the 'id' field receives the edited partNumber
+            id: item.partNumber, 
             partNumber: item.partNumber,
             name: item.name,
             price: item.price,
@@ -333,7 +334,7 @@ export const logUnknownItem = async (item: CartItem) => {
             },
             body: JSON.stringify(payload)
         });
-        console.log(`Logged unknown item: ${item.partNumber}`);
+        console.log(`Logged unknown item to Master Sheet: ${item.partNumber}`);
     } catch (e) {
         console.error("Failed to log unknown item:", e);
     }
