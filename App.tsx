@@ -178,6 +178,15 @@ const App: React.FC = () => {
     }));
   };
 
+  const updateItemPartNumber = (id: string, newPartNumber: string) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return { ...item, partNumber: newPartNumber };
+      }
+      return item;
+    }));
+  };
+
   // Add Service Item Logic
   const handleAddServiceItem = (item: Product) => {
       handleProductFound(item);
@@ -186,23 +195,28 @@ const App: React.FC = () => {
   
   // Handle proceeding to checkout: Log unknown items
   const handleProceedToCheckout = () => {
-      // 1. Identify items that are unknown (manually entered part numbers)
-      // Exclude Service items (start with SVC-) as they are dynamic/temporary
+      // 1. Identify items that are unknown (manually entered or edited part numbers)
+      // We check against item.partNumber because the user might have fixed a scan error.
+      // Exclude Service items (start with SVC-)
       const unknownItems = cart.filter(item => 
-          !item.id.startsWith('SVC-') && !isProductKnown(item.id)
+          !item.id.startsWith('SVC-') && !isProductKnown(item.partNumber)
       );
 
       // 2. If unknown items exist, prompt the user
       if (unknownItems.length > 0) {
+          // Create a readable list for the prompt
+          const examples = unknownItems.slice(0, 3).map(i => i.partNumber).join(', ');
+          const more = unknownItems.length > 3 ? '...' : '';
+          
           const confirmRegister = window.confirm(
-              `未登録（マスタにない）商品が ${unknownItems.length} 点あります。\n` +
-              `「品番追加」シートへ登録依頼を送信しますか？\n\n` +
-              `[OK] 送信して進む\n` +
-              `[キャンセル] 送信せずに進む`
+              `未登録品番（例: ${examples}${more}）が含まれています。\n` +
+              `品番参照シートに追加登録しますか？\n\n` +
+              `[OK] 登録して会計へ進む\n` +
+              `[キャンセル] 登録せずに会計へ進む`
           );
 
           if (confirmRegister) {
-              // Send logs for each unknown item
+              // Send logs for each unknown item using the current (possibly edited) details
               unknownItems.forEach(item => logUnknownItem(item));
           }
       }
@@ -466,7 +480,14 @@ const App: React.FC = () => {
                     <div key={item.id} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
                       <div className="flex-1">
                         <h3 className="font-semibold text-onSurface">{item.name}</h3>
-                        <p className="text-xs text-gray-400">{item.partNumber}</p>
+                        {/* Editable Part Number */}
+                        <input
+                          type="text"
+                          value={item.partNumber}
+                          onChange={(e) => updateItemPartNumber(item.id, e.target.value)}
+                          className="w-full bg-transparent text-xs text-gray-400 border-b border-gray-800 focus:border-primary focus:text-primary outline-none transition-colors mb-1 py-0.5"
+                          placeholder="品番"
+                        />
                         <div className="flex items-center gap-2 mt-2">
                           <span className="text-gray-400 text-sm">@</span>
                           <div className="relative">
