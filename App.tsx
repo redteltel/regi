@@ -186,22 +186,28 @@ const App: React.FC = () => {
   
   // Handle proceeding to checkout: Log unknown items
   const handleProceedToCheckout = () => {
-      // Fire-and-forget logging for items not in the known database
-      // This applies to manual items (where id = partNumber) which don't exist in the master sheet
-      // Service items (SVC-...) are also technically unknown in master, but likely ignored by intent,
-      // but logging them doesn't hurt or can be filtered if needed. 
-      // Current requirement: "品番が見つからず手動で...追加された商品"
-      cart.forEach(item => {
-          // If it's a service item or a known product, skip logging
-          // (Service items start with SVC-, known products are in memoryCache)
-          if (item.id.startsWith('SVC-')) return;
+      // 1. Identify items that are unknown (manually entered part numbers)
+      // Exclude Service items (start with SVC-) as they are dynamic/temporary
+      const unknownItems = cart.filter(item => 
+          !item.id.startsWith('SVC-') && !isProductKnown(item.id)
+      );
 
-          if (!isProductKnown(item.id)) {
-              // This is a manual entry or unknown product
-              logUnknownItem(item);
+      // 2. If unknown items exist, prompt the user
+      if (unknownItems.length > 0) {
+          const confirmRegister = window.confirm(
+              `未登録（マスタにない）商品が ${unknownItems.length} 点あります。\n` +
+              `「品番追加」シートへ登録依頼を送信しますか？\n\n` +
+              `[OK] 送信して進む\n` +
+              `[キャンセル] 送信せずに進む`
+          );
+
+          if (confirmRegister) {
+              // Send logs for each unknown item
+              unknownItems.forEach(item => logUnknownItem(item));
           }
-      });
+      }
 
+      // 3. Always proceed to checkout
       setAppState(AppState.PREVIEW);
   };
 
