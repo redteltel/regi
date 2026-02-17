@@ -257,7 +257,6 @@ export class PrinterService {
     } else if (mode === 'ESTIMATION') {
         add(this.encode("御 見 積 書\n"));
     } else {
-        // [FIX] Changed from "領収書 (レシート)" to "領収書"
         add(this.encode("領収書\n"));
     }
     add(SIZE_NORMAL);
@@ -285,7 +284,7 @@ export class PrinterService {
         add(ALIGN_CENTER);
         add(SIZE_DOUBLE);
         add(EMPHASIS_ON);
-        // [FIX] Use "円" suffix, remove "¥"
+        // Use "円" suffix
         add(this.encode(`${total.toLocaleString()}円\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
@@ -323,11 +322,12 @@ export class PrinterService {
         
         // --- NEW: PART NUMBER PRINT ---
         if (item.partNumber) {
-            add(this.encode(`(品番: ${item.partNumber})\n`));
+            // Indent slightly to indicate it belongs to the item above
+            add(this.encode(`  (品番: ${item.partNumber})\n`));
         }
         // -----------------------------
 
-        // [FIX] Use "円" suffix, remove "¥"
+        // Use "円" suffix
         const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
         const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
         
@@ -353,7 +353,6 @@ export class PrinterService {
         add(this.encode(`値引: - ${discount.toLocaleString()}円\n`));
     }
     
-    // [FIX] Use "円" suffix, remove "¥"
     add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
     add(this.encode(`(内消費税10%): ${tax.toLocaleString()}円\n`));
     
@@ -361,7 +360,6 @@ export class PrinterService {
         add([LF]);
         add(EMPHASIS_ON);
         add(SIZE_DOUBLE);
-        // [FIX] Use "円" suffix, remove "¥"
         add(this.encode(`合計: ${total.toLocaleString()}円\n`));
         add(EMPHASIS_OFF);
         add(SIZE_NORMAL);
@@ -376,7 +374,6 @@ export class PrinterService {
         add(EMPHASIS_OFF);
         add(this.encode("天草信用金庫 瀬戸橋支店\n"));
         add(this.encode("普通口座 0088477\n"));
-        // [FIX] Changed from half-width "ﾌｸｼﾏ ｶｽﾞﾋｺ" to full-width "フクシマ カズヒコ"
         add(this.encode("フクシマ カズヒコ\n"));
         add([LF]);
     }
