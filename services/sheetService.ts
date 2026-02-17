@@ -317,10 +317,10 @@ export const logUnknownItem = async (item: CartItem) => {
     try {
         const payload = {
             // FIX: Explicitly map the fields as requested
-            // 'id' param -> Part Number (from text box)
-            // 'name' param -> Product Name
-            id: item.partNumber, // Ensure the Sheet ID column receives the Part Number
-            name: item.name,     // Ensure the Sheet Name column receives the Product Name
+            // 'id' param -> Part Number (from the editable text box)
+            // 'name' param -> Product Name (e.g. "スポットライト")
+            id: item.partNumber, // Sends the edited code "LED-AC2022" to the ID column
+            name: item.name,     // Sends "スポットライト" to the Name column
             
             partNumber: item.partNumber,
             price: item.price,
