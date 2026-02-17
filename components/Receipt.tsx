@@ -127,12 +127,18 @@ const Receipt: React.FC<ReceiptProps> = ({
       )}
 
       {/* Line Items */}
-      <div className="space-y-3 mb-4">
+      <div className="space-y-4 mb-4">
         {(mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') && <p className="text-xs text-gray-500 border-b border-dashed pb-1">内訳</p>}
         
         {items.map((item) => (
-          <div key={item.id} className="flex flex-col">
+          <div key={item.id} className="flex flex-col border-b border-dashed border-gray-100 pb-2 last:border-0 last:pb-0">
             <span className="font-bold text-sm">{item.name}</span>
+            {/* Display Part Number */}
+            {item.partNumber && (
+                <span className="text-[10px] text-gray-500 font-mono tracking-tight mb-0.5">
+                  (品番: {item.partNumber})
+                </span>
+            )}
             <div className="flex justify-between text-gray-600 text-xs">
               <span>{item.quantity} x {item.price.toLocaleString()}円</span>
               <span>{(item.price * item.quantity).toLocaleString()}円</span>

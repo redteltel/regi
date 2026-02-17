@@ -320,6 +320,13 @@ export class PrinterService {
     add(ALIGN_LEFT);
     for (const item of items) {
         add(this.encode(`${item.name}\n`));
+        
+        // --- NEW: PART NUMBER PRINT ---
+        if (item.partNumber) {
+            add(this.encode(`(品番: ${item.partNumber})\n`));
+        }
+        // -----------------------------
+
         // [FIX] Use "円" suffix, remove "¥"
         const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
         const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
