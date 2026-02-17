@@ -178,15 +178,12 @@ const App: React.FC = () => {
     }));
   };
 
-  // Update both the partNumber and the ID-like reference for display
-  // Using index to locate item to allow ID mutation
-  const updateItemPartNumber = (index: number, newPartNumber: string) => {
+  // Update item NAME instead of Part Number
+  const updateItemName = (index: number, newName: string) => {
     setCart(prev => {
         const newCart = [...prev];
         const item = newCart[index];
-        // Ensure ID is updated immediately to match the partNumber
-        // This ensures the correct ID is sent during checkout
-        newCart[index] = { ...item, id: newPartNumber, partNumber: newPartNumber };
+        newCart[index] = { ...item, name: newName };
         return newCart;
     });
   };
@@ -199,12 +196,10 @@ const App: React.FC = () => {
   
   // Handle proceeding to checkout: Log unknown items
   const handleProceedToCheckout = () => {
-      // 1. Identify items that are unknown (manually entered or edited part numbers)
-      // We check against item.partNumber because the user might have fixed a scan error
-      // or changed the ID to something new.
-      // Exclude Service items (start with SVC-)
+      // 1. Identify items that are unknown.
+      // Use item.id (which is the scanned partNumber) to check against cache.
       const unknownItems = cart.filter(item => 
-          !item.id.startsWith('SVC-') && !isProductKnown(item.partNumber)
+          !item.id.startsWith('SVC-') && !isProductKnown(item.id)
       );
 
       // 2. If unknown items exist, prompt the user
@@ -214,7 +209,8 @@ const App: React.FC = () => {
           const more = unknownItems.length > 3 ? '...' : '';
           
           const confirmRegister = window.confirm(
-              `未登録品番（${examples}${more}）をマスターデータ（品番参照シート）に直接登録しますか？\n\n` +
+              `未登録の商品をマスターデータ（品番参照シート）に追加登録しますか？\n` +
+              `対象: ${examples}${more}\n\n` +
               `[OK] 登録して会計へ進む\n` +
               `[キャンセル] 登録せずに会計へ進む`
           );
@@ -483,17 +479,20 @@ const App: React.FC = () => {
                   cart.map((item, index) => (
                     <div key={index} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
                       <div className="flex-1">
-                        <h3 className="font-semibold text-onSurface">{item.name}</h3>
-                        {/* Editable Part Number - Replaces static text */}
-                        <div className="mt-1 mb-2">
+                        {/* Part Number (Static, ID) */}
+                        <div className="text-sm font-mono text-secondary mb-1">{item.partNumber}</div>
+                        
+                        {/* Product Name (Editable) */}
+                        <div className="mb-2">
                             <input
                               type="text"
-                              value={item.partNumber}
-                              onChange={(e) => updateItemPartNumber(index, e.target.value)}
-                              className="w-full max-w-[180px] bg-transparent text-xs text-gray-300 border-b border-gray-700 focus:border-primary focus:text-primary outline-none transition-colors py-0.5 placeholder-gray-600"
-                              placeholder="品番を入力"
+                              value={item.name}
+                              onChange={(e) => updateItemName(index, e.target.value)}
+                              className="w-full bg-transparent text-lg font-bold text-onSurface border-b border-gray-700 focus:border-primary focus:text-primary outline-none transition-colors placeholder-gray-600"
+                              placeholder="商品名を入力"
                             />
                         </div>
+
                         <div className="flex items-center gap-2">
                           <span className="text-gray-400 text-sm">@</span>
                           <div className="relative">

@@ -320,10 +320,10 @@ export const logUnknownItem = async (item: CartItem) => {
             sheetName: "品番参照", 
 
             // FIX: Explicitly map the fields as requested
-            // 'id' param -> Part Number (from the editable text box)
-            // 'name' param -> Product Name (e.g. "スポットライト")
-            id: item.partNumber, // Sends the edited code "LED-AC2022" to the ID column
-            name: item.name,     // Sends "スポットライト" to the Name column
+            // 'id' param -> Part Number (Static value from scan)
+            // 'name' param -> Product Name (Edited value from text box)
+            id: item.partNumber, // Column A: Part Number
+            name: item.name,     // Column B: Edited Product Name
             
             partNumber: item.partNumber,
             price: item.price,
@@ -340,7 +340,7 @@ export const logUnknownItem = async (item: CartItem) => {
             },
             body: JSON.stringify(payload)
         });
-        console.log(`Logged unknown item to Master Sheet (Reference): ${item.partNumber}`);
+        console.log(`Logged unknown item to Master Sheet (Reference): ${item.partNumber}, Name: ${item.name}`);
     } catch (e) {
         console.error("Failed to log unknown item:", e);
     }
