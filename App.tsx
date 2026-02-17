@@ -179,13 +179,16 @@ const App: React.FC = () => {
   };
 
   // Update both the partNumber and the ID-like reference for display
-  const updateItemPartNumber = (id: string, newPartNumber: string) => {
-    setCart(prev => prev.map(item => {
-      if (item.id === id) {
-        return { ...item, partNumber: newPartNumber };
-      }
-      return item;
-    }));
+  // Using index to locate item to allow ID mutation
+  const updateItemPartNumber = (index: number, newPartNumber: string) => {
+    setCart(prev => {
+        const newCart = [...prev];
+        const item = newCart[index];
+        // Ensure ID is updated immediately to match the partNumber
+        // This ensures the correct ID is sent during checkout
+        newCart[index] = { ...item, id: newPartNumber, partNumber: newPartNumber };
+        return newCart;
+    });
   };
 
   // Add Service Item Logic
@@ -477,8 +480,8 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  cart.map(item => (
-                    <div key={item.id} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
+                  cart.map((item, index) => (
+                    <div key={index} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
                       <div className="flex-1">
                         <h3 className="font-semibold text-onSurface">{item.name}</h3>
                         {/* Editable Part Number - Replaces static text */}
@@ -486,7 +489,7 @@ const App: React.FC = () => {
                             <input
                               type="text"
                               value={item.partNumber}
-                              onChange={(e) => updateItemPartNumber(item.id, e.target.value)}
+                              onChange={(e) => updateItemPartNumber(index, e.target.value)}
                               className="w-full max-w-[180px] bg-transparent text-xs text-gray-300 border-b border-gray-700 focus:border-primary focus:text-primary outline-none transition-colors py-0.5 placeholder-gray-600"
                               placeholder="品番を入力"
                             />
