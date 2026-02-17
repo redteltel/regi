@@ -7,6 +7,7 @@ const MODEL_NAME = 'gemini-3-flash-preview';
 // Helper to strip Markdown code blocks
 const cleanJsonString = (text: string): string => {
   let cleaned = text.trim();
+  // Remove markdown code blocks
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '');
   }
@@ -26,6 +27,7 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
   }
 
   const ai = new GoogleGenAI({ apiKey });
+  // Ensure we strip the prefix if present (Camera.tsx now sends image/jpeg data URL)
   const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
 
   const responseSchema = {
@@ -33,7 +35,7 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
     properties: {
       partNumber: {
         type: Type.STRING,
-        description: "The alphanumeric product code, model number, or SKU found in the image. Ignore purely numeric barcodes if an alphanumeric code exists.",
+        description: "The alphanumeric product code or model number (品番) visible in the image. e.g. 'ABC-123', 'WHP1234'. Ignore barcodes if text is present.",
       },
       confidence: {
         type: Type.NUMBER,
@@ -55,19 +57,19 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
           parts: [
             {
               inlineData: {
-                mimeType: 'image/jpeg', // API accepts 'image/jpeg' for generic image data
+                mimeType: 'image/jpeg', // Camera.tsx sends JPEG
                 data: cleanBase64,
               },
             },
             {
-              text: "Extract the main product model number (品番) from this image. Return just the code in JSON.",
+              text: "Read the product model number (品番) from this label image. Return JSON.",
             },
           ],
         },
         config: {
           responseMimeType: "application/json",
           responseSchema: responseSchema,
-          temperature: 0.1,
+          temperature: 0.1, // Low temperature for deterministic output
         },
       });
 
@@ -89,8 +91,8 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
         throw new Error("電波の良い場所でもう一度お試しください。");
       }
       
-      // Exponential Backoff: Wait longer between retries (2s, 3s...)
-      await wait(1000 + (attempts * 1000));
+      // Exponential Backoff: Wait longer between retries (1s, 2s...)
+      await wait(1000 * attempts);
     }
   }
 

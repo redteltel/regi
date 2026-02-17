@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import { AppState, CartItem, Product, PrinterStatus } from './types';
 import { printerService } from './services/printerService';
-import { fetchServiceItems } from './services/sheetService';
+import { fetchServiceItems, isProductKnown, logUnknownItem } from './services/sheetService';
 import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -182,6 +182,27 @@ const App: React.FC = () => {
   const handleAddServiceItem = (item: Product) => {
       handleProductFound(item);
       setShowServiceModal(false);
+  };
+  
+  // Handle proceeding to checkout: Log unknown items
+  const handleProceedToCheckout = () => {
+      // Fire-and-forget logging for items not in the known database
+      // This applies to manual items (where id = partNumber) which don't exist in the master sheet
+      // Service items (SVC-...) are also technically unknown in master, but likely ignored by intent,
+      // but logging them doesn't hurt or can be filtered if needed. 
+      // Current requirement: "品番が見つからず手動で...追加された商品"
+      cart.forEach(item => {
+          // If it's a service item or a known product, skip logging
+          // (Service items start with SVC-, known products are in memoryCache)
+          if (item.id.startsWith('SVC-')) return;
+
+          if (!isProductKnown(item.id)) {
+              // This is a manual entry or unknown product
+              logUnknownItem(item);
+          }
+      });
+
+      setAppState(AppState.PREVIEW);
   };
 
   // Printing Logic - Text Mode with Shift-JIS (via printerService)
@@ -533,7 +554,7 @@ const App: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => setAppState(AppState.PREVIEW)}
+                  onClick={handleProceedToCheckout}
                   disabled={totalAmount === 0 && discountVal === 0}
                   className={`w-full mt-6 py-4 rounded-xl font-bold text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2
                     ${(totalAmount === 0 && discountVal === 0) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-primary text-onPrimary'}

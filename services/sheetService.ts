@@ -1,4 +1,4 @@
-import { Product } from '../types';
+import { Product, CartItem } from '../types';
 
 // The Google Sheet ID provided by the user
 const SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
@@ -8,6 +8,10 @@ const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/expor
 
 // GVIZ_URL: Used for specific sheets like 'ServiceItems'. More reliable for sheet selection by name.
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
+
+// ★ここにデプロイしたGASウェブアプリのURLを貼り付けてください★
+// 例: 'https://script.google.com/macros/s/AKfycbx.../exec'
+const GAS_LOG_ENDPOINT = ''; 
 
 const SHEET_NAME_SERVICE = 'ServiceItems';
 
@@ -292,4 +296,46 @@ export const searchProduct = async (query: string): Promise<SearchResult> => {
   .slice(0, 5); 
   
   return { exact: null, candidates };
+};
+
+// Check if a product ID exists in the current cache
+export const isProductKnown = (id: string): boolean => {
+    // If cache is empty, technically we don't know, but treating as unknown is safer
+    if (memoryCache.length === 0) return false;
+    
+    // We check if any product in our DB has this ID (partNumber)
+    // Note: IDs in memoryCache are partNumbers
+    return memoryCache.some(p => p.id === id);
+};
+
+// Log unknown/manual items to Google Sheet via GAS
+export const logUnknownItem = async (item: CartItem) => {
+    if (!GAS_LOG_ENDPOINT) {
+        console.warn("GAS_LOG_ENDPOINT is not configured. Skipping log.");
+        return;
+    }
+
+    try {
+        const payload = {
+            partNumber: item.partNumber,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity
+        };
+
+        // Fire and forget using no-cors to avoid CORS errors with simple GAS setups
+        // Note: 'no-cors' means we can't read the response, but it submits the data.
+        // For GAS doPost(e), text/plain is often easier to handle than application/json with CORS preflight.
+        await fetch(GAS_LOG_ENDPOINT, {
+            method: 'POST',
+            mode: 'no-cors', 
+            headers: {
+                'Content-Type': 'text/plain',
+            },
+            body: JSON.stringify(payload)
+        });
+        console.log(`Logged unknown item: ${item.partNumber}`);
+    } catch (e) {
+        console.error("Failed to log unknown item:", e);
+    }
 };

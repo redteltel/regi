@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { extractPartNumber } from '../services/geminiService';
 import { searchProduct } from '../services/sheetService';
 import { Product } from '../types';
-import { Plus, X, AlertCircle, RefreshCw, CameraOff, Lock } from 'lucide-react';
+import { Plus, X, AlertCircle, RefreshCw, CameraOff, Lock, Zap } from 'lucide-react';
 
 interface CameraProps {
   onProductFound: (product: Product) => void;
@@ -42,24 +42,22 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   }, []);
 
   const startCamera = async () => {
-    // 1. Check for Secure Context (HTTPS or Localhost)
-    // Chrome requires HTTPS for getUserMedia (except localhost)
     if (window.location.protocol !== 'https:' && 
         window.location.hostname !== 'localhost' && 
         window.location.hostname !== '127.0.0.1') {
-         setError("カメラを使用するにはHTTPS接続が必要です。\n(現在の接続: " + window.location.protocol + "//" + window.location.hostname + ")");
+         setError("カメラを使用するにはHTTPS接続が必要です。");
          return;
     }
 
-    // 2. Check API support
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setError("このブラウザはカメラAPIをサポートしていません。");
         return;
     }
 
     try {
-      stopCamera(); // Stop existing if any
+      stopCamera();
 
+      // Request high resolution for better OCR
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
@@ -69,35 +67,31 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         audio: false,
       });
       
+      // Attempt to enforce continuous focus if supported
+      const track = mediaStream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities() as any; // Type casting for advanced features
+      
+      if (capabilities?.focusMode?.includes('continuous')) {
+        try {
+          await track.applyConstraints({
+            advanced: [{ focusMode: 'continuous' }] as any
+          });
+          console.log("Continuous focus enabled");
+        } catch (e) {
+          console.warn("Could not apply focus constraints", e);
+        }
+      }
+      
       setStream(mediaStream);
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        // Explicit play helps on some Android versions if autoplay fails
         videoRef.current.play().catch(e => console.warn("Video play error:", e));
       }
       setError(null);
     } catch (err: any) {
       console.error("Camera access error:", err);
-      
-      const name = err.name || 'Unknown';
-      const msg = err.message || '';
-      
-      let userMsg = "カメラを起動できませんでした。";
-
-      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || msg.includes('Permission denied')) {
-        userMsg = "カメラのアクセスが許可されていません。\nブラウザのアドレスバーの鍵アイコン🔒または設定から、このサイトへのカメラ権限を許可してください。";
-      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-        userMsg = "カメラデバイスが見つかりません。";
-      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
-        userMsg = "カメラにアクセスできません。\n他のアプリが使用中の可能性があります。";
-      } else if (name === 'OverconstrainedError') {
-        userMsg = "要求された解像度がサポートされていません。";
-      } else {
-        userMsg = `カメラエラー (${name}): ${msg}`;
-      }
-      
-      setError(userMsg);
+      setError("カメラを起動できませんでした。\n設定を確認してください。");
     }
   };
 
@@ -161,21 +155,38 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     showStatus("AI解析中...", 'info');
 
     try {
-      const MAX_WIDTH = 1024; 
-      const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
+      // 1. Image Pre-processing (Crop & Filter)
+      const srcW = video.videoWidth;
+      const srcH = video.videoHeight;
       
-      canvas.width = video.videoWidth * scale;
-      canvas.height = video.videoHeight * scale;
+      // Crop center area where the guide frame is.
+      // Assuming user centers the label.
+      // Keep 70% width and 35% height to focus on the text strip.
+      const cropW = Math.floor(srcW * 0.7);
+      const cropH = Math.floor(srcH * 0.35);
+      const startX = Math.floor((srcW - cropW) / 2);
+      const startY = Math.floor((srcH - cropH) / 2);
+
+      canvas.width = cropW;
+      canvas.height = cropH;
 
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) throw new Error("Canvas context error");
 
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64 = canvas.toDataURL('image/webp', 0.6);
+      // Apply high contrast filter for better OCR
+      // Grayscale reduces color noise, High contrast makes text pop
+      ctx.filter = "contrast(1.3) grayscale(1)";
+      
+      // Draw cropped image
+      ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
+      
+      // Convert to JPEG with moderate quality for speed
+      const base64 = canvas.toDataURL('image/jpeg', 0.8);
 
-      // Add timeout for Gemini API call (Increased to 45s for stability)
+      // 2. Call AI
+      // Add timeout for Gemini API call
       const timeoutPromise = new Promise<null>((_, reject) => 
-         setTimeout(() => reject(new Error("Timeout")), 45000)
+         setTimeout(() => reject(new Error("Timeout")), 30000)
       );
       
       const result = await Promise.race([
@@ -332,7 +343,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
 
           {/* Guide Frame */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-72 h-20 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
+            <div className="w-72 h-24 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
               <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
                 品番を枠内に大きく写してください
               </div>
@@ -365,7 +376,9 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
              </svg>
           ) : (
             <div className="w-20 h-20 rounded-full bg-white/20 pointer-events-none backdrop-blur-sm flex items-center justify-center">
-                 <div className="w-16 h-16 rounded-full bg-white opacity-80 shadow-inner"></div>
+                 <div className="w-16 h-16 rounded-full bg-white opacity-80 shadow-inner flex items-center justify-center">
+                    <Zap size={24} className="text-gray-400 opacity-50" fill="currentColor" />
+                 </div>
             </div>
           )}
         </button>
@@ -373,7 +386,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         <div className="text-center space-y-1">
             <h3 className="text-xl font-bold text-onSurface">Scan Label</h3>
             <p className="text-gray-400 text-sm">
-              {isProcessing ? 'AI Processing...' : 'Press to Analyze'}
+              {isProcessing ? 'AI Processing...' : 'Tap to Analyze'}
             </p>
         </div>
       </div>
