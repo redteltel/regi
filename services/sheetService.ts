@@ -10,6 +10,7 @@ const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/expor
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
 
 // GAS Web App URL for logging unknown items directly to the Master Sheet (Product Reference)
+// Updated to the new endpoint provided
 const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwTNFLC9WbUkebBONdw5oQgfZS1SkYtyTS5As4Pk_x4yVAQIyaD_KieZTxTkadwXkWP/exec'; 
 
 const SHEET_NAME_SERVICE = 'ServiceItems';
@@ -316,7 +317,9 @@ export const logUnknownItem = async (item: CartItem) => {
 
     try {
         const payload = {
-            // CRITICAL: Ensure the 'id' field receives the edited partNumber
+            // CRITICAL: Force the 'id' field to use the edited partNumber.
+            // Even if item.id (the scanned value) is different, the partNumber (edited value)
+            // is what we want to register as the new master ID.
             id: item.partNumber, 
             partNumber: item.partNumber,
             name: item.name,
@@ -334,7 +337,7 @@ export const logUnknownItem = async (item: CartItem) => {
             },
             body: JSON.stringify(payload)
         });
-        console.log(`Logged unknown item to Master Sheet: ${item.partNumber}`);
+        console.log(`Logged unknown item to Master Sheet (Reference): ${item.partNumber}`);
     } catch (e) {
         console.error("Failed to log unknown item:", e);
     }

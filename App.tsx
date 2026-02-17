@@ -197,7 +197,8 @@ const App: React.FC = () => {
   // Handle proceeding to checkout: Log unknown items
   const handleProceedToCheckout = () => {
       // 1. Identify items that are unknown (manually entered or edited part numbers)
-      // We check against item.partNumber because the user might have fixed a scan error.
+      // We check against item.partNumber because the user might have fixed a scan error
+      // or changed the ID to something new.
       // Exclude Service items (start with SVC-)
       const unknownItems = cart.filter(item => 
           !item.id.startsWith('SVC-') && !isProductKnown(item.partNumber)
