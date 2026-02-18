@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { extractPartNumber } from '../services/geminiService';
-import { searchProduct } from '../services/sheetService';
+import { searchProduct, SheetError } from '../services/sheetService';
 import { Product } from '../types';
-import { Plus, X, AlertCircle, RefreshCw, CameraOff, Lock, Zap } from 'lucide-react';
+import { Plus, X, AlertCircle, RefreshCw, CameraOff, Lock, Zap, WifiOff, FileWarning } from 'lucide-react';
 
 interface CameraProps {
   onProductFound: (product: Product) => void;
@@ -20,6 +20,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   // Status UI
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [statusType, setStatusType] = useState<'info' | 'success' | 'error'>('info');
+  const [detailedError, setDetailedError] = useState<string>("");
 
   // Candidate Dialog State
   const [showCandidateDialog, setShowCandidateDialog] = useState(false);
@@ -67,16 +68,14 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         audio: false,
       });
       
-      // Attempt to enforce continuous focus if supported
       const track = mediaStream.getVideoTracks()[0];
-      const capabilities = track.getCapabilities() as any; // Type casting for advanced features
+      const capabilities = track.getCapabilities() as any; 
       
       if (capabilities?.focusMode?.includes('continuous')) {
         try {
           await track.applyConstraints({
             advanced: [{ focusMode: 'continuous' }] as any
           });
-          console.log("Continuous focus enabled");
         } catch (e) {
           console.warn("Could not apply focus constraints", e);
         }
@@ -107,9 +106,10 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       startCamera();
   };
 
-  const showStatus = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
+  const showStatus = (msg: string, type: 'info' | 'success' | 'error' = 'info', detail: string = "") => {
     setStatusMsg(msg);
     setStatusType(type);
+    setDetailedError(detail);
   };
 
   const handleManualAdd = () => {
@@ -136,6 +136,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       setScannedCode("");
       setIsProcessing(false);
       setStatusMsg("");
+      setDetailedError("");
   };
 
   const handleCapture = useCallback(async () => {
@@ -153,15 +154,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     if (navigator.vibrate) navigator.vibrate(30);
     setIsProcessing(true);
     showStatus("AI解析中...", 'info');
+    setDetailedError("");
 
     try {
-      // 1. Image Pre-processing (Crop & Filter)
       const srcW = video.videoWidth;
       const srcH = video.videoHeight;
-      
-      // Crop center area where the guide frame is.
-      // Assuming user centers the label.
-      // Keep 70% width and 35% height to focus on the text strip.
       const cropW = Math.floor(srcW * 0.7);
       const cropH = Math.floor(srcH * 0.35);
       const startX = Math.floor((srcW - cropW) / 2);
@@ -173,20 +170,14 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) throw new Error("Canvas context error");
 
-      // Apply high contrast filter for better OCR
-      // Grayscale reduces color noise, High contrast makes text pop
       ctx.filter = "contrast(1.3) grayscale(1)";
-      
-      // Draw cropped image
       ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
       
-      // Convert to JPEG with moderate quality for speed
       const base64 = canvas.toDataURL('image/jpeg', 0.8);
 
-      // 2. Call AI
-      // Add timeout for Gemini API call
+      // AI Call (Gemini)
       const timeoutPromise = new Promise<null>((_, reject) => 
-         setTimeout(() => reject(new Error("Timeout")), 30000)
+         setTimeout(() => reject(new Error("GeminiTimeout")), 30000)
       );
       
       const result = await Promise.race([
@@ -196,6 +187,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       
       if (result && result.partNumber) {
         showStatus("データ照合中...", 'info');
+        
+        // Sheet Call (with error handling)
         const searchResult = await searchProduct(result.partNumber);
         
         if (searchResult.exact) {
@@ -227,17 +220,37 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       }
     } catch (e: any) {
       console.error("Scan Error:", e);
-      let errMsg = e.message || "エラーが発生しました";
+      let errMsg = "エラーが発生しました";
+      let detail = "";
       
-      if (errMsg === "Timeout") {
-          errMsg = "通信タイムアウト\n電波の良い場所で再試行してください";
-      } else if (errMsg.includes("fetch") || errMsg.includes("Network")) {
-          errMsg = "通信エラー\n接続状況を確認してください";
+      if (e.message === "GeminiTimeout") {
+          errMsg = "AI解析タイムアウト";
+          detail = "電波の良い場所で再試行してください";
+      } else if (e instanceof SheetError || e.name === 'SheetError' || e.message.includes('HTTP_')) {
+          const msg = e.message || "";
+          if (msg.includes('403') || msg.includes('401') || msg.includes('HTML')) {
+              errMsg = "スプレッドシート権限エラー";
+              detail = "GASデプロイ設定を確認してください:\n・実行ユーザー: 自分\n・アクセス: 全員(Anyone)\nシートの共有設定を確認してください(全員閲覧可)";
+          } else if (msg.includes('404')) {
+              errMsg = "スプレッドシートが見つかりません";
+              detail = "IDまたはURLが間違っています";
+          } else if (msg.includes('TIMEOUT')) {
+              errMsg = "データ取得タイムアウト";
+              detail = "通信環境を確認して再試行してください";
+          } else {
+              errMsg = "データ通信エラー";
+              detail = `Status: ${e.status || 'Unknown'}`;
+          }
+      } else if (e.message.includes("fetch") || e.message.includes("Network")) {
+          errMsg = "通信エラー";
+          detail = "インターネット接続を確認してください";
       }
       
-      showStatus(errMsg, 'error');
-      // Show error message for 4 seconds so user can read it
-      setTimeout(() => { setIsProcessing(false); setStatusMsg(""); }, 4000);
+      showStatus(errMsg, 'error', detail);
+      
+      // Keep error visible longer if it's detailed
+      const displayTime = detail ? 8000 : 4000;
+      setTimeout(() => { setIsProcessing(false); setStatusMsg(""); setDetailedError(""); }, displayTime);
     }
   }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing, error]);
 
@@ -330,14 +343,19 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           />
           
           {/* Status Overlay */}
-          <div className="absolute top-6 left-0 right-0 z-30 flex justify-center pointer-events-none px-4">
+          <div className="absolute top-6 left-0 right-0 z-30 flex justify-center pointer-events-none px-4 flex-col items-center gap-2">
              {statusMsg && (
                <div className={`
-                 backdrop-blur-md text-white py-2 px-6 rounded-full font-bold text-sm shadow-lg border border-white/10 animate-fade-in
-                 ${statusType === 'error' ? 'bg-red-500/80' : statusType === 'success' ? 'bg-green-500/80' : 'bg-black/70'}
+                 backdrop-blur-md text-white py-2 px-6 rounded-full font-bold text-sm shadow-lg border border-white/10 animate-fade-in text-center
+                 ${statusType === 'error' ? 'bg-red-500/90' : statusType === 'success' ? 'bg-green-500/80' : 'bg-black/70'}
                `}>
                  {statusMsg}
                </div>
+             )}
+             {detailedError && (
+                 <div className="bg-black/80 backdrop-blur-md text-red-200 text-xs py-2 px-4 rounded-lg border border-red-500/30 max-w-[85%] whitespace-pre-wrap text-center animate-fade-in">
+                     {detailedError}
+                 </div>
              )}
           </div>
 

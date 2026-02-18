@@ -10,14 +10,13 @@ const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/expor
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
 
 // GAS Web App URL for logging unknown items directly to the Master Sheet (Product Reference)
-// UPDATED URL per request
 const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyu5qtOa8jxSGPkQigUI5ppm2a14nca6EK9IzYXBnvcuUD8gyv7hrd7LXes6pli8N1B/exec';
 
 const SHEET_NAME_SERVICE = 'ServiceItems';
 
 const CACHE_KEY = 'pixelpos_product_db';
 const TIMESTAMP_KEY = 'pixelpos_db_timestamp';
-const CACHE_TTL = 1000 * 60 * 5; // Reduced cache to 5 minutes for freshness
+const CACHE_TTL = 1000 * 60 * 5; // 5 minutes cache
 
 // In-memory mirror for instant access
 let memoryCache: Product[] = [];
@@ -90,13 +89,57 @@ const toHalfWidth = (str: string) => {
   });
 };
 
+// Custom Error Class for Sheet Operations
+export class SheetError extends Error {
+  constructor(public status: string, message: string) {
+    super(message);
+    this.name = 'SheetError';
+  }
+}
+
+// Robust Fetch with Timeout and Retry
+const fetchWithRetry = async (url: string, options: RequestInit = {}, retries = 1, timeout = 10000): Promise<Response> => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    
+    if (!res.ok) {
+        // Throw specific error to trigger retry or catch block
+        throw new SheetError(res.status.toString(), `HTTP_${res.status}`);
+    }
+    return res;
+  } catch (error: any) {
+    clearTimeout(id);
+    
+    // Determine if we should retry
+    // Don't retry on 4xx errors (likely permission/not found), unless it's 429 (Rate Limit) or 408 (Timeout)
+    const isClientError = error instanceof SheetError && error.status.startsWith('4') && error.status !== '429' && error.status !== '408';
+    const isAbort = error.name === 'AbortError';
+
+    if (retries > 0 && !isClientError) {
+      console.warn(`Fetch failed (${error.message}), retrying... (${retries} left)`);
+      await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
+      return fetchWithRetry(url, options, retries - 1, timeout);
+    }
+    
+    // If it was a timeout, clarify the error message
+    if (isAbort) {
+        throw new SheetError('TIMEOUT', 'Request timed out');
+    }
+    
+    throw error;
+  }
+};
+
 // Load from LocalStorage on startup
 const loadFromLocal = (): Product[] => {
   try {
     const json = localStorage.getItem(CACHE_KEY);
     if (json) {
       const data = JSON.parse(json);
-      console.log(`Loaded ${data.length} products from LocalStorage.`);
       return data;
     }
   } catch (e) {
@@ -121,15 +164,15 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
     // Add timestamp to bypass browser/CDN cache
     const urlWithTimestamp = `${BASE_URL}&t=${now}`;
     
-    // Explicitly set cache to no-store to ensure freshness
-    const res = await fetch(urlWithTimestamp, { 
-        cache: 'no-store',
-        headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
-    });
-    
-    if (!res.ok) throw new Error(`Sheet fetch failed: ${res.status}`);
-
+    // Use enhanced fetch with 1 retry and 10s timeout
+    const res = await fetchWithRetry(urlWithTimestamp, {}, 1, 10000);
     const text = await res.text();
+
+    // Check for Google Login Page (HTML) -> Indicates Permission Error
+    if (text.trim().startsWith('<!DOCTYPE html>') || text.includes('<html')) {
+        throw new SheetError('403_HTML', 'Spreadsheet permission denied (Login page returned)');
+    }
+
     const rows = parseCSV(text);
     
     const products: Product[] = [];
@@ -140,8 +183,6 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
         const partNumber = row[0];
         const name = row[1];
-        
-        // Clean price string: Remove non-numeric, handle full-width
         const priceClean = toHalfWidth(row[2]).replace(/[^0-9]/g, '');
         const price = parseInt(priceClean, 10);
 
@@ -157,52 +198,41 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
     
     console.log(`Updated cache with ${products.length} products.`);
     return products;
-  } catch (e) {
+  } catch (e: any) {
     console.error("Sheet Service Error:", e);
-    // Fallback to existing memory cache even if expired
-    return memoryCache;
+    
+    // If we have a cache (even expired), use it as fallback rather than failing completely
+    // UNLESS it's a critical error we want to show the user (like Permissions)
+    if (memoryCache.length > 0) {
+        console.warn("Returning stale cache due to fetch error.");
+        return memoryCache;
+    }
+    
+    // If no cache and failed, we must throw so the UI shows the error
+    throw e;
   }
 };
 
-// Fetch Service Items from the separate "ServiceItems" sheet
 export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
       const encodedSheetName = encodeURIComponent(SHEET_NAME_SERVICE);
-      // Use GVIZ URL to explicitly fetch the named sheet
       const url = `${GVIZ_URL}&sheet=${encodedSheetName}&t=${now}`;
       
-      console.log(`Fetching Service Items from: ${url}`);
-      
-      const res = await fetch(url, { 
-        cache: 'no-store',
-        headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
-      });
-      
-      if (!res.ok) {
-          console.error(`Service fetch failed: ${res.status} ${res.statusText}`);
-          return [];
-      }
-      
+      const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
       const rows = parseCSV(text);
       
       if (rows.length < 2) return [];
 
-      // Flexible Header Detection
       const header = rows[0].map(c => c.toLowerCase());
-      
-      // Look for columns containing keywords
       let idxName = header.findIndex(h => h.includes('name') || h.includes('品名') || h.includes('項目') || h.includes('item'));
       let idxPrice = header.findIndex(h => h.includes('price') || h.includes('cost') || h.includes('単価') || h.includes('価格') || h.includes('金額'));
       let idxCategory = header.findIndex(h => h.includes('category') || h.includes('cat') || h.includes('note') || h.includes('memo') || h.includes('備考') || h.includes('分類'));
 
-      // Defaults if not found (legacy support)
       if (idxName === -1) idxName = 0;
       if (idxPrice === -1) idxPrice = 1;
-      // If category is not found, default to 2 if available, otherwise ignore
       if (idxCategory === -1 && rows[0].length > 2) {
-          // Find a column that isn't name or price
           for(let i=0; i<rows[0].length; i++) {
               if (i !== idxName && i !== idxPrice) {
                   idxCategory = i;
@@ -211,36 +241,27 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
           }
       }
 
-      console.log(`Detected Columns - Name:${idxName}, Price:${idxPrice}, Cat:${idxCategory}`);
-
       const items: Product[] = [];
-      // Skip Header (Row 0)
       for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
-          // Ensure row has enough columns
           const maxIdx = Math.max(idxName, idxPrice);
           if (row.length <= maxIdx) continue;
           
           const name = row[idxName]?.trim();
-          
-          // Robust Price Parsing
           let rawPrice = row[idxPrice] || "0";
           rawPrice = toHalfWidth(rawPrice).replace(/[¥,円\s]/g, '');
           const price = parseInt(rawPrice, 10);
-          
           const category = (idxCategory !== -1 && row[idxCategory]) ? row[idxCategory].trim() : '';
 
           if (name && !isNaN(price)) {
               items.push({
-                  id: `SVC-${i}-${now}`, // Unique temporary ID
-                  partNumber: category || 'Service', // Use category as partNumber for display
+                  id: `SVC-${i}-${now}`,
+                  partNumber: category || 'Service',
                   name: name,
                   price: price
               });
           }
       }
-      
-      console.log(`Parsed ${items.length} service items from sheet '${SHEET_NAME_SERVICE}'.`);
       return items;
   } catch (e) {
       console.error("Failed to fetch service items", e);
@@ -254,25 +275,25 @@ export interface SearchResult {
 }
 
 export const searchProduct = async (query: string): Promise<SearchResult> => {
-  // Ensure we have data (force update if cache is empty or very old)
   let db = memoryCache;
+  
+  // If DB is empty, force a fetch (and await it)
+  // This is where timeout errors will be caught by the caller (Camera.tsx)
   if (db.length === 0) {
       db = await fetchDatabase(true);
   } else {
-      // Background refresh if older than TTL
+      // Background refresh
       fetchDatabase(); 
   }
   
   const normalize = (s: string) => s.trim().toUpperCase().replace(/[-\s]/g, '');
   const target = normalize(query);
   
-  // 1. Exact match
   const exact = db.find(p => normalize(p.partNumber) === target);
   if (exact) {
       return { exact, candidates: [] };
   }
 
-  // 2. Fuzzy/Candidate Search
   const candidates = db.filter(p => {
       const pNorm = normalize(p.partNumber);
       if (pNorm.length < 3 || target.length < 3) return false;
@@ -298,51 +319,35 @@ export const searchProduct = async (query: string): Promise<SearchResult> => {
   return { exact: null, candidates };
 };
 
-// Check if a product ID exists in the current cache
 export const isProductKnown = (id: string): boolean => {
-    // If cache is empty, technically we don't know, but treating as unknown is safer
     if (memoryCache.length === 0) return false;
-    
-    // We check if any product in our DB has this ID (partNumber)
-    // Note: IDs in memoryCache are partNumbers
     return memoryCache.some(p => p.id === id);
 };
 
-// Log unknown/manual items to Google Sheet via GAS
 export const logUnknownItem = async (item: CartItem) => {
     if (!GAS_LOG_ENDPOINT) {
-        console.warn("GAS_LOG_ENDPOINT is not configured. Skipping log.");
+        console.warn("GAS_LOG_ENDPOINT is not configured.");
         return;
     }
 
     try {
         const payload = {
-            // FIX: Explicitly set target sheet name per instructions
             sheetName: "品番参照", 
-
-            // FIX: Explicitly map the fields
-            // id (Column A) -> Part Number
-            // name (Column B) -> Edited Product Name
             id: item.partNumber, 
             name: item.name,     
-            
-            // Legacy mapping fallback (if GAS script uses these)
             partNumber: item.partNumber,
             price: item.price,
             quantity: item.quantity
         };
 
-        // Fire and forget using no-cors to avoid CORS errors with simple GAS setups
-        // Note: 'no-cors' means we can't read the response, but it submits the data.
+        // Use no-cors mode (fire and forget)
         await fetch(GAS_LOG_ENDPOINT, {
             method: 'POST',
             mode: 'no-cors', 
-            headers: {
-                'Content-Type': 'text/plain',
-            },
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(payload)
         });
-        console.log(`Logged unknown item to Master Sheet (品番参照): ${item.partNumber}, Name: ${item.name}`);
+        console.log(`Logged unknown item: ${item.partNumber}`);
     } catch (e) {
         console.error("Failed to log unknown item:", e);
     }
