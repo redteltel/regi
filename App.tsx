@@ -25,6 +25,9 @@ const DEFAULT_SETTINGS: StoreSettings = {
   accountHolder: "フクシマ カズヒコ"
 };
 
+// Unique key for this specific app deployment to ensure isolation from other apps on same domain
+const SETTINGS_STORAGE_KEY = 'pixelpos_regi_store_settings';
+
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -69,8 +72,8 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Load Settings from LocalStorage
-    const savedSettings = localStorage.getItem('pixelpos_store_settings');
+    // Load Settings from LocalStorage (Session Independent)
+    const savedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (savedSettings) {
         try {
             const parsed = JSON.parse(savedSettings);
@@ -97,7 +100,7 @@ const App: React.FC = () => {
 
   const handleSaveSettings = (newSettings: StoreSettings) => {
       setStoreSettings(newSettings);
-      localStorage.setItem('pixelpos_store_settings', JSON.stringify(newSettings));
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
   };
 
   // Update proviso default when entering preview

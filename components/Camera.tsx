@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { extractPartNumber } from '../services/geminiService';
 import { searchProduct, SheetError, preloadDatabase } from '../services/sheetService';
 import { Product } from '../types';
-import { Plus, X, AlertCircle, RefreshCw, CameraOff, Zap, AlertTriangle } from 'lucide-react';
+import { Plus, X, AlertCircle, RefreshCw, CameraOff, Zap, AlertTriangle, Clock } from 'lucide-react';
 
 interface CameraProps {
   onProductFound: (product: Product) => void;
@@ -265,7 +265,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       // 1. Rate Limit Handling (429 / Quota) -> Wait
       if (rawMsg.includes('429') || rawMsg.includes('quota') || rawMsg.includes('too many requests') || rawMsg.includes('resource_exhausted')) {
           setCooldown(30); // 30s cooldown
-          showStatus("アクセス集中 (429)", 'warning', "待機してください...");
+          // Override status message in render loop, but set state here for logs
+          showStatus("アクセス制限中", 'warning', "Google側で一時的な制限がかかっています");
           setIsProcessing(false);
           return;
       }
@@ -301,9 +302,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     }
   }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing, error, cooldown]);
 
-  // Derive Status Display Logic
-  const currentStatusMsg = cooldown > 0 ? "⚠️ アクセス集中" : statusMsg;
-  const currentDetailMsg = cooldown > 0 ? `あと ${cooldown} 秒待ってください` : detailedError;
+  // Derive Status Display Logic (Priority: Cooldown > Error/Info)
+  const currentStatusMsg = cooldown > 0 ? "⚠️ 一時的な制限中" : statusMsg;
+  const currentDetailMsg = cooldown > 0 
+    ? `Google側で一時的な制限がかかっています。\nあと ${cooldown} 秒お待ちください。` 
+    : detailedError;
   const currentStatusType = cooldown > 0 ? 'warning' : statusType;
 
   if (error) {
@@ -404,15 +407,15 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
                    currentStatusType === 'warning' ? 'bg-orange-600/95 border-orange-400' : 
                    'bg-black/70'}
                `}>
-                 {currentStatusType === 'warning' && <AlertTriangle size={16} />}
+                 {currentStatusType === 'warning' && <Clock size={16} className="animate-pulse" />}
                  {currentStatusMsg}
                </div>
              )}
              {currentDetailMsg && (
                  <div className={`
-                    backdrop-blur-md text-xs py-2 px-4 rounded-lg border max-w-[85%] whitespace-pre-wrap text-center animate-fade-in mt-1
+                    backdrop-blur-md text-xs py-2 px-4 rounded-lg border max-w-[85%] whitespace-pre-wrap text-center animate-fade-in mt-1 shadow-xl
                     ${currentStatusType === 'warning' 
-                        ? 'bg-orange-900/80 text-orange-100 border-orange-500/50' 
+                        ? 'bg-orange-950/90 text-orange-50 border-orange-500/50' 
                         : 'bg-black/80 text-red-200 border-red-500/30'}
                  `}>
                      {currentDetailMsg}

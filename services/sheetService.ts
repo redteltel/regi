@@ -14,8 +14,10 @@ const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyu5qtOa8jxSGP
 
 const SHEET_NAME_SERVICE = 'ServiceItems';
 
-const CACHE_KEY = 'pixelpos_product_db';
-const TIMESTAMP_KEY = 'pixelpos_db_timestamp';
+// Use a unique key for the "regi" app to prevent conflict with other apps on same domain
+const CACHE_KEY = 'pixelpos_regi_product_db';
+const TIMESTAMP_KEY = 'pixelpos_regi_db_timestamp';
+
 const CACHE_TTL = 1000 * 60 * 60; // Increased to 1 hour since we want stability
 
 // Extended Product type for internal optimization

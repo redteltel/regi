@@ -13,10 +13,16 @@ GROUP="redteltel"
 WEB_USER="nginx" 
 WEB_GROUP="nginx"
 
-# ★ここにGemini APIキーを設定してください★
-export VITE_GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
+# ★ここに新しいAPIキー（yoshida10ejpプロジェクト）を設定してください★
+export VITE_GEMINI_API_KEY="PLEASE_PASTE_YOUR_NEW_API_KEY_HERE"
 # 互換性のため古い変数名もセット
 export API_KEY="$VITE_GEMINI_API_KEY"
+
+if [ "$VITE_GEMINI_API_KEY" == "PLEASE_PASTE_YOUR_NEW_API_KEY_HERE" ]; then
+    echo "⚠️  ERROR: API Key is not set in deploy.sh!"
+    echo "Please edit deploy.sh and replace PLEASE_PASTE_YOUR_NEW_API_KEY_HERE with your actual key."
+    exit 1
+fi
 
 echo "🚀 Starting Deployment on Rocky Linux..."
 
