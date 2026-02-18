@@ -30,6 +30,8 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
   // Ensure we strip the prefix if present
   const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
 
+  console.log(`Sending image to Gemini (${MODEL_NAME}), payload length: ${cleanBase64.length}`);
+
   const responseSchema = {
     type: Type.OBJECT,
     properties: {
@@ -79,6 +81,7 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
       const jsonText = cleanJsonString(rawText);
       const data = JSON.parse(jsonText) as ScannedResult;
       
+      console.log("Gemini Success:", data);
       return data;
 
     } catch (error: any) {

@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { extractPartNumber } from '../services/geminiService';
-import { searchProduct, SheetError } from '../services/sheetService';
+import { searchProduct, SheetError, preloadDatabase } from '../services/sheetService';
 import { Product } from '../types';
-import { Plus, X, AlertCircle, RefreshCw, CameraOff, Lock, Zap, WifiOff, FileWarning } from 'lucide-react';
+import { Plus, X, AlertCircle, RefreshCw, CameraOff, Zap } from 'lucide-react';
 
 interface CameraProps {
   onProductFound: (product: Product) => void;
@@ -31,6 +31,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     let mounted = true;
 
     const init = async () => {
+        // Preload database on mount to avoid network lag during scan
+        preloadDatabase().catch(e => console.warn("Background DB fetch failed:", e));
         await startCamera();
     };
     init();
@@ -68,9 +70,9 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         audio: false,
       });
       
+      // Auto-Focus Constraint (if supported)
       const track = mediaStream.getVideoTracks()[0];
       const capabilities = track.getCapabilities() as any; 
-      
       if (capabilities?.focusMode?.includes('continuous')) {
         try {
           await track.applyConstraints({
@@ -82,7 +84,6 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       }
       
       setStream(mediaStream);
-      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.play().catch(e => console.warn("Video play error:", e));
@@ -110,6 +111,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     setStatusMsg(msg);
     setStatusType(type);
     setDetailedError(detail);
+    console.log(`[Status] ${msg} ${detail ? `(${detail})` : ''}`);
   };
 
   const handleManualAdd = () => {
@@ -153,10 +155,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
 
     if (navigator.vibrate) navigator.vibrate(30);
     setIsProcessing(true);
-    showStatus("AI解析中...", 'info');
     setDetailedError("");
 
     try {
+      showStatus("画像圧縮中...", 'info');
+
       // 1. Capture & Crop
       const srcW = video.videoWidth;
       const srcH = video.videoHeight;
@@ -166,8 +169,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       const startY = Math.floor((srcH - cropH) / 2);
 
       // 2. Resize Logic (Optimization)
-      // Limit max width to 1024px for faster AI processing
-      const MAX_WIDTH = 1024;
+      // Limit max width to 800px for faster upload (reduced from 1024)
+      const MAX_WIDTH = 800;
       let finalW = cropW;
       let finalH = cropH;
       
@@ -186,10 +189,12 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       ctx.filter = "contrast(1.3) grayscale(1)";
       ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, finalW, finalH);
       
-      // Use 0.7 quality for lighter payload
-      const base64 = canvas.toDataURL('image/jpeg', 0.7);
+      // Use 0.5 quality for maximum compression (reduced from 0.7)
+      const base64 = canvas.toDataURL('image/jpeg', 0.5);
 
-      // 3. AI Call with explicit 20s timeout
+      // 3. AI Call
+      showStatus("AI解析中...", 'info', "送信中...");
+      
       const TIMEOUT_MS = 20000;
       const timeoutPromise = new Promise<null>((_, reject) => 
          setTimeout(() => reject(new Error("GeminiTimeout")), TIMEOUT_MS)
@@ -203,7 +208,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       if (result && result.partNumber) {
         showStatus("データ照合中...", 'info');
         
-        // Sheet Call
+        // Sheet Call (Instant with cache)
         const searchResult = await searchProduct(result.partNumber);
         
         if (searchResult.exact) {
@@ -218,7 +223,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           setShowCandidateDialog(true);
           showStatus("候補が見つかりました", 'info');
         } else {
-          // No match, suggest manual add
+          // No match
           if (navigator.vibrate) navigator.vibrate([30, 100, 30]);
           const newProduct: Product = {
             id: result.partNumber,
@@ -241,18 +246,18 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       
       if (e.message === "GeminiTimeout") {
           errMsg = "AI解析タイムアウト";
-          detail = "電波の良い場所で再試行するか、\nWi-Fiを確認してください(20秒経過)";
+          detail = "電波状態を確認して再試行してください(20秒)";
       } else if (e instanceof SheetError || e.name === 'SheetError' || e.message.includes('HTTP_')) {
            const msg = e.message || "";
            if (msg.includes('403') || msg.includes('401') || msg.includes('HTML')) {
               errMsg = "スプレッドシート権限エラー";
-              detail = "GASデプロイ設定を確認してください:\n・実行ユーザー: 自分\n・アクセス: 全員(Anyone)";
+              detail = "GAS公開設定を確認してください(Anyone)";
           } else {
               errMsg = "データ通信エラー";
               detail = `Status: ${e.status || 'Unknown'}`;
           }
       } else {
-          errMsg = "通信/解析エラー";
+          errMsg = "解析エラー";
           detail = e.message;
       }
       

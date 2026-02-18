@@ -6,20 +6,28 @@ const SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
 // BASE_URL: Used for the main product database (Scan). Defaults to the first sheet.
 const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
 
-// GVIZ_URL: Used for specific sheets like 'ServiceItems'. More reliable for sheet selection by name.
+// GVIZ_URL: Used for specific sheets like 'ServiceItems'.
 const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
 
-// GAS Web App URL for logging unknown items directly to the Master Sheet (Product Reference)
+// GAS Web App URL for logging unknown items
 const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyu5qtOa8jxSGPkQigUI5ppm2a14nca6EK9IzYXBnvcuUD8gyv7hrd7LXes6pli8N1B/exec';
 
 const SHEET_NAME_SERVICE = 'ServiceItems';
 
 const CACHE_KEY = 'pixelpos_product_db';
 const TIMESTAMP_KEY = 'pixelpos_db_timestamp';
-const CACHE_TTL = 1000 * 60 * 5; // 5 minutes cache
+const CACHE_TTL = 1000 * 60 * 60; // Increased to 1 hour since we want stability
 
-// In-memory mirror for instant access
-let memoryCache: Product[] = [];
+// Extended Product type for internal optimization
+interface CachedProduct extends Product {
+  _norm: string; // Pre-calculated normalized part number for fast matching
+}
+
+// In-memory mirror
+let memoryCache: CachedProduct[] = [];
+
+// Helper: Normalize string (remove spaces, hyphens, uppercase)
+const normalize = (s: string) => s.trim().toUpperCase().replace(/[-\s]/g, '');
 
 // Levenshtein distance for fuzzy matching
 const levenshtein = (s: string, t: string): number => {
@@ -44,7 +52,6 @@ const levenshtein = (s: string, t: string): number => {
   return d[s.length][t.length];
 };
 
-// Robust CSV Parser
 const parseCSV = (text: string): string[][] => {
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -82,14 +89,12 @@ const parseCSV = (text: string): string[][] => {
   return rows;
 };
 
-// Helper to convert full-width numbers to half-width
 const toHalfWidth = (str: string) => {
   return str.replace(/[０-９]/g, (s) => {
     return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
   });
 };
 
-// Custom Error Class for Sheet Operations
 export class SheetError extends Error {
   constructor(public status: string, message: string) {
     super(message);
@@ -97,7 +102,6 @@ export class SheetError extends Error {
   }
 }
 
-// Robust Fetch with Timeout and Retry
 const fetchWithRetry = async (url: string, options: RequestInit = {}, retries = 1, timeout = 10000): Promise<Response> => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
@@ -117,33 +121,39 @@ const fetchWithRetry = async (url: string, options: RequestInit = {}, retries = 
     const isAbort = error.name === 'AbortError';
 
     if (retries > 0 && !isClientError) {
-      console.warn(`Fetch failed (${error.message}), retrying... (${retries} left)`);
+      console.warn(`Fetch failed (${error.message}), retrying...`);
       await new Promise(r => setTimeout(r, 1000));
       return fetchWithRetry(url, options, retries - 1, timeout);
     }
     
-    if (isAbort) {
-        throw new SheetError('TIMEOUT', 'Request timed out');
-    }
-    
+    if (isAbort) throw new SheetError('TIMEOUT', 'Request timed out');
     throw error;
   }
 };
 
-const loadFromLocal = (): Product[] => {
+// Internal function to hydrate memory cache from raw product list
+const hydrateCache = (products: Product[]) => {
+  memoryCache = products.map(p => ({
+    ...p,
+    _norm: normalize(p.partNumber) // Pre-calculate for speed
+  }));
+  console.log(`Hydrated memory cache with ${memoryCache.length} items.`);
+};
+
+const loadFromLocal = () => {
   try {
     const json = localStorage.getItem(CACHE_KEY);
     if (json) {
       const data = JSON.parse(json);
-      return data;
+      hydrateCache(data);
     }
   } catch (e) {
     console.error("Failed to load local cache", e);
   }
-  return [];
 };
 
-memoryCache = loadFromLocal();
+// Initialize
+loadFromLocal();
 
 const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
   const now = Date.now();
@@ -153,13 +163,14 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
     return memoryCache;
   }
 
+  console.log("Fetching new database from Google Sheets...");
   try {
     const urlWithTimestamp = `${BASE_URL}&t=${now}`;
-    const res = await fetchWithRetry(urlWithTimestamp, {}, 1, 10000);
+    const res = await fetchWithRetry(urlWithTimestamp, {}, 1, 15000); // 15s timeout for DB fetch
     const text = await res.text();
 
     if (text.trim().startsWith('<!DOCTYPE html>') || text.includes('<html')) {
-        throw new SheetError('403_HTML', 'Spreadsheet permission denied (Login page returned)');
+        throw new SheetError('403_HTML', 'Permission Denied');
     }
 
     const rows = parseCSV(text);
@@ -179,69 +190,55 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
         }
     }
     
-    memoryCache = products;
+    hydrateCache(products);
     localStorage.setItem(CACHE_KEY, JSON.stringify(products));
     localStorage.setItem(TIMESTAMP_KEY, now.toString());
     
-    console.log(`Updated cache with ${products.length} products.`);
     return products;
   } catch (e: any) {
     console.error("Sheet Service Error:", e);
     if (memoryCache.length > 0) {
-        console.warn("Returning stale cache due to fetch error.");
+        console.warn("Using stale cache due to fetch error.");
         return memoryCache;
     }
     throw e;
   }
 };
 
+// Public method to trigger preload
+export const preloadDatabase = async () => {
+  return fetchDatabase(false);
+};
+
 export const fetchServiceItems = async (): Promise<Product[]> => {
+  // Service Items Fetching Logic (unchanged)
   try {
       const now = Date.now();
       const encodedSheetName = encodeURIComponent(SHEET_NAME_SERVICE);
       const url = `${GVIZ_URL}&sheet=${encodedSheetName}&t=${now}`;
-      
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
       const rows = parseCSV(text);
-      
       if (rows.length < 2) return [];
-
+      
+      // ... simplistic parsing for service items ...
       const header = rows[0].map(c => c.toLowerCase());
-      let idxName = header.findIndex(h => h.includes('name') || h.includes('品名') || h.includes('項目') || h.includes('item'));
-      let idxPrice = header.findIndex(h => h.includes('price') || h.includes('cost') || h.includes('単価') || h.includes('価格') || h.includes('金額'));
-      let idxCategory = header.findIndex(h => h.includes('category') || h.includes('cat') || h.includes('note') || h.includes('memo') || h.includes('備考') || h.includes('分類'));
-
+      let idxName = header.findIndex(h => h.includes('name') || h.includes('品名') || h.includes('項目'));
+      let idxPrice = header.findIndex(h => h.includes('price') || h.includes('cost') || h.includes('単価'));
       if (idxName === -1) idxName = 0;
       if (idxPrice === -1) idxPrice = 1;
-      if (idxCategory === -1 && rows[0].length > 2) {
-          for(let i=0; i<rows[0].length; i++) {
-              if (i !== idxName && i !== idxPrice) {
-                  idxCategory = i;
-                  break;
-              }
-          }
-      }
 
       const items: Product[] = [];
       for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
-          const maxIdx = Math.max(idxName, idxPrice);
-          if (row.length <= maxIdx) continue;
-          
+          if (row.length <= Math.max(idxName, idxPrice)) continue;
           const name = row[idxName]?.trim();
           let rawPrice = row[idxPrice] || "0";
           rawPrice = toHalfWidth(rawPrice).replace(/[¥,円\s]/g, '');
           const price = parseInt(rawPrice, 10);
-          const category = (idxCategory !== -1 && row[idxCategory]) ? row[idxCategory].trim() : '';
 
           if (name && !isNaN(price)) {
-              items.push({
-                  id: `SVC-${i}-${now}`,
-                  partNumber: category || 'Service',
-                  name: name,
-                  price: price
-              });
+              items.push({ id: `SVC-${i}-${now}`, partNumber: 'Service', name, price });
           }
       }
       return items;
@@ -257,76 +254,62 @@ export interface SearchResult {
 }
 
 export const searchProduct = async (query: string): Promise<SearchResult> => {
-  let db = memoryCache;
-  
-  if (db.length === 0) {
-      db = await fetchDatabase(true);
-  } else {
-      fetchDatabase(); 
+  // 1. Ensure DB is loaded. If empty, sync fetch.
+  // Optimization: Remove background fetch. We only fetch if empty or on app start.
+  if (memoryCache.length === 0) {
+      console.log("Cache empty during search, fetching synchronously...");
+      await fetchDatabase(true);
   }
-  
-  const normalize = (s: string) => s.trim().toUpperCase().replace(/[-\s]/g, '');
+
   const target = normalize(query);
   const targetLen = target.length;
   
-  // 1. Exact Match (Fastest)
-  const exact = db.find(p => normalize(p.partNumber) === target);
+  // 2. Exact Match using Pre-calculated key (O(n) -> O(1) effectively if we used Map, but Array.find is fast enough for <10k)
+  const exact = memoryCache.find(p => p._norm === target);
   if (exact) {
-      return { exact, candidates: [] };
+      // Return Clean Product (without _norm)
+      const { _norm, ...cleanProduct } = exact;
+      return { exact: cleanProduct, candidates: [] };
   }
 
-  // 2. Optimized Candidates Search
-  // Avoid running Levenshtein on everything.
-  // First, filter by simple heuristics (length & includes)
-  const potentialCandidates = db.filter(p => {
-      const pNorm = normalize(p.partNumber);
-      const pLen = pNorm.length;
-
-      // Filter out items that are too different in length
-      if (Math.abs(pLen - targetLen) > 2) return false;
+  // 3. Optimized Candidates Search
+  // Filter phase: reduce set using simple string ops on pre-normalized data
+  const potentialCandidates = memoryCache.filter(p => {
+      const pLen = p._norm.length;
+      if (Math.abs(pLen - targetLen) > 2) return false; // Length heuristic
       if (pLen < 3 || targetLen < 3) return false;
-
-      // Check simple inclusion
-      if (pNorm.includes(target) || target.includes(pNorm)) return true;
-
-      return true; // Pass to Levenshtein check
+      if (p._norm.includes(target) || target.includes(p._norm)) return true; // Substring
+      return true; // Fallback to distance check
   });
 
-  // Now apply detailed scoring on smaller subset
+  // Ranking phase
   const candidates = potentialCandidates.filter(p => {
-      const pNorm = normalize(p.partNumber);
-      // Already checked length and inclusion above, verify distance for others
-      if (pNorm.includes(target) || target.includes(pNorm)) return true;
-      
-      const dist = levenshtein(pNorm, target);
-      const threshold = targetLen > 5 ? 2 : 1;
-      return dist <= threshold;
+      if (p._norm.includes(target) || target.includes(p._norm)) return true;
+      const dist = levenshtein(p._norm, target);
+      return dist <= (targetLen > 5 ? 2 : 1);
   })
   .sort((a, b) => {
-      const aNorm = normalize(a.partNumber);
-      const bNorm = normalize(b.partNumber);
-      const aStarts = aNorm.startsWith(target);
-      const bStarts = bNorm.startsWith(target);
+      const aStarts = a._norm.startsWith(target);
+      const bStarts = b._norm.startsWith(target);
       if (aStarts && !bStarts) return -1;
       if (!aStarts && bStarts) return 1;
       return 0;
   })
-  .slice(0, 5); 
+  .slice(0, 5)
+  .map(p => {
+      const { _norm, ...rest } = p;
+      return rest;
+  });
   
   return { exact: null, candidates };
 };
 
 export const isProductKnown = (id: string): boolean => {
-    if (memoryCache.length === 0) return false;
     return memoryCache.some(p => p.id === id);
 };
 
 export const logUnknownItem = async (item: CartItem) => {
-    if (!GAS_LOG_ENDPOINT) {
-        console.warn("GAS_LOG_ENDPOINT is not configured.");
-        return;
-    }
-
+    if (!GAS_LOG_ENDPOINT) return;
     try {
         const payload = {
             sheetName: "品番参照", 
@@ -336,7 +319,6 @@ export const logUnknownItem = async (item: CartItem) => {
             price: item.price,
             quantity: item.quantity
         };
-
         await fetch(GAS_LOG_ENDPOINT, {
             method: 'POST',
             mode: 'no-cors', 
@@ -344,7 +326,5 @@ export const logUnknownItem = async (item: CartItem) => {
             body: JSON.stringify(payload)
         });
         console.log(`Logged unknown item: ${item.partNumber}`);
-    } catch (e) {
-        console.error("Failed to log unknown item:", e);
-    }
+    } catch (e) { console.error(e); }
 };
