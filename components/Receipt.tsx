@@ -10,8 +10,8 @@ interface ReceiptProps {
   recipientName: string;
   proviso: string;
   paymentDeadline: string;
-  discount?: number; // Added discount prop
-  logo?: string | null; // Added logo prop
+  discount?: number;
+  logo?: string | null;
 }
 
 const Receipt: React.FC<ReceiptProps> = ({ 
@@ -26,7 +26,6 @@ const Receipt: React.FC<ReceiptProps> = ({
   discount = 0,
   logo = null
 }) => {
-  // Revenue stamp only for Formal Receipt >= 50,000
   const needsStamp = mode === 'FORMAL' && total >= 50000;
   const [imgError, setImgError] = useState(false);
 
@@ -48,7 +47,6 @@ const Receipt: React.FC<ReceiptProps> = ({
       
       {/* Header */}
       <div className="text-center mb-6">
-        {/* Logo Display */}
         {logo && !imgError && (
            <img 
              src={logo} 
@@ -135,7 +133,7 @@ const Receipt: React.FC<ReceiptProps> = ({
             {/* Item Name */}
             <span className="font-bold text-sm break-words">{item.name}</span>
             
-            {/* Part Number Display - Ensure it wraps correctly */}
+            {/* Part Number Display */}
             {item.partNumber && (
                 <span className="text-[10px] text-gray-500 font-mono tracking-tight mb-0.5 break-all">
                   (品番: {item.partNumber})
@@ -152,7 +150,6 @@ const Receipt: React.FC<ReceiptProps> = ({
 
       {/* Totals */}
       <div className="border-t border-dashed border-gray-400 pt-3 mb-6 space-y-1">
-        {/* Discount Line */}
         {discount > 0 && (
           <div className="flex justify-between text-gray-600">
              <span>値引</span>
