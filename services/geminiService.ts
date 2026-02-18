@@ -18,12 +18,12 @@ const cleanJsonString = (text: string): string => {
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const extractPartNumber = async (base64Image: string): Promise<ScannedResult | null> => {
-  // Retrieve API Key at runtime
-  const apiKey = process.env.API_KEY;
+  // Retrieve API Key: Prioritize Vite env var, fallback to process.env shim
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
 
   if (!apiKey) {
-    console.error("Gemini API Key is missing.");
-    throw new Error("Gemini API Key is not configured.");
+    console.error("Gemini API Key is missing. Please check .env file.");
+    throw new Error("API Key is not configured (VITE_GEMINI_API_KEY).");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -87,6 +87,12 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
     } catch (error: any) {
       attempts++;
       console.warn(`Gemini API Attempt ${attempts} failed:`, error);
+      
+      // If error is 400 (Invalid Key) or 403 (Referrer/Quota), do not retry.
+      const msg = (error.message || "").toLowerCase();
+      if (msg.includes('400') || msg.includes('403') || msg.includes('invalid api key')) {
+          throw error;
+      }
       
       if (attempts >= maxAttempts) {
         // If it's the last attempt, let the UI handle the error

@@ -262,11 +262,20 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       let detail = "";
       const rawMsg = (e.message || e.toString() || "").toLowerCase();
       
-      // Rate Limit Handling (429)
+      // 1. Rate Limit Handling (429 / Quota) -> Wait
       if (rawMsg.includes('429') || rawMsg.includes('quota') || rawMsg.includes('too many requests') || rawMsg.includes('resource_exhausted')) {
           setCooldown(30); // 30s cooldown
           showStatus("アクセス集中 (429)", 'warning', "待機してください...");
           setIsProcessing(false);
+          return;
+      }
+
+      // 2. API Key / Referrer Issues (400 / 403) -> Contact Admin
+      if (rawMsg.includes('400') || rawMsg.includes('403') || rawMsg.includes('invalid api key') || rawMsg.includes('permission_denied')) {
+          errMsg = "APIキーエラー";
+          detail = "管理者に連絡してください\n(認証失敗/リファラー制限)";
+          showStatus(errMsg, 'error', detail);
+          setTimeout(() => { setIsProcessing(false); setStatusMsg(""); setDetailedError(""); }, 6000);
           return;
       }
 
