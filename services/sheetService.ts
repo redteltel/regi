@@ -259,6 +259,8 @@ export const searchProduct = async (query: string): Promise<SearchResult> => {
   if (memoryCache.length === 0) {
       console.log("Cache empty during search, fetching synchronously...");
       await fetchDatabase(true);
+  } else {
+      console.log(`Searching in cache (${memoryCache.length} items)...`);
   }
 
   const target = normalize(query);

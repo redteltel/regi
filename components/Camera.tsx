@@ -169,7 +169,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       const startY = Math.floor((srcH - cropH) / 2);
 
       // 2. Resize Logic (Optimization)
-      // Limit max width to 800px for faster upload (reduced from 1024)
+      // Limit max width to 800px for faster upload
       const MAX_WIDTH = 800;
       let finalW = cropW;
       let finalH = cropH;
@@ -189,8 +189,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       ctx.filter = "contrast(1.3) grayscale(1)";
       ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, finalW, finalH);
       
-      // Use 0.5 quality for maximum compression (reduced from 0.7)
-      const base64 = canvas.toDataURL('image/jpeg', 0.5);
+      // Use 0.4 quality for maximum compression (Optimization for timeout)
+      const base64 = canvas.toDataURL('image/jpeg', 0.4);
 
       // 3. AI Call
       showStatus("AI解析中...", 'info', "送信中...");
