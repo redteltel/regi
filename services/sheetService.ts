@@ -107,25 +107,21 @@ const fetchWithRetry = async (url: string, options: RequestInit = {}, retries = 
     clearTimeout(id);
     
     if (!res.ok) {
-        // Throw specific error to trigger retry or catch block
         throw new SheetError(res.status.toString(), `HTTP_${res.status}`);
     }
     return res;
   } catch (error: any) {
     clearTimeout(id);
     
-    // Determine if we should retry
-    // Don't retry on 4xx errors (likely permission/not found), unless it's 429 (Rate Limit) or 408 (Timeout)
     const isClientError = error instanceof SheetError && error.status.startsWith('4') && error.status !== '429' && error.status !== '408';
     const isAbort = error.name === 'AbortError';
 
     if (retries > 0 && !isClientError) {
       console.warn(`Fetch failed (${error.message}), retrying... (${retries} left)`);
-      await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
+      await new Promise(r => setTimeout(r, 1000));
       return fetchWithRetry(url, options, retries - 1, timeout);
     }
     
-    // If it was a timeout, clarify the error message
     if (isAbort) {
         throw new SheetError('TIMEOUT', 'Request timed out');
     }
@@ -134,7 +130,6 @@ const fetchWithRetry = async (url: string, options: RequestInit = {}, retries = 
   }
 };
 
-// Load from LocalStorage on startup
 const loadFromLocal = (): Product[] => {
   try {
     const json = localStorage.getItem(CACHE_KEY);
@@ -148,35 +143,28 @@ const loadFromLocal = (): Product[] => {
   return [];
 };
 
-// Initialize memory cache immediately
 memoryCache = loadFromLocal();
 
 const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
   const now = Date.now();
   const lastFetch = parseInt(localStorage.getItem(TIMESTAMP_KEY) || '0', 10);
 
-  // Use memory/local cache if valid and not forcing update
   if (!forceUpdate && memoryCache.length > 0 && (now - lastFetch < CACHE_TTL)) {
     return memoryCache;
   }
 
   try {
-    // Add timestamp to bypass browser/CDN cache
     const urlWithTimestamp = `${BASE_URL}&t=${now}`;
-    
-    // Use enhanced fetch with 1 retry and 10s timeout
     const res = await fetchWithRetry(urlWithTimestamp, {}, 1, 10000);
     const text = await res.text();
 
-    // Check for Google Login Page (HTML) -> Indicates Permission Error
     if (text.trim().startsWith('<!DOCTYPE html>') || text.includes('<html')) {
         throw new SheetError('403_HTML', 'Spreadsheet permission denied (Login page returned)');
     }
 
     const rows = parseCSV(text);
-    
     const products: Product[] = [];
-    // Skip Header
+    
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (row.length < 3) continue;
@@ -191,7 +179,6 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
         }
     }
     
-    // Update caches
     memoryCache = products;
     localStorage.setItem(CACHE_KEY, JSON.stringify(products));
     localStorage.setItem(TIMESTAMP_KEY, now.toString());
@@ -200,15 +187,10 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
     return products;
   } catch (e: any) {
     console.error("Sheet Service Error:", e);
-    
-    // If we have a cache (even expired), use it as fallback rather than failing completely
-    // UNLESS it's a critical error we want to show the user (like Permissions)
     if (memoryCache.length > 0) {
         console.warn("Returning stale cache due to fetch error.");
         return memoryCache;
     }
-    
-    // If no cache and failed, we must throw so the UI shows the error
     throw e;
   }
 };
@@ -277,33 +259,48 @@ export interface SearchResult {
 export const searchProduct = async (query: string): Promise<SearchResult> => {
   let db = memoryCache;
   
-  // If DB is empty, force a fetch (and await it)
-  // This is where timeout errors will be caught by the caller (Camera.tsx)
   if (db.length === 0) {
       db = await fetchDatabase(true);
   } else {
-      // Background refresh
       fetchDatabase(); 
   }
   
   const normalize = (s: string) => s.trim().toUpperCase().replace(/[-\s]/g, '');
   const target = normalize(query);
+  const targetLen = target.length;
   
+  // 1. Exact Match (Fastest)
   const exact = db.find(p => normalize(p.partNumber) === target);
   if (exact) {
       return { exact, candidates: [] };
   }
 
-  const candidates = db.filter(p => {
+  // 2. Optimized Candidates Search
+  // Avoid running Levenshtein on everything.
+  // First, filter by simple heuristics (length & includes)
+  const potentialCandidates = db.filter(p => {
       const pNorm = normalize(p.partNumber);
-      if (pNorm.length < 3 || target.length < 3) return false;
+      const pLen = pNorm.length;
+
+      // Filter out items that are too different in length
+      if (Math.abs(pLen - targetLen) > 2) return false;
+      if (pLen < 3 || targetLen < 3) return false;
+
+      // Check simple inclusion
       if (pNorm.includes(target) || target.includes(pNorm)) return true;
-      if (Math.abs(pNorm.length - target.length) <= 2) {
-          const dist = levenshtein(pNorm, target);
-          const threshold = target.length > 5 ? 2 : 1;
-          if (dist <= threshold) return true;
-      }
-      return false;
+
+      return true; // Pass to Levenshtein check
+  });
+
+  // Now apply detailed scoring on smaller subset
+  const candidates = potentialCandidates.filter(p => {
+      const pNorm = normalize(p.partNumber);
+      // Already checked length and inclusion above, verify distance for others
+      if (pNorm.includes(target) || target.includes(pNorm)) return true;
+      
+      const dist = levenshtein(pNorm, target);
+      const threshold = targetLen > 5 ? 2 : 1;
+      return dist <= threshold;
   })
   .sort((a, b) => {
       const aNorm = normalize(a.partNumber);
@@ -340,7 +337,6 @@ export const logUnknownItem = async (item: CartItem) => {
             quantity: item.quantity
         };
 
-        // Use no-cors mode (fire and forget)
         await fetch(GAS_LOG_ENDPOINT, {
             method: 'POST',
             mode: 'no-cors', 

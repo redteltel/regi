@@ -157,6 +157,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     setDetailedError("");
 
     try {
+      // 1. Capture & Crop
       const srcW = video.videoWidth;
       const srcH = video.videoHeight;
       const cropW = Math.floor(srcW * 0.7);
@@ -164,20 +165,34 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       const startX = Math.floor((srcW - cropW) / 2);
       const startY = Math.floor((srcH - cropH) / 2);
 
-      canvas.width = cropW;
-      canvas.height = cropH;
+      // 2. Resize Logic (Optimization)
+      // Limit max width to 1024px for faster AI processing
+      const MAX_WIDTH = 1024;
+      let finalW = cropW;
+      let finalH = cropH;
+      
+      if (finalW > MAX_WIDTH) {
+          const ratio = MAX_WIDTH / finalW;
+          finalW = MAX_WIDTH;
+          finalH = Math.floor(cropH * ratio);
+      }
+
+      canvas.width = finalW;
+      canvas.height = finalH;
 
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) throw new Error("Canvas context error");
 
       ctx.filter = "contrast(1.3) grayscale(1)";
-      ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
+      ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, finalW, finalH);
       
-      const base64 = canvas.toDataURL('image/jpeg', 0.8);
+      // Use 0.7 quality for lighter payload
+      const base64 = canvas.toDataURL('image/jpeg', 0.7);
 
-      // AI Call (Gemini)
+      // 3. AI Call with explicit 20s timeout
+      const TIMEOUT_MS = 20000;
       const timeoutPromise = new Promise<null>((_, reject) => 
-         setTimeout(() => reject(new Error("GeminiTimeout")), 30000)
+         setTimeout(() => reject(new Error("GeminiTimeout")), TIMEOUT_MS)
       );
       
       const result = await Promise.race([
@@ -188,7 +203,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       if (result && result.partNumber) {
         showStatus("データ照合中...", 'info');
         
-        // Sheet Call (with error handling)
+        // Sheet Call
         const searchResult = await searchProduct(result.partNumber);
         
         if (searchResult.exact) {
@@ -203,6 +218,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           setShowCandidateDialog(true);
           showStatus("候補が見つかりました", 'info');
         } else {
+          // No match, suggest manual add
           if (navigator.vibrate) navigator.vibrate([30, 100, 30]);
           const newProduct: Product = {
             id: result.partNumber,
@@ -225,32 +241,23 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       
       if (e.message === "GeminiTimeout") {
           errMsg = "AI解析タイムアウト";
-          detail = "電波の良い場所で再試行してください";
+          detail = "電波の良い場所で再試行するか、\nWi-Fiを確認してください(20秒経過)";
       } else if (e instanceof SheetError || e.name === 'SheetError' || e.message.includes('HTTP_')) {
-          const msg = e.message || "";
-          if (msg.includes('403') || msg.includes('401') || msg.includes('HTML')) {
+           const msg = e.message || "";
+           if (msg.includes('403') || msg.includes('401') || msg.includes('HTML')) {
               errMsg = "スプレッドシート権限エラー";
-              detail = "GASデプロイ設定を確認してください:\n・実行ユーザー: 自分\n・アクセス: 全員(Anyone)\nシートの共有設定を確認してください(全員閲覧可)";
-          } else if (msg.includes('404')) {
-              errMsg = "スプレッドシートが見つかりません";
-              detail = "IDまたはURLが間違っています";
-          } else if (msg.includes('TIMEOUT')) {
-              errMsg = "データ取得タイムアウト";
-              detail = "通信環境を確認して再試行してください";
+              detail = "GASデプロイ設定を確認してください:\n・実行ユーザー: 自分\n・アクセス: 全員(Anyone)";
           } else {
               errMsg = "データ通信エラー";
               detail = `Status: ${e.status || 'Unknown'}`;
           }
-      } else if (e.message.includes("fetch") || e.message.includes("Network")) {
-          errMsg = "通信エラー";
-          detail = "インターネット接続を確認してください";
+      } else {
+          errMsg = "通信/解析エラー";
+          detail = e.message;
       }
       
       showStatus(errMsg, 'error', detail);
-      
-      // Keep error visible longer if it's detailed
-      const displayTime = detail ? 8000 : 4000;
-      setTimeout(() => { setIsProcessing(false); setStatusMsg(""); setDetailedError(""); }, displayTime);
+      setTimeout(() => { setIsProcessing(false); setStatusMsg(""); setDetailedError(""); }, 5000);
     }
   }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing, error]);
 

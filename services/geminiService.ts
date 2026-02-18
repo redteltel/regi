@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// Using gemini-3-flash-preview as recommended for basic text tasks
+// Using gemini-3-flash-preview for speed
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 // Helper to strip Markdown code blocks
@@ -27,7 +27,7 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  // Ensure we strip the prefix if present (Camera.tsx now sends image/jpeg data URL)
+  // Ensure we strip the prefix if present
   const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
 
   const responseSchema = {
@@ -35,7 +35,7 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
     properties: {
       partNumber: {
         type: Type.STRING,
-        description: "The alphanumeric product code or model number (品番) visible in the image. e.g. 'ABC-123', 'WHP1234'. Ignore barcodes if text is present.",
+        description: "The alphanumeric product code or model number (品番) visible in the image. e.g. 'ABC-123', 'WHP1234'. Ignore barcodes.",
       },
       confidence: {
         type: Type.NUMBER,
@@ -45,9 +45,9 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
     required: ["partNumber"],
   };
 
-  // Retry logic: Try up to 3 times (Enhanced Stability)
+  // Optimization: Reduce retries to 1 to fit within the frontend timeout (20s)
   let attempts = 0;
-  const maxAttempts = 3;
+  const maxAttempts = 2; // Initial + 1 retry
 
   while (attempts < maxAttempts) {
     try {
@@ -57,19 +57,19 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
           parts: [
             {
               inlineData: {
-                mimeType: 'image/jpeg', // Camera.tsx sends JPEG
+                mimeType: 'image/jpeg',
                 data: cleanBase64,
               },
             },
             {
-              text: "Read the product model number (品番) from this label image. Return JSON.",
+              text: "Read the product model number (品番) from this label. Return JSON.",
             },
           ],
         },
         config: {
           responseMimeType: "application/json",
           responseSchema: responseSchema,
-          temperature: 0.1, // Low temperature for deterministic output
+          temperature: 0, // 0 for max determinism and speed
         },
       });
 
@@ -86,13 +86,12 @@ export const extractPartNumber = async (base64Image: string): Promise<ScannedRes
       console.warn(`Gemini API Attempt ${attempts} failed:`, error);
       
       if (attempts >= maxAttempts) {
-        console.error("Gemini Vision Error after retries:", error);
-        // Return a user-friendly error message for the UI to display
-        throw new Error("電波の良い場所でもう一度お試しください。");
+        // If it's the last attempt, let the UI handle the error
+        throw error;
       }
       
-      // Exponential Backoff: Wait longer between retries (1s, 2s...)
-      await wait(1000 * attempts);
+      // Short backoff
+      await wait(1000);
     }
   }
 
