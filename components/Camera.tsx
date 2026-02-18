@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { extractPartNumber } from '../services/geminiService';
 import { searchProduct, SheetError, preloadDatabase } from '../services/sheetService';
 import { Product } from '../types';
-import { Plus, X, AlertCircle, RefreshCw, CameraOff, Zap } from 'lucide-react';
+import { Plus, X, AlertCircle, RefreshCw, CameraOff, Zap, AlertTriangle } from 'lucide-react';
 
 interface CameraProps {
   onProductFound: (product: Product) => void;
@@ -19,8 +19,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   
   // Status UI
   const [statusMsg, setStatusMsg] = useState<string>("");
-  const [statusType, setStatusType] = useState<'info' | 'success' | 'error'>('info');
+  const [statusType, setStatusType] = useState<'info' | 'success' | 'error' | 'warning'>('info');
   const [detailedError, setDetailedError] = useState<string>("");
+
+  // Rate Limit Cooldown State
+  const [cooldown, setCooldown] = useState(0);
 
   // Candidate Dialog State
   const [showCandidateDialog, setShowCandidateDialog] = useState(false);
@@ -43,6 +46,19 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Cooldown Timer Effect
+  useEffect(() => {
+    let timer: any;
+    if (cooldown > 0) {
+      timer = setInterval(() => {
+        setCooldown((prev) => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [cooldown]);
 
   const startCamera = async () => {
     if (window.location.protocol !== 'https:' && 
@@ -107,7 +123,7 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       startCamera();
   };
 
-  const showStatus = (msg: string, type: 'info' | 'success' | 'error' = 'info', detail: string = "") => {
+  const showStatus = (msg: string, type: 'info' | 'success' | 'error' | 'warning' = 'info', detail: string = "") => {
     setStatusMsg(msg);
     setStatusType(type);
     setDetailedError(detail);
@@ -142,7 +158,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   };
 
   const handleCapture = useCallback(async () => {
-    if (isProcessing || showCandidateDialog || error) return;
+    // Block capture if cooldown is active
+    if (isProcessing || showCandidateDialog || error || cooldown > 0) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -243,7 +260,16 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       console.error("Scan Error:", e);
       let errMsg = "エラーが発生しました";
       let detail = "";
+      const rawMsg = (e.message || e.toString() || "").toLowerCase();
       
+      // Rate Limit Handling (429)
+      if (rawMsg.includes('429') || rawMsg.includes('quota') || rawMsg.includes('too many requests') || rawMsg.includes('resource_exhausted')) {
+          setCooldown(30); // 30s cooldown
+          showStatus("アクセス集中 (429)", 'warning', "待機してください...");
+          setIsProcessing(false);
+          return;
+      }
+
       if (e.message === "GeminiTimeout") {
           errMsg = "AI解析タイムアウト";
           detail = "電波状態を確認して再試行してください(20秒)";
@@ -264,7 +290,12 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       showStatus(errMsg, 'error', detail);
       setTimeout(() => { setIsProcessing(false); setStatusMsg(""); setDetailedError(""); }, 5000);
     }
-  }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing, error]);
+  }, [isProcessing, showCandidateDialog, onProductFound, setIsProcessing, error, cooldown]);
+
+  // Derive Status Display Logic
+  const currentStatusMsg = cooldown > 0 ? "⚠️ アクセス集中" : statusMsg;
+  const currentDetailMsg = cooldown > 0 ? `あと ${cooldown} 秒待ってください` : detailedError;
+  const currentStatusType = cooldown > 0 ? 'warning' : statusType;
 
   if (error) {
     return (
@@ -356,24 +387,33 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
           
           {/* Status Overlay */}
           <div className="absolute top-6 left-0 right-0 z-30 flex justify-center pointer-events-none px-4 flex-col items-center gap-2">
-             {statusMsg && (
+             {currentStatusMsg && (
                <div className={`
-                 backdrop-blur-md text-white py-2 px-6 rounded-full font-bold text-sm shadow-lg border border-white/10 animate-fade-in text-center
-                 ${statusType === 'error' ? 'bg-red-500/90' : statusType === 'success' ? 'bg-green-500/80' : 'bg-black/70'}
+                 backdrop-blur-md text-white py-2 px-6 rounded-full font-bold text-sm shadow-lg border border-white/10 animate-fade-in text-center flex items-center gap-2
+                 ${currentStatusType === 'error' ? 'bg-red-500/90' : 
+                   currentStatusType === 'success' ? 'bg-green-500/80' : 
+                   currentStatusType === 'warning' ? 'bg-orange-600/95 border-orange-400' : 
+                   'bg-black/70'}
                `}>
-                 {statusMsg}
+                 {currentStatusType === 'warning' && <AlertTriangle size={16} />}
+                 {currentStatusMsg}
                </div>
              )}
-             {detailedError && (
-                 <div className="bg-black/80 backdrop-blur-md text-red-200 text-xs py-2 px-4 rounded-lg border border-red-500/30 max-w-[85%] whitespace-pre-wrap text-center animate-fade-in">
-                     {detailedError}
+             {currentDetailMsg && (
+                 <div className={`
+                    backdrop-blur-md text-xs py-2 px-4 rounded-lg border max-w-[85%] whitespace-pre-wrap text-center animate-fade-in mt-1
+                    ${currentStatusType === 'warning' 
+                        ? 'bg-orange-900/80 text-orange-100 border-orange-500/50' 
+                        : 'bg-black/80 text-red-200 border-red-500/30'}
+                 `}>
+                     {currentDetailMsg}
                  </div>
              )}
           </div>
 
           {/* Guide Frame */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-72 h-24 border-2 border-primary/90 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10">
+            <div className={`w-72 h-24 border-2 rounded-lg relative shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-black/10 transition-colors duration-300 ${cooldown > 0 ? 'border-orange-500/50' : 'border-primary/90'}`}>
               <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-white/90 text-[10px] font-bold drop-shadow-md whitespace-nowrap bg-black/40 px-2 py-0.5 rounded">
                 品番を枠内に大きく写してください
               </div>
@@ -392,14 +432,18 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 bg-surface">
         <button
           onClick={handleCapture}
-          disabled={isProcessing || showCandidateDialog}
+          disabled={isProcessing || showCandidateDialog || cooldown > 0}
           className={`
-            relative w-24 h-24 rounded-full border-4 border-surface ring-4 ring-primary/20 flex items-center justify-center
+            relative w-24 h-24 rounded-full border-4 border-surface ring-4 flex items-center justify-center
             transition-all duration-200 shadow-2xl
-            ${isProcessing ? 'bg-gray-700 scale-95 opacity-80 cursor-not-allowed' : 'bg-primary hover:bg-primary/90 active:scale-90 active:bg-white'}
+            ${(isProcessing || cooldown > 0) ? 'bg-gray-700 ring-gray-600 scale-95 opacity-90 cursor-not-allowed' : 'bg-primary ring-primary/20 hover:bg-primary/90 active:scale-90 active:bg-white'}
           `}
         >
-          {isProcessing ? (
+          {cooldown > 0 ? (
+             <div className="flex flex-col items-center justify-center">
+                 <span className="text-2xl font-bold text-orange-500">{cooldown}</span>
+             </div>
+          ) : isProcessing ? (
              <svg className="animate-spin h-10 w-10 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -414,9 +458,11 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         </button>
 
         <div className="text-center space-y-1">
-            <h3 className="text-xl font-bold text-onSurface">Scan Label</h3>
+            <h3 className={`text-xl font-bold ${cooldown > 0 ? 'text-orange-500' : 'text-onSurface'}`}>
+                {cooldown > 0 ? 'Wait to Retry' : 'Scan Label'}
+            </h3>
             <p className="text-gray-400 text-sm">
-              {isProcessing ? 'AI Processing...' : 'Tap to Analyze'}
+              {cooldown > 0 ? `Please wait ${cooldown}s` : isProcessing ? 'AI Processing...' : 'Tap to Analyze'}
             </p>
         </div>
       </div>
