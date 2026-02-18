@@ -177,18 +177,6 @@ const Receipt: React.FC<ReceiptProps> = ({
         )}
       </div>
 
-      {/* Invoice/Estimation Bank Information */}
-      {(mode === 'INVOICE' || mode === 'ESTIMATION') && (
-        <div className="mb-6 p-4 border border-gray-300 rounded bg-gray-50 text-xs">
-            <p className="font-bold border-b border-gray-300 mb-2 pb-1 text-gray-700">お振込先</p>
-            <div className="space-y-1 font-medium text-gray-800">
-                <p>天草信用金庫　瀬戸橋支店</p>
-                <p>普通口座　００８８４７７</p>
-                <p>フクシマ カズヒコ</p>
-            </div>
-        </div>
-      )}
-
       {/* Footer: Store Info & Stamp */}
       <div className="mt-8 pt-4 border-t-2 border-gray-800 relative">
         <div className="text-xs leading-5">
@@ -210,6 +198,18 @@ const Receipt: React.FC<ReceiptProps> = ({
           </div>
         )}
       </div>
+
+      {/* Bank Information (Appears at bottom for all modes if present in settings) */}
+      {(settings.bankName) && (
+        <div className="mt-6 p-3 border-t border-dashed border-gray-300 text-xs">
+            <p className="font-bold mb-1">【お振込先】</p>
+            <div className="space-y-0.5 text-gray-800">
+                <p>{settings.bankName} {settings.branchName}</p>
+                <p>{settings.accountType} {settings.accountNumber}</p>
+                <p>{settings.accountHolder}</p>
+            </div>
+        </div>
+      )}
       
       <div className="text-center text-[10px] text-gray-400 mt-4">
         {mode === 'INVOICE' ? 'ご請求書を送付いたします。' : 

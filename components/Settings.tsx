@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StoreSettings } from '../types';
-import { X, Save, Store } from 'lucide-react';
+import { X, Save, Store, Landmark } from 'lucide-react';
 
 interface SettingsProps {
   isOpen: boolean;
@@ -16,7 +16,7 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
     setSettings(initialSettings);
   }, [initialSettings, isOpen]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     // Address length check (simplified for UI feedback, print logic handles truncation if needed)
     if ((name === 'address1' || name === 'address2') && value.length > 15) {
@@ -39,15 +39,19 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
         <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-surface rounded-t-2xl">
           <h2 className="text-xl font-bold flex items-center gap-2 text-primary">
             <Store size={24} />
-            店舗設定
+            店舗・口座設定
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400">
             <X size={24} />
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          {/* Store Info Section */}
           <div className="space-y-4">
+            <h3 className="text-sm font-bold text-secondary flex items-center gap-2 border-b border-gray-800 pb-2">
+                <Store size={16} /> 基本情報
+            </h3>
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-1">店舗名</label>
               <input
@@ -112,6 +116,67 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                 onChange={handleChange}
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
                 placeholder="T1234567890123"
+              />
+            </div>
+          </div>
+
+          {/* Bank Info Section */}
+          <div className="space-y-4">
+             <h3 className="text-sm font-bold text-secondary flex items-center gap-2 border-b border-gray-800 pb-2">
+                <Landmark size={16} /> 振込先口座
+            </h3>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">金融機関名</label>
+              <input
+                name="bankName"
+                value={settings.bankName || ''}
+                onChange={handleChange}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                placeholder="例: 天草信用金庫"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">支店名</label>
+              <input
+                name="branchName"
+                value={settings.branchName || ''}
+                onChange={handleChange}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                placeholder="例: 瀬戸橋支店"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-1">
+                     <label className="block text-xs font-bold text-gray-400 mb-1">預金種別</label>
+                     <select 
+                        name="accountType"
+                        value={settings.accountType || '普通'}
+                        onChange={handleChange}
+                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all appearance-none"
+                     >
+                         <option value="普通">普通</option>
+                         <option value="当座">当座</option>
+                     </select>
+                </div>
+                <div className="col-span-2">
+                     <label className="block text-xs font-bold text-gray-400 mb-1">口座番号</label>
+                     <input
+                        name="accountNumber"
+                        value={settings.accountNumber || ''}
+                        onChange={handleChange}
+                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                        placeholder="例: 1234567"
+                     />
+                </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">口座名義 (カナ)</label>
+              <input
+                name="accountHolder"
+                value={settings.accountHolder || ''}
+                onChange={handleChange}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                placeholder="例: フクシマ カズヒコ"
               />
             </div>
           </div>

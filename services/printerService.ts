@@ -365,18 +365,6 @@ export class PrinterService {
     }
     add([LF]);
 
-    // Invoice/Estimation Bank Info
-    if (mode === 'INVOICE' || mode === 'ESTIMATION') {
-        add(ALIGN_LEFT);
-        add(EMPHASIS_ON);
-        add(this.encode("[お振込先]\n"));
-        add(EMPHASIS_OFF);
-        add(this.encode("天草信用金庫 瀬戸橋支店\n"));
-        add(this.encode("普通口座 0088477\n"));
-        add(this.encode("フクシマ カズヒコ\n"));
-        add([LF]);
-    }
-    
     // Footer: Store Info from Settings
     add(ALIGN_CENTER);
     add(EMPHASIS_ON);
@@ -405,6 +393,20 @@ export class PrinterService {
     }
 
     add([LF]);
+    
+    // --- NEW BANK INFO LOGIC ---
+    if (settings.bankName) {
+        add(ALIGN_LEFT);
+        add(this.encode("--------------------------------\n"));
+        add(this.encode("【お振込先】\n"));
+        add(this.encode(`${settings.bankName} ${settings.branchName}\n`));
+        add(this.encode(`${settings.accountType} ${settings.accountNumber}\n`));
+        add(this.encode(`${settings.accountHolder}\n`));
+        add(this.encode("--------------------------------\n"));
+        add(ALIGN_CENTER);
+        add([LF]);
+    }
+
     if (mode === 'INVOICE') {
          add(this.encode("ご請求書を送付いたします。\n"));
     } else if (mode === 'ESTIMATION') {

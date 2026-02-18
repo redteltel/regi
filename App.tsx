@@ -17,7 +17,12 @@ const DEFAULT_SETTINGS: StoreSettings = {
   address1: "熊本県天草市旭町４３",
   address2: "",
   tel: "0969-24-0218",
-  registrationNum: "T6810624772686"
+  registrationNum: "T6810624772686",
+  bankName: "天草信用金庫",
+  branchName: "瀬戸橋支店",
+  accountType: "普通",
+  accountNumber: "0088477",
+  accountHolder: "フクシマ カズヒコ"
 };
 
 const App: React.FC = () => {
@@ -68,7 +73,9 @@ const App: React.FC = () => {
     const savedSettings = localStorage.getItem('pixelpos_store_settings');
     if (savedSettings) {
         try {
-            setStoreSettings(JSON.parse(savedSettings));
+            const parsed = JSON.parse(savedSettings);
+            // Merge with default to ensure new fields exist if loading old settings
+            setStoreSettings({ ...DEFAULT_SETTINGS, ...parsed });
         } catch (e) {
             console.error("Failed to load settings", e);
         }

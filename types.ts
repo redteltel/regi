@@ -36,6 +36,11 @@ export interface StoreSettings {
   address2: string;
   tel: string;
   registrationNum: string;
+  bankName: string;
+  branchName: string;
+  accountType: string;
+  accountNumber: string;
+  accountHolder: string;
 }
 
 // Web Bluetooth & Serial API Type Declarations
