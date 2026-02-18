@@ -29,6 +29,15 @@ export type ScannedResult = {
   confidence: number;
 };
 
+export interface StoreSettings {
+  storeName: string;
+  zipCode: string;
+  address1: string;
+  address2: string;
+  tel: string;
+  registrationNum: string;
+}
+
 // Web Bluetooth & Serial API Type Declarations
 declare global {
   interface Navigator {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CartItem } from '../types';
+import { CartItem, StoreSettings } from '../types';
 
 interface ReceiptProps {
   items: CartItem[];
@@ -12,6 +12,7 @@ interface ReceiptProps {
   paymentDeadline: string;
   discount?: number;
   logo?: string | null;
+  settings: StoreSettings;
 }
 
 const Receipt: React.FC<ReceiptProps> = ({ 
@@ -24,7 +25,8 @@ const Receipt: React.FC<ReceiptProps> = ({
   proviso,
   paymentDeadline,
   discount = 0,
-  logo = null
+  logo = null,
+  settings
 }) => {
   const needsStamp = mode === 'FORMAL' && total >= 50000;
   const [imgError, setImgError] = useState(false);
@@ -162,7 +164,8 @@ const Receipt: React.FC<ReceiptProps> = ({
           <span>{subTotal.toLocaleString()}円</span>
         </div>
         <div className="flex justify-between text-gray-600">
-          <span>(内消費税10%)</span>
+          {/* Changed label to Consumer Tax (10%) as per external tax logic */}
+          <span>消費税(10%)</span>
           <span>{tax.toLocaleString()}円</span>
         </div>
         
@@ -189,11 +192,12 @@ const Receipt: React.FC<ReceiptProps> = ({
       {/* Footer: Store Info & Stamp */}
       <div className="mt-8 pt-4 border-t-2 border-gray-800 relative">
         <div className="text-xs leading-5">
-            <p className="font-bold text-sm">パナランドヨシダ</p>
-            <p>〒863-0015</p>
-            <p>熊本県天草市旭町４３</p>
-            <p>電話: 0969-24-0218</p>
-            <p className="mt-1 font-mono">登録番号: T6810624772686</p>
+            <p className="font-bold text-sm">{settings.storeName}</p>
+            <p>〒{settings.zipCode}</p>
+            <p>{settings.address1}</p>
+            {settings.address2 && <p>{settings.address2}</p>}
+            <p>電話: {settings.tel}</p>
+            <p className="mt-1 font-mono">登録番号: {settings.registrationNum}</p>
         </div>
 
         {/* Revenue Stamp Box */}

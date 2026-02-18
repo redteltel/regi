@@ -1,19 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import Camera from './components/Camera';
 import Receipt from './components/Receipt';
-import { AppState, CartItem, Product, PrinterStatus } from './types';
+import Settings from './components/Settings'; // New Import
+import { AppState, CartItem, Product, PrinterStatus, StoreSettings } from './types';
 import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem } from './services/sheetService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { LOGO_URL } from './logoData';
+
+// Default Settings
+const DEFAULT_SETTINGS: StoreSettings = {
+  storeName: "パナランドヨシダ",
+  zipCode: "863-0015",
+  address1: "熊本県天草市旭町４３",
+  address2: "",
+  tel: "0969-24-0218",
+  registrationNum: "T6810624772686"
+};
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
+  // Settings State
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
+  const [showSettings, setShowSettings] = useState(false);
+
   // Discount & Cash State
   const [discount, setDiscount] = useState<string>('');
   const [cashReceived, setCashReceived] = useState<string>('');
@@ -49,6 +64,16 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    // Load Settings from LocalStorage
+    const savedSettings = localStorage.getItem('pixelpos_store_settings');
+    if (savedSettings) {
+        try {
+            setStoreSettings(JSON.parse(savedSettings));
+        } catch (e) {
+            console.error("Failed to load settings", e);
+        }
+    }
+
     // Ensure no debug logs appear in UI
     printerService.setOnDisconnect(() => {
       console.log("App detected printer disconnect");
@@ -63,6 +88,11 @@ const App: React.FC = () => {
     loadServiceItems();
   }, []);
 
+  const handleSaveSettings = (newSettings: StoreSettings) => {
+      setStoreSettings(newSettings);
+      localStorage.setItem('pixelpos_store_settings', JSON.stringify(newSettings));
+  };
+
   // Update proviso default when entering preview
   useEffect(() => {
     if (appState === AppState.PREVIEW && !proviso) {
@@ -72,30 +102,25 @@ const App: React.FC = () => {
     }
   }, [appState, cart.length]);
 
-  // --- Calculation Logic (Revised for Discount) ---
-  // 1. Calculate Items Total (Tax Exclusive Sum)
+  // --- REVISED Calculation Logic (Tax Exclusive / 外税) ---
+  // Formula: floor(subtotal * 0.10), Total = subtotal + tax
+
+  // 1. Calculate Items Total (Sum of Price * Quantity)
   const itemsTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
-  // 2. Calculate Initial Tax-Included Total
-  // (Assuming item prices are tax-exclusive base prices, standard tax is 10%)
-  const initialTotalWithTax = Math.floor(itemsTotal * 1.10);
-
-  // 3. Apply Discount
+  // 2. Discount (Applied to the subtotal before tax calculation typically, or after? 
+  // Standard Japanese practice varies, but usually: (Subtotal - Discount) * TaxRate.
+  // We will assume discount reduces the taxable base.
   const discountVal = parseInt(discount || '0', 10);
-  // Ensure total doesn't go negative
-  const finalTotalWithTax = Math.max(0, initialTotalWithTax - discountVal);
+  
+  // 3. Subtotal (Taxable Base)
+  const subTotal = Math.max(0, itemsTotal - discountVal);
 
-  // 4. Back-calculate New Base Price (Excl. Tax) from the Final Total
-  // Formula: FinalTotal / 1.1 (floored)
-  const newBasePrice = Math.floor(finalTotalWithTax / 1.10);
+  // 4. Tax (10% floor)
+  const tax = Math.floor(subTotal * 0.10);
 
-  // 5. Calculate New Tax
-  const newTax = finalTotalWithTax - newBasePrice;
-
-  // Assignments for UI
-  const subTotal = newBasePrice; // Displayed Subtotal reflects the back-calculated base
-  const tax = newTax;
-  const totalAmount = finalTotalWithTax;
+  // 5. Total Amount
+  const totalAmount = subTotal + tax;
 
   // Auto-sync cashReceived with totalAmount
   useEffect(() => {
@@ -178,34 +203,26 @@ const App: React.FC = () => {
     }));
   };
 
-  // Update item NAME instead of Part Number
   const updateItemName = (index: number, newName: string) => {
     setCart(prev => {
         const newCart = [...prev];
         const item = newCart[index];
-        // Only update name, keep existing ID/PartNumber
         newCart[index] = { ...item, name: newName };
         return newCart;
     });
   };
 
-  // Add Service Item Logic
   const handleAddServiceItem = (item: Product) => {
       handleProductFound(item);
       setShowServiceModal(false);
   };
   
-  // Handle proceeding to checkout: Log unknown items
   const handleProceedToCheckout = () => {
-      // 1. Identify items that are unknown.
-      // Use item.id (which is the scanned partNumber) to check against cache.
       const unknownItems = cart.filter(item => 
           !item.id.startsWith('SVC-') && !isProductKnown(item.id)
       );
 
-      // 2. If unknown items exist, prompt the user
       if (unknownItems.length > 0) {
-          // Create a readable list for the prompt
           const examples = unknownItems.slice(0, 3).map(i => i.partNumber).join(', ');
           const more = unknownItems.length > 3 ? '...' : '';
           
@@ -217,12 +234,10 @@ const App: React.FC = () => {
           );
 
           if (confirmRegister) {
-              // Send logs for each unknown item using the current (possibly edited) details
               unknownItems.forEach(item => logUnknownItem(item));
           }
       }
 
-      // 3. Always proceed to checkout
       setAppState(AppState.PREVIEW);
   };
 
@@ -250,7 +265,6 @@ const App: React.FC = () => {
     if (navigator.vibrate) navigator.vibrate(50);
 
     try {
-      // Use the new Shift-JIS specific receipt generation in PrinterService
       await printerService.printReceipt(
         cart,
         subTotal,
@@ -260,8 +274,9 @@ const App: React.FC = () => {
         recipientName,
         proviso,
         paymentDeadline,
-        discountVal, // Pass discount
-        LOGO_URL     // Pass Logo URL
+        discountVal, 
+        LOGO_URL,
+        storeSettings // Pass Settings
       );
 
       if (navigator.vibrate) navigator.vibrate([100]);
@@ -331,7 +346,6 @@ const App: React.FC = () => {
                       now.getMinutes().toString().padStart(2, '0') +
                       now.getSeconds().toString().padStart(2, '0');
       
-      // Map for filename
       let typeStr = 'Receipt';
       if (receiptMode === 'FORMAL') typeStr = 'FormalReceipt';
       else if (receiptMode === 'INVOICE') typeStr = 'Invoice';
@@ -353,7 +367,7 @@ const App: React.FC = () => {
         try {
             await navigator.share({
               files: [file],
-              title: `パナランドヨシダ ${titleMap[receiptMode]}`,
+              title: `${storeSettings.storeName} ${titleMap[receiptMode]}`,
               text: `${titleMap[receiptMode]} (${dateStr}) を送信します。`,
             });
         } catch (shareError: any) {
@@ -444,7 +458,6 @@ const App: React.FC = () => {
 
             <div className="flex justify-between items-end mb-4">
                 <h2 className="text-2xl font-bold text-primary">Cart ({cart.length})</h2>
-                {/* Floating style or header button */}
                 <button 
                   onClick={() => setShowServiceModal(true)}
                   className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-secondary text-xs rounded-full flex items-center gap-1.5 transition-colors border border-gray-700"
@@ -480,10 +493,8 @@ const App: React.FC = () => {
                   cart.map((item, index) => (
                     <div key={index} className="bg-[#1E2025] p-4 rounded-xl flex items-center justify-between shadow-sm">
                       <div className="flex-1">
-                        {/* Part Number (Static, ID) - Reverted to text display */}
                         <div className="text-sm font-mono text-secondary mb-1">{item.partNumber}</div>
                         
-                        {/* Product Name (Editable) - Changed to Input */}
                         <div className="mb-2">
                             <input
                               type="text"
@@ -529,22 +540,10 @@ const App: React.FC = () => {
                     <span>Items Total</span>
                     <span>¥{itemsTotal.toLocaleString()}</span>
                   </div>
-                  <div className="border-t border-gray-800 my-2"></div>
-                   <div className="flex justify-between items-center text-sm mb-2 text-gray-300 font-medium">
-                    <span>Subtotal</span>
-                    <span>¥{subTotal.toLocaleString()}</span>
-                  </div>
+                  
+                  {/* Discount Input */}
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
-                    <span>Tax (10%)</span>
-                    <span>¥{tax.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-700">
-                    <span>Total</span>
-                    <span className="text-primary">¥{totalAmount.toLocaleString()}</span>
-                  </div>
-                  {/* Discount Input below Total */}
-                  <div className="flex justify-between items-center text-sm pt-2 mt-2 border-t border-gray-800/50">
-                     <span className="text-gray-400">値引 (Discount)</span>
+                     <span>Discount (値引)</span>
                      <div className="relative">
                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-red-400 text-xs">▲</span>
                          <input 
@@ -557,6 +556,21 @@ const App: React.FC = () => {
                          />
                      </div>
                   </div>
+
+                  <div className="border-t border-gray-800 my-2"></div>
+                   <div className="flex justify-between items-center text-sm mb-2 text-gray-300 font-medium">
+                    <span>Subtotal (Taxable)</span>
+                    <span>¥{subTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Tax (10%)</span>
+                    <span>¥{tax.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-700">
+                    <span>Total</span>
+                    <span className="text-primary">¥{totalAmount.toLocaleString()}</span>
+                  </div>
+
                   {/* Cash Received Input */}
                   <div className="flex justify-between items-center text-sm pt-2 mt-2 border-t border-gray-800/50">
                      <span className="text-gray-400">預かり (Cash)</span>
@@ -621,7 +635,7 @@ const App: React.FC = () => {
             
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-4 pb-32">
-               {/* Mode Switcher - ESTIMATION restored at left */}
+               {/* Mode Switcher */}
                <div className="flex bg-gray-200 p-1 rounded-lg mb-4">
                   <button
                     onClick={() => setReceiptMode('ESTIMATION')}
@@ -711,7 +725,8 @@ const App: React.FC = () => {
                  proviso={proviso}
                  paymentDeadline={paymentDeadline}
                  discount={discountVal}
-                 logo={LOGO_URL} // Pass Logo URL
+                 logo={LOGO_URL} 
+                 settings={storeSettings} // Pass Settings
                />
                
                <div className="text-center text-gray-400 text-xs mt-4">
@@ -794,21 +809,37 @@ const App: React.FC = () => {
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-surface text-onSurface overflow-hidden">
+      {/* Settings Modal */}
+      <Settings 
+         isOpen={showSettings} 
+         onClose={() => setShowSettings(false)} 
+         onSave={handleSaveSettings}
+         initialSettings={storeSettings}
+      />
+
       {appState !== AppState.PREVIEW && (
         <div className="flex justify-between items-center p-4 bg-surface/80 backdrop-blur-md z-10 shrink-0">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             PixelPOS
           </h1>
-          <button 
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
-              printerStatus.isConnected 
-                ? 'bg-green-500/10 border-green-500/50 text-green-300' 
-                : 'bg-gray-800 border-gray-700 text-gray-400'
-            }`}
-          >
-            {printerStatus.type === 'USB' ? <Cable size={12} /> : <Bluetooth size={12} />}
-            {printerStatus.isConnected ? 'Ready' : 'No Printer'}
-          </button>
+          <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowSettings(true)}
+                className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
+              >
+                  <SettingsIcon size={18} />
+              </button>
+              <button 
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
+                  printerStatus.isConnected 
+                    ? 'bg-green-500/10 border-green-500/50 text-green-300' 
+                    : 'bg-gray-800 border-gray-700 text-gray-400'
+                }`}
+              >
+                {printerStatus.type === 'USB' ? <Cable size={12} /> : <Bluetooth size={12} />}
+                {printerStatus.isConnected ? 'Ready' : 'No Printer'}
+              </button>
+          </div>
         </div>
       )}
 

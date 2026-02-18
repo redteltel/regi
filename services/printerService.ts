@@ -1,4 +1,4 @@
-import { CartItem } from '../types';
+import { CartItem, StoreSettings } from '../types';
 import Encoding from 'encoding-japanese';
 
 // ESC/POS Commands
@@ -218,7 +218,8 @@ export class PrinterService {
       proviso: string = '',
       paymentDeadline: string = '',
       discount: number = 0,
-      logoUrl: string | null = null
+      logoUrl: string | null = null,
+      settings: StoreSettings
   ) {
     this.log("Generating Receipt (Shift_JIS)...");
     
@@ -320,14 +321,11 @@ export class PrinterService {
     for (const item of items) {
         add(this.encode(`${item.name}\n`));
         
-        // --- NEW: PART NUMBER PRINT ---
+        // Part Number Print
         if (item.partNumber) {
-            // Indent slightly to indicate it belongs to the item above
             add(this.encode(`  (品番: ${item.partNumber})\n`));
         }
-        // -----------------------------
 
-        // Use "円" suffix
         const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
         const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
         
@@ -354,7 +352,8 @@ export class PrinterService {
     }
     
     add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
-    add(this.encode(`(内消費税10%): ${tax.toLocaleString()}円\n`));
+    // Updated Tax Label to be consistent with external tax calculation
+    add(this.encode(`消費税(10%): ${tax.toLocaleString()}円\n`));
     
     if (mode === 'RECEIPT') {
         add([LF]);
@@ -378,14 +377,17 @@ export class PrinterService {
         add([LF]);
     }
     
-    // Footer: Store Info
+    // Footer: Store Info from Settings
     add(ALIGN_CENTER);
     add(EMPHASIS_ON);
-    add(this.encode("パナランドヨシダ\n"));
+    add(this.encode(`${settings.storeName}\n`));
     add(EMPHASIS_OFF);
-    add(this.encode("〒863-0015\n熊本県天草市旭町43\n"));
-    add(this.encode("電話: 0969-24-0218\n"));
-    add(this.encode("登録番号: T6810624772686\n"));
+    add(this.encode(`〒${settings.zipCode}\n${settings.address1}\n`));
+    if (settings.address2) {
+        add(this.encode(`${settings.address2}\n`));
+    }
+    add(this.encode(`電話: ${settings.tel}\n`));
+    add(this.encode(`登録番号: ${settings.registrationNum}\n`));
     
     if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
         add(ALIGN_RIGHT);
