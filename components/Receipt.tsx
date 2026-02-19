@@ -152,22 +152,27 @@ const Receipt: React.FC<ReceiptProps> = ({
 
       {/* Totals */}
       <div className="border-t border-dashed border-gray-400 pt-3 mb-6 space-y-1">
-        {discount > 0 && (
-          <div className="flex justify-between text-gray-600">
-             <span>値引</span>
-             <span>- {discount.toLocaleString()}円</span>
-          </div>
-        )}
-        
         <div className="flex justify-between text-gray-600">
           <span>小計</span>
           <span>{subTotal.toLocaleString()}円</span>
         </div>
         <div className="flex justify-between text-gray-600">
-          {/* Changed label to Consumer Tax (10%) as per external tax logic */}
           <span>消費税(10%)</span>
           <span>{tax.toLocaleString()}円</span>
         </div>
+
+        {discount > 0 && (
+          <>
+            <div className="flex justify-between text-gray-600 border-t border-dashed border-gray-300 pt-1 mt-1">
+               <span>合計 (値引前)</span>
+               <span>{(subTotal + tax).toLocaleString()}円</span>
+            </div>
+            <div className="flex justify-between text-red-600">
+               <span>値引</span>
+               <span>- {discount.toLocaleString()}円</span>
+            </div>
+          </>
+        )}
         
         {mode === 'RECEIPT' && (
           <div className="flex justify-between text-xl font-bold border-t border-gray-200 pt-2 mt-2">

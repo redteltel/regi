@@ -346,14 +346,14 @@ export class PrinterService {
     // Total Breakdown
     add(ALIGN_RIGHT);
     
-    // Discount Line
+    add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
+    add(this.encode(`消費税(10%): ${tax.toLocaleString()}円\n`));
+
     if (discount > 0) {
+        const initialTotal = subTotal + tax;
+        add(this.encode(`合計(値引前): ${initialTotal.toLocaleString()}円\n`));
         add(this.encode(`値引: - ${discount.toLocaleString()}円\n`));
     }
-    
-    add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
-    // Updated Tax Label to be consistent with external tax calculation
-    add(this.encode(`消費税(10%): ${tax.toLocaleString()}円\n`));
     
     if (mode === 'RECEIPT') {
         add([LF]);

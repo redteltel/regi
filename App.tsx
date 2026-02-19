@@ -111,24 +111,23 @@ const App: React.FC = () => {
   }, [appState, cart.length]);
 
   // --- REVISED Calculation Logic (Tax Exclusive / 外税) ---
-  // Formula: floor(subtotal * 0.10), Total = subtotal + tax
+  // Formula: floor(subtotal * 0.10), Total = subtotal + tax - discount
 
-  // 1. Calculate Items Total (Sum of Price * Quantity)
+  // 1. Items Total (Taxable Base)
   const itemsTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const subTotal = itemsTotal; // Alias for clarity
 
-  // 2. Discount (Applied to the subtotal before tax calculation typically, or after? 
-  // Standard Japanese practice varies, but usually: (Subtotal - Discount) * TaxRate.
-  // We will assume discount reduces the taxable base.
-  const discountVal = parseInt(discount || '0', 10);
-  
-  // 3. Subtotal (Taxable Base)
-  const subTotal = Math.max(0, itemsTotal - discountVal);
-
-  // 4. Tax (10% floor)
+  // 2. Tax (10% floor)
   const tax = Math.floor(subTotal * 0.10);
 
-  // 5. Total Amount
-  const totalAmount = subTotal + tax;
+  // 3. Initial Total (Before Discount)
+  const initialTotal = subTotal + tax;
+
+  // 4. Discount
+  const discountVal = parseInt(discount || '0', 10);
+
+  // 5. Final Total
+  const totalAmount = Math.max(0, initialTotal - discountVal);
 
   // Auto-sync cashReceived with totalAmount
   useEffect(() => {
@@ -464,27 +463,25 @@ const App: React.FC = () => {
                 
                 <div className="mt-8 bg-surface p-4 rounded-xl border border-gray-800">
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
-                    <span>Items Total</span>
+                    <span>Items Total (Subtotal)</span>
                     <span>¥{itemsTotal.toLocaleString()}</span>
                   </div>
                   
-                  <div className="border-t border-gray-800 my-2"></div>
-                   <div className="flex justify-between items-center text-sm mb-2 text-gray-300 font-medium">
-                    <span>Subtotal (Taxable)</span>
-                    <span>¥{subTotal.toLocaleString()}</span>
-                  </div>
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
                     <span>Tax (10%)</span>
                     <span>¥{tax.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-700">
-                    <span>Total</span>
-                    <span className="text-primary">¥{totalAmount.toLocaleString()}</span>
+
+                  <div className="border-t border-gray-800 my-2"></div>
+
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-300 font-medium">
+                    <span>Total (Before Discount)</span>
+                    <span>¥{initialTotal.toLocaleString()}</span>
                   </div>
 
-                  {/* Discount Input - Moved Below Total */}
-                  <div className="flex justify-between items-center text-sm pt-2 mt-2 border-t border-gray-800/50">
-                     <span>Discount (値引)</span>
+                  {/* Discount Input */}
+                  <div className="flex justify-between items-center text-sm mb-2">
+                     <span className="text-gray-400">Discount (値引)</span>
                      <div className="relative">
                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-red-400 text-xs">▲</span>
                          <input 
@@ -496,6 +493,11 @@ const App: React.FC = () => {
                             className="w-24 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-red-400 font-mono focus:border-red-500 focus:outline-none transition-all placeholder-gray-600"
                          />
                      </div>
+                  </div>
+
+                  <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-700">
+                    <span>Final Total</span>
+                    <span className="text-primary">¥{totalAmount.toLocaleString()}</span>
                   </div>
 
                   {/* Cash Received Input */}
