@@ -420,7 +420,7 @@ const App: React.FC = () => {
             
             <div className="space-y-4">
                 {cart.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-800 rounded-xl bg-surface/50">
+                  <div className={`flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-800 rounded-xl ${isDemoMode ? 'bg-teal-900/50' : 'bg-surface/50'}`}>
                     <ShoppingCart className="w-10 h-10 mb-3 opacity-40 text-gray-500" />
                     <p className="text-sm font-medium text-gray-400">商品がありません (No items)</p>
                     <div className="flex gap-2 mt-4">
@@ -486,7 +486,7 @@ const App: React.FC = () => {
                   ))
                 )}
                 
-                <div className="mt-8 bg-surface p-4 rounded-xl border border-gray-800">
+                <div className={`mt-8 p-4 rounded-xl border border-gray-800 ${isDemoMode ? 'bg-teal-900' : 'bg-surface'}`}>
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
                     <span>Items Total (Subtotal)</span>
                     <span>¥{itemsTotal.toLocaleString()}</span>
@@ -747,7 +747,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-[100dvh] w-screen flex flex-col bg-surface text-onSurface overflow-hidden">
+    <div className={`h-[100dvh] w-screen flex flex-col ${isDemoMode ? 'bg-teal-950' : 'bg-surface'} text-onSurface overflow-hidden transition-colors duration-500`}>
       {/* Settings Modal */}
       <Settings 
          isOpen={showSettings} 
@@ -768,10 +768,20 @@ const App: React.FC = () => {
       />
 
       {appState !== AppState.PREVIEW && (
-        <div className="flex justify-between items-center p-4 bg-surface/80 backdrop-blur-md z-10 shrink-0">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            PixelPOS
-          </h1>
+        <div className={`flex justify-between items-center p-4 ${isDemoMode ? 'bg-teal-900/80' : 'bg-surface/80'} backdrop-blur-md z-10 shrink-0 transition-colors duration-500`}>
+          <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                    PixelPOS
+                  </h1>
+                  {isDemoMode && (
+                      <span className="px-2 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded shadow-sm animate-pulse">
+                          DEMO MODE
+                      </span>
+                  )}
+              </div>
+              {isDemoMode && <span className="text-[10px] text-gray-400">非売品 / 試用版</span>}
+          </div>
           <div className="flex items-center gap-2">
               <button 
                 onClick={() => setShowSettings(true)}
@@ -798,7 +808,7 @@ const App: React.FC = () => {
       </div>
 
       {appState !== AppState.PREVIEW && (
-        <div className="bg-surface border-t border-gray-800 flex items-center justify-around px-6 pt-4 pb-28 shrink-0 z-20">
+        <div className={`border-t border-gray-800 flex items-center justify-around px-6 pt-4 pb-28 shrink-0 z-20 ${isDemoMode ? 'bg-teal-950' : 'bg-surface'}`}>
           <button 
             onClick={() => setAppState(AppState.SCANNING)}
             className={`flex flex-col items-center gap-1 p-2 transition-colors ${appState === AppState.SCANNING ? 'text-primary' : 'text-gray-500'}`}
