@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { StoreSettings } from '../types';
-import { X, Save, Store, Landmark, FileSpreadsheet } from 'lucide-react';
+import { X, Save, Store, Landmark, FileSpreadsheet, Edit2 } from 'lucide-react';
 
 interface SettingsProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (settings: StoreSettings) => void;
   initialSettings: StoreSettings;
+  onOpenMasterEditor: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSettings }) => {
+const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSettings, onOpenMasterEditor }) => {
   const [settings, setSettings] = useState<StoreSettings>(initialSettings);
 
   useEffect(() => {
@@ -125,6 +126,15 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
              <h3 className="text-sm font-bold text-secondary flex items-center gap-2 border-b border-gray-800 pb-2">
                 <FileSpreadsheet size={16} /> データソース設定
             </h3>
+            
+            <button 
+                onClick={onOpenMasterEditor}
+                className="w-full bg-gray-800 border border-gray-700 text-secondary py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors mb-4"
+            >
+                <Edit2 size={18} />
+                マスターデータを編集
+            </button>
+
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-1">スプレッドシートID</label>
               <input

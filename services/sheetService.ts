@@ -351,6 +351,7 @@ export const logUnknownItem = async (item: CartItem) => {
     if (!GAS_LOG_ENDPOINT) return;
     try {
         const payload = {
+            action: 'LOG',
             sheetName: "品番参照", 
             id: item.partNumber, 
             name: item.name,     
@@ -366,4 +367,44 @@ export const logUnknownItem = async (item: CartItem) => {
         });
         console.log(`Logged unknown item: ${item.partNumber}`);
     } catch (e) { console.error(e); }
+};
+
+interface UpdateItemPayload {
+    spreadsheetId: string;
+    sheetName: string;
+    id: string;
+    name: string;
+    price: number;
+    action: 'UPDATE';
+}
+
+export const updateSheetItem = async (payload: UpdateItemPayload) => {
+    if (!GAS_LOG_ENDPOINT) throw new Error("GAS Endpoint not configured");
+    
+    // Optimistic update for local cache
+    const newItem: Product = {
+        id: payload.id,
+        partNumber: payload.id,
+        name: payload.name,
+        price: payload.price
+    };
+    
+    // Update memory cache immediately
+    const existingIdx = memoryCache.findIndex(p => p.id === payload.id);
+    if (existingIdx >= 0) {
+        memoryCache[existingIdx] = { ...newItem, _norm: normalize(newItem.partNumber) };
+    } else {
+        memoryCache.push({ ...newItem, _norm: normalize(newItem.partNumber) });
+    }
+    
+    // Send to GAS
+    // Note: 'no-cors' mode means we can't read the response, but it allows the request to go through.
+    // For a real app, we'd want CORS enabled on GAS side, but that's complex to setup for users.
+    // We assume success if no network error.
+    await fetch(GAS_LOG_ENDPOINT, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+    });
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import Settings from './components/Settings'; // New Import
+import MasterEditor from './components/MasterEditor';
 import { AppState, CartItem, Product, PrinterStatus, StoreSettings } from './types';
 import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache } from './services/sheetService';
@@ -39,6 +40,7 @@ const App: React.FC = () => {
   // Settings State
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
+  const [showMasterEditor, setShowMasterEditor] = useState(false);
 
   // Discount & Cash State
   const [discount, setDiscount] = useState<string>('');
@@ -744,6 +746,16 @@ const App: React.FC = () => {
          onClose={() => setShowSettings(false)} 
          onSave={handleSaveSettings}
          initialSettings={storeSettings}
+         onOpenMasterEditor={() => {
+             setShowSettings(false);
+             setShowMasterEditor(true);
+         }}
+      />
+
+      <MasterEditor 
+        isOpen={showMasterEditor}
+        onClose={() => setShowMasterEditor(false)}
+        settings={storeSettings}
       />
 
       {appState !== AppState.PREVIEW && (
