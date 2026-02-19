@@ -6,8 +6,6 @@ import { AppState, CartItem, Product, PrinterStatus, StoreSettings } from './typ
 import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem } from './services/sheetService';
 import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 import { LOGO_URL } from './logoData';
 
 // Default Settings
@@ -313,89 +311,8 @@ const App: React.FC = () => {
     }
   };
 
-  // PDF Export via Web Share API
-  const handleSharePDF = async () => {
-    if (isProcessing) return;
+  // PDF Export removed to fix build errors
 
-    const element = document.getElementById('receipt-preview');
-    if (!element) {
-      alert("プレビューの取得に失敗しました。");
-      return;
-    }
-
-    setIsProcessing(true);
-    if (navigator.vibrate) navigator.vibrate(50);
-
-    try {
-      const canvas = await html2canvas(element, { 
-        scale: 2, 
-        useCORS: true, 
-        logging: false, 
-        backgroundColor: '#ffffff'
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      
-      // @ts-ignore
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-      });
-
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      
-      const now = new Date();
-      const dateStr = now.getFullYear() +
-                      (now.getMonth() + 1).toString().padStart(2, '0') +
-                      now.getDate().toString().padStart(2, '0') + '_' +
-                      now.getHours().toString().padStart(2, '0') +
-                      now.getMinutes().toString().padStart(2, '0') +
-                      now.getSeconds().toString().padStart(2, '0');
-      
-      let typeStr = 'Receipt';
-      if (receiptMode === 'FORMAL') typeStr = 'FormalReceipt';
-      else if (receiptMode === 'INVOICE') typeStr = 'Invoice';
-      else if (receiptMode === 'ESTIMATION') typeStr = 'Estimation';
-
-      const filename = `${typeStr}_Panaland_${dateStr}.pdf`;
-      
-      const titleMap = {
-          'RECEIPT': 'レシート',
-          'FORMAL': '領収書',
-          'INVOICE': '請求書',
-          'ESTIMATION': '見積書'
-      };
-
-      const blob = pdf.output('blob');
-      const file = new File([blob], filename, { type: 'application/pdf' });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-            await navigator.share({
-              files: [file],
-              title: `${storeSettings.storeName} ${titleMap[receiptMode]}`,
-              text: `${titleMap[receiptMode]} (${dateStr}) を送信します。`,
-            });
-        } catch (shareError: any) {
-            if (shareError.name !== 'AbortError') {
-                pdf.save(filename);
-            }
-        }
-      } else {
-        pdf.save(filename);
-      }
-      
-    } catch (e: any) {
-      console.error("PDF Export failed:", e);
-      alert(`PDF作成に失敗しました: ${e.message}`);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   const renderContent = () => {
     switch (appState) {
@@ -551,22 +468,6 @@ const App: React.FC = () => {
                     <span>¥{itemsTotal.toLocaleString()}</span>
                   </div>
                   
-                  {/* Discount Input */}
-                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
-                     <span>Discount (値引)</span>
-                     <div className="relative">
-                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-red-400 text-xs">▲</span>
-                         <input 
-                            type="number"
-                            inputMode="numeric"
-                            value={discount}
-                            onChange={e => setDiscount(e.target.value)}
-                            placeholder="0"
-                            className="w-24 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-red-400 font-mono focus:border-red-500 focus:outline-none transition-all placeholder-gray-600"
-                         />
-                     </div>
-                  </div>
-
                   <div className="border-t border-gray-800 my-2"></div>
                    <div className="flex justify-between items-center text-sm mb-2 text-gray-300 font-medium">
                     <span>Subtotal (Taxable)</span>
@@ -579,6 +480,22 @@ const App: React.FC = () => {
                   <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-700">
                     <span>Total</span>
                     <span className="text-primary">¥{totalAmount.toLocaleString()}</span>
+                  </div>
+
+                  {/* Discount Input - Moved Below Total */}
+                  <div className="flex justify-between items-center text-sm pt-2 mt-2 border-t border-gray-800/50">
+                     <span>Discount (値引)</span>
+                     <div className="relative">
+                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-red-400 text-xs">▲</span>
+                         <input 
+                            type="number"
+                            inputMode="numeric"
+                            value={discount}
+                            onChange={e => setDiscount(e.target.value)}
+                            placeholder="0"
+                            className="w-24 bg-surface border border-gray-700 rounded-lg py-1 pl-6 pr-2 text-right text-red-400 font-mono focus:border-red-500 focus:outline-none transition-all placeholder-gray-600"
+                         />
+                     </div>
                   </div>
 
                   {/* Cash Received Input */}
@@ -787,23 +704,8 @@ const App: React.FC = () => {
 
               <div className="flex gap-3">
                   <button 
-                    onClick={handleSharePDF}
-                    disabled={isProcessing}
-                    className={`flex-1 bg-gray-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
-                      isProcessing ? 'opacity-70 cursor-wait' : ''
-                    }`}
-                  >
-                    {isProcessing ? (
-                        <Loader2 className="animate-spin" size={20} />
-                    ) : (
-                        <Share size={20} />
-                    )}
-                    {isProcessing ? '生成中' : 'PDF共有'}
-                  </button>
-
-                  <button 
                     onClick={handlePrint}
-                    className={`flex-[2] py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
+                    className={`flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
                       !printerStatus.isConnected ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-blue-600 text-white'
                     }`}
                   >
