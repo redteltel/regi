@@ -4,7 +4,7 @@ import Receipt from './components/Receipt';
 import Settings from './components/Settings'; // New Import
 import { AppState, CartItem, Product, PrinterStatus, StoreSettings } from './types';
 import { printerService } from './services/printerService';
-import { fetchServiceItems, isProductKnown, logUnknownItem } from './services/sheetService';
+import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache } from './services/sheetService';
 import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { LOGO_URL } from './logoData';
 
@@ -20,7 +20,11 @@ const DEFAULT_SETTINGS: StoreSettings = {
   branchName: "瀬戸橋支店",
   accountType: "普通",
   accountNumber: "0088477",
-  accountHolder: "フクシマ カズヒコ"
+  accountHolder: "フクシマ カズヒコ",
+  // Spreadsheet Defaults
+  spreadsheetId: "1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k",
+  spreadsheetName: "DATA",
+  sheetName: "品番参照"
 };
 
 // Unique key for this specific app deployment to ensure isolation from other apps on same domain
@@ -97,8 +101,17 @@ const App: React.FC = () => {
   }, []);
 
   const handleSaveSettings = (newSettings: StoreSettings) => {
+      // Check if spreadsheet settings changed
+      const prevId = storeSettings.spreadsheetId;
+      const prevSheet = storeSettings.sheetName;
+      
       setStoreSettings(newSettings);
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
+
+      if (prevId !== newSettings.spreadsheetId || prevSheet !== newSettings.sheetName) {
+          clearCache();
+          loadServiceItems(); // Reload service items from new sheet
+      }
   };
 
   // Update proviso default when entering preview

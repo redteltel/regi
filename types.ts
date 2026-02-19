@@ -41,6 +41,10 @@ export interface StoreSettings {
   accountType: string;
   accountNumber: string;
   accountHolder: string;
+  // Spreadsheet Settings
+  spreadsheetId: string;
+  spreadsheetName: string; // Just for display/memo
+  sheetName: string; // For Product DB
 }
 
 // Web Bluetooth & Serial API Type Declarations

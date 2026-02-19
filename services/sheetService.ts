@@ -1,24 +1,44 @@
-import { Product, CartItem } from '../types';
+import { Product, CartItem, StoreSettings } from '../types';
 
-// The Google Sheet ID provided by the user
-const SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
+// Default constants (Fallback)
+const DEFAULT_SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
+const DEFAULT_SHEET_NAME = '品番参照';
+const SHEET_NAME_SERVICE = 'ServiceItems';
 
-// BASE_URL: Used for the main product database (Scan). Defaults to the first sheet.
-const BASE_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
-
-// GVIZ_URL: Used for specific sheets like 'ServiceItems'.
-const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
+// Settings Key (Must match App.tsx)
+const SETTINGS_STORAGE_KEY = 'pixelpos_regi_store_settings';
 
 // GAS Web App URL for logging unknown items
 const GAS_LOG_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyu5qtOa8jxSGPkQigUI5ppm2a14nca6EK9IzYXBnvcuUD8gyv7hrd7LXes6pli8N1B/exec';
-
-const SHEET_NAME_SERVICE = 'ServiceItems';
 
 // Use a unique key for the "regi" app to prevent conflict with other apps on same domain
 const CACHE_KEY = 'pixelpos_regi_product_db';
 const TIMESTAMP_KEY = 'pixelpos_regi_db_timestamp';
 
-const CACHE_TTL = 1000 * 60 * 60; // Increased to 1 hour since we want stability
+const CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
+// Helper to get current settings
+const getSettings = (): { spreadsheetId: string, sheetName: string } => {
+    try {
+        const json = localStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (json) {
+            const settings = JSON.parse(json) as StoreSettings;
+            return {
+                spreadsheetId: settings.spreadsheetId || DEFAULT_SPREADSHEET_ID,
+                sheetName: settings.sheetName || DEFAULT_SHEET_NAME
+            };
+        }
+    } catch (e) {
+        console.error("Failed to load settings for sheet service", e);
+    }
+    return { spreadsheetId: DEFAULT_SPREADSHEET_ID, sheetName: DEFAULT_SHEET_NAME };
+};
+
+// Helper to construct GVIZ URL
+const getGvizUrl = (spreadsheetId: string, sheetName: string) => {
+    const encodedSheet = encodeURIComponent(sheetName);
+    return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodedSheet}`;
+};
 
 // Extended Product type for internal optimization
 interface CachedProduct extends Product {
@@ -157,6 +177,13 @@ const loadFromLocal = () => {
 // Initialize
 loadFromLocal();
 
+export const clearCache = () => {
+    console.log("Clearing product database cache...");
+    memoryCache = [];
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(TIMESTAMP_KEY);
+};
+
 const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
   const now = Date.now();
   const lastFetch = parseInt(localStorage.getItem(TIMESTAMP_KEY) || '0', 10);
@@ -165,10 +192,12 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
     return memoryCache;
   }
 
-  console.log("Fetching new database from Google Sheets...");
+  const { spreadsheetId, sheetName } = getSettings();
+  console.log(`Fetching DB from Sheet: ${sheetName} (ID: ${spreadsheetId.slice(0,5)}...)`);
+
   try {
-    const urlWithTimestamp = `${BASE_URL}&t=${now}`;
-    const res = await fetchWithRetry(urlWithTimestamp, {}, 1, 15000); // 15s timeout for DB fetch
+    const url = getGvizUrl(spreadsheetId, sheetName) + `&t=${now}`;
+    const res = await fetchWithRetry(url, {}, 1, 15000); // 15s timeout for DB fetch
     const text = await res.text();
 
     if (text.trim().startsWith('<!DOCTYPE html>') || text.includes('<html')) {
@@ -213,11 +242,12 @@ export const preloadDatabase = async () => {
 };
 
 export const fetchServiceItems = async (): Promise<Product[]> => {
-  // Service Items Fetching Logic (unchanged)
   try {
       const now = Date.now();
-      const encodedSheetName = encodeURIComponent(SHEET_NAME_SERVICE);
-      const url = `${GVIZ_URL}&sheet=${encodedSheetName}&t=${now}`;
+      const { spreadsheetId } = getSettings();
+      // Service Items always come from 'ServiceItems' sheet in the same spreadsheet
+      const url = getGvizUrl(spreadsheetId, SHEET_NAME_SERVICE) + `&t=${now}`;
+      
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
       const rows = parseCSV(text);

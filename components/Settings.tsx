@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StoreSettings } from '../types';
-import { X, Save, Store, Landmark } from 'lucide-react';
+import { X, Save, Store, Landmark, FileSpreadsheet } from 'lucide-react';
 
 interface SettingsProps {
   isOpen: boolean;
@@ -117,6 +117,46 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
                 placeholder="T1234567890123"
               />
+            </div>
+          </div>
+
+          {/* Spreadsheet Info Section */}
+          <div className="space-y-4">
+             <h3 className="text-sm font-bold text-secondary flex items-center gap-2 border-b border-gray-800 pb-2">
+                <FileSpreadsheet size={16} /> データソース設定
+            </h3>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">スプレッドシートID</label>
+              <input
+                name="spreadsheetId"
+                value={settings.spreadsheetId || ''}
+                onChange={handleChange}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white font-mono text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all break-all"
+                placeholder="1abc...xyz"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">※URLの /d/ と /edit の間の文字列</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-1">
+                    <label className="block text-xs font-bold text-gray-400 mb-1">ブック名 (表示用)</label>
+                    <input
+                        name="spreadsheetName"
+                        value={settings.spreadsheetName || ''}
+                        onChange={handleChange}
+                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                        placeholder="DATA"
+                    />
+                </div>
+                <div className="col-span-1">
+                     <label className="block text-xs font-bold text-gray-400 mb-1">シート名 (タブ名)</label>
+                    <input
+                        name="sheetName"
+                        value={settings.sheetName || ''}
+                        onChange={handleChange}
+                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                        placeholder="品番参照"
+                    />
+                </div>
             </div>
           </div>
 
