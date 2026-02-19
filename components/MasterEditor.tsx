@@ -117,9 +117,9 @@ const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, settings, 
   if (!isOpen) return null;
 
   return (
-    <div className={`fixed inset-0 z-[70] ${isDemoMode ? 'bg-teal-950' : 'bg-surface'} text-onSurface flex flex-col animate-in slide-in-from-bottom duration-200`}>
+    <div className={`fixed inset-0 z-[70] ${isDemoMode ? 'bg-demoSurface' : 'bg-surface'} text-onSurface flex flex-col animate-in slide-in-from-bottom duration-200`}>
       {/* Header */}
-      <div className={`p-4 border-b border-gray-800 flex justify-between items-center ${isDemoMode ? 'bg-teal-900' : 'bg-surface'} shrink-0`}>
+      <div className={`p-4 border-b border-gray-800 flex justify-between items-center ${isDemoMode ? 'bg-demoSurface' : 'bg-surface'} shrink-0`}>
         <h2 className="text-xl font-bold flex items-center gap-2 text-primary">
           <Edit2 size={24} />
           マスターデータ編集
