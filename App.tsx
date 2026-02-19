@@ -32,6 +32,9 @@ const DEFAULT_SETTINGS: StoreSettings = {
 // Unique key for this specific app deployment to ensure isolation from other apps on same domain
 const SETTINGS_STORAGE_KEY = 'pixelpos_regi_store_settings';
 
+// Demo Mode Detection
+const isDemoMode = window.location.pathname.includes('/demo-regi/');
+
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -267,6 +270,11 @@ const App: React.FC = () => {
 
   // Printing Logic - Text Mode with Shift-JIS (via printerService)
   const handlePrint = async () => {
+    if (isDemoMode) {
+        alert("デモ版のため印刷機能は制限されています");
+        return;
+    }
+
     if (cart.length === 0) return;
     
     let isReady = printerStatus.isConnected && printerService.isConnected();
@@ -756,6 +764,7 @@ const App: React.FC = () => {
         isOpen={showMasterEditor}
         onClose={() => setShowMasterEditor(false)}
         settings={storeSettings}
+        isDemoMode={isDemoMode}
       />
 
       {appState !== AppState.PREVIEW && (

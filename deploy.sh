@@ -5,7 +5,7 @@
 # ==========================================
 
 # 設定
-APP_DIR="/var/www/regi"
+APP_DIR=$(pwd)
 REPO_URL="https://github.com/redteltel/regi.git"
 USER="redteltel"
 GROUP="redteltel"
@@ -37,7 +37,7 @@ if [ -d "$APP_DIR/.git" ]; then
     echo "⬇️  Pulling latest code..."
     cd $APP_DIR
     git reset --hard
-    git pull origin main
+    git pull
 else
     echo "🧹 Cleaning directory and cloning fresh..."
     sudo rm -rf $APP_DIR

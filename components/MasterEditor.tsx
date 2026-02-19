@@ -7,11 +7,12 @@ interface MasterEditorProps {
   isOpen: boolean;
   onClose: () => void;
   settings: StoreSettings;
+  isDemoMode?: boolean;
 }
 
 type Tab = 'PRODUCT' | 'SERVICE';
 
-const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, settings }) => {
+const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, settings, isDemoMode = false }) => {
   const [activeTab, setActiveTab] = useState<Tab>('PRODUCT');
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Product[]>([]);
@@ -79,6 +80,11 @@ const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, settings }
   };
 
   const handleSave = async () => {
+      if (isDemoMode) {
+          alert("デモ版ではデータの保存はできません");
+          return;
+      }
+
       if (!editForm.id || !editForm.name) {
           alert("品番と品名は必須です");
           return;
@@ -270,8 +276,11 @@ const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, settings }
                   
                   <div className="text-[10px] text-gray-500 text-center bg-gray-900/50 p-2 rounded border border-gray-800">
                       <AlertCircle size={12} className="inline mr-1" />
-                      変更はGoogleスプレッドシートに直接反映されます。<br/>
-                      GASのデプロイが必要です。
+                      {isDemoMode ? (
+                          <span className="text-orange-400">デモモード: データの保存は無効化されています。</span>
+                      ) : (
+                          <>変更はGoogleスプレッドシートに直接反映されます。<br/>GASのデプロイが必要です。</>
+                      )}
                   </div>
               </div>
           </div>
