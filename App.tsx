@@ -748,6 +748,13 @@ const App: React.FC = () => {
 
   return (
     <div className={`h-[100dvh] w-screen flex flex-col ${isDemoMode ? 'bg-demoSurface' : 'bg-surface'} text-onSurface overflow-hidden transition-colors duration-500`}>
+      {/* Demo Mode Badge */}
+      {isDemoMode && (
+        <div className="fixed top-0 right-0 z-[100] bg-red-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-lg pointer-events-none">
+          DEMO MODE
+        </div>
+      )}
+
       {/* Settings Modal */}
       <Settings 
          isOpen={showSettings} 
@@ -774,13 +781,7 @@ const App: React.FC = () => {
                   <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
                     PixelPOS
                   </h1>
-                  {isDemoMode && (
-                      <span className="px-2 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded shadow-sm animate-pulse">
-                          DEMO MODE
-                      </span>
-                  )}
               </div>
-              {isDemoMode && <span className="text-[10px] text-gray-400">非売品 / 試用版</span>}
           </div>
           <div className="flex items-center gap-2">
               <button 
