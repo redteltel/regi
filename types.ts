@@ -45,6 +45,7 @@ export interface StoreSettings {
   spreadsheetId: string;
   spreadsheetName: string; // Just for display/memo
   sheetName: string; // For Product DB
+  serviceSheetName: string; // For Service Items
 }
 
 // Web Bluetooth & Serial API Type Declarations

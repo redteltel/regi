@@ -3,7 +3,7 @@ import { Product, CartItem, StoreSettings } from '../types';
 // Default constants (Fallback)
 const DEFAULT_SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
 const DEFAULT_SHEET_NAME = '品番参照';
-const SHEET_NAME_SERVICE = 'ServiceItems';
+const DEFAULT_SERVICE_SHEET_NAME = 'ServiceItems';
 
 // Settings Key (Must match App.tsx)
 const SETTINGS_STORAGE_KEY = 'pixelpos_regi_store_settings';
@@ -18,20 +18,25 @@ const TIMESTAMP_KEY = 'pixelpos_regi_db_timestamp';
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
 // Helper to get current settings
-const getSettings = (): { spreadsheetId: string, sheetName: string } => {
+const getSettings = (): { spreadsheetId: string, sheetName: string, serviceSheetName: string } => {
     try {
         const json = localStorage.getItem(SETTINGS_STORAGE_KEY);
         if (json) {
             const settings = JSON.parse(json) as StoreSettings;
             return {
                 spreadsheetId: settings.spreadsheetId || DEFAULT_SPREADSHEET_ID,
-                sheetName: settings.sheetName || DEFAULT_SHEET_NAME
+                sheetName: settings.sheetName || DEFAULT_SHEET_NAME,
+                serviceSheetName: settings.serviceSheetName || DEFAULT_SERVICE_SHEET_NAME
             };
         }
     } catch (e) {
         console.error("Failed to load settings for sheet service", e);
     }
-    return { spreadsheetId: DEFAULT_SPREADSHEET_ID, sheetName: DEFAULT_SHEET_NAME };
+    return { 
+        spreadsheetId: DEFAULT_SPREADSHEET_ID, 
+        sheetName: DEFAULT_SHEET_NAME,
+        serviceSheetName: DEFAULT_SERVICE_SHEET_NAME
+    };
 };
 
 // Helper to construct GVIZ URL
@@ -244,9 +249,9 @@ export const preloadDatabase = async () => {
 export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
-      const { spreadsheetId } = getSettings();
+      const { spreadsheetId, serviceSheetName } = getSettings();
       // Service Items always come from 'ServiceItems' sheet in the same spreadsheet
-      const url = getGvizUrl(spreadsheetId, SHEET_NAME_SERVICE) + `&t=${now}`;
+      const url = getGvizUrl(spreadsheetId, serviceSheetName) + `&t=${now}`;
       
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();

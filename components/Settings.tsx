@@ -148,13 +148,23 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                     />
                 </div>
                 <div className="col-span-1">
-                     <label className="block text-xs font-bold text-gray-400 mb-1">シート名 (タブ名)</label>
+                     <label className="block text-xs font-bold text-gray-400 mb-1">シート名 (品番参照)</label>
                     <input
                         name="sheetName"
                         value={settings.sheetName || ''}
                         onChange={handleChange}
                         className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
                         placeholder="品番参照"
+                    />
+                </div>
+                <div className="col-span-1">
+                     <label className="block text-xs font-bold text-gray-400 mb-1">シート名 (サービス)</label>
+                    <input
+                        name="serviceSheetName"
+                        value={settings.serviceSheetName || ''}
+                        onChange={handleChange}
+                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                        placeholder="ServiceItems"
                     />
                 </div>
             </div>

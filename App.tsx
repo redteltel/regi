@@ -24,7 +24,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
   // Spreadsheet Defaults
   spreadsheetId: "1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k",
   spreadsheetName: "DATA",
-  sheetName: "品番参照"
+  sheetName: "品番参照",
+  serviceSheetName: "ServiceItems"
 };
 
 // Unique key for this specific app deployment to ensure isolation from other apps on same domain
@@ -104,11 +105,12 @@ const App: React.FC = () => {
       // Check if spreadsheet settings changed
       const prevId = storeSettings.spreadsheetId;
       const prevSheet = storeSettings.sheetName;
+      const prevServiceSheet = storeSettings.serviceSheetName;
       
       setStoreSettings(newSettings);
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
 
-      if (prevId !== newSettings.spreadsheetId || prevSheet !== newSettings.sheetName) {
+      if (prevId !== newSettings.spreadsheetId || prevSheet !== newSettings.sheetName || prevServiceSheet !== newSettings.serviceSheetName) {
           clearCache();
           loadServiceItems(); // Reload service items from new sheet
       }
