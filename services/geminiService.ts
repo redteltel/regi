@@ -18,8 +18,8 @@ const cleanJsonString = (text: string): string => {
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const extractPartNumber = async (base64Image: string): Promise<ScannedResult | null> => {
-  // Retrieve API Key: Prioritize Vite env var, fallback to process.env shim
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
+  // Retrieve API Key: Prioritize Vite env var
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
     console.error("Gemini API Key is missing. Please check .env file.");
