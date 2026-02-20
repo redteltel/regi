@@ -774,6 +774,7 @@ const App: React.FC = () => {
              setShowSettings(false);
              setShowMasterEditor(true);
          }}
+         isDemoMode={isDemoMode}
       />
 
       <MasterEditor 

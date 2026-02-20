@@ -8,9 +8,10 @@ interface SettingsProps {
   onSave: (settings: StoreSettings) => void;
   initialSettings: StoreSettings;
   onOpenMasterEditor: () => void;
+  isDemoMode?: boolean;
 }
 
-const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSettings, onOpenMasterEditor }) => {
+const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSettings, onOpenMasterEditor, isDemoMode = false }) => {
   const [settings, setSettings] = useState<StoreSettings>(initialSettings);
 
   useEffect(() => {
@@ -36,8 +37,8 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
 
   return (
     <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-surface text-onSurface w-full max-w-md rounded-2xl shadow-2xl border border-gray-800 flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-surface rounded-t-2xl">
+      <div className={`w-full max-w-md rounded-2xl shadow-2xl border border-gray-800 flex flex-col max-h-[90vh] ${isDemoMode ? 'bg-[#0a192f] text-onSurface' : 'bg-[#111318] text-onSurface'}`}>
+        <div className={`p-4 border-b border-gray-800 flex justify-between items-center rounded-t-2xl ${isDemoMode ? 'bg-[#0a192f]' : 'bg-[#111318]'}`}>
           <h2 className="text-xl font-bold flex items-center gap-2 text-primary">
             <Store size={24} />
             店舗・口座設定
@@ -136,12 +137,13 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
             </button>
 
             <div>
-              <label className="block text-xs font-bold text-gray-400 mb-1">スプレッドシートID</label>
+              <label className="block text-xs font-bold text-gray-400 mb-1">スプレッドシートID {isDemoMode && <span className="text-red-400 text-[10px]">(デモ版は変更不可)</span>}</label>
               <input
                 name="spreadsheetId"
                 value={settings.spreadsheetId || ''}
                 onChange={handleChange}
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white font-mono text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all break-all"
+                disabled={isDemoMode}
+                className={`w-full border border-gray-700 rounded-lg p-3 text-white font-mono text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all break-all ${isDemoMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-900'}`}
                 placeholder="1abc...xyz"
               />
               <p className="text-[10px] text-gray-500 mt-1">※URLの /d/ と /edit の間の文字列</p>
@@ -153,7 +155,8 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                         name="spreadsheetName"
                         value={settings.spreadsheetName || ''}
                         onChange={handleChange}
-                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                        disabled={isDemoMode}
+                        className={`w-full border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all ${isDemoMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-900'}`}
                         placeholder="DATA"
                     />
                 </div>
@@ -163,7 +166,8 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                         name="sheetName"
                         value={settings.sheetName || ''}
                         onChange={handleChange}
-                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                        disabled={isDemoMode}
+                        className={`w-full border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all ${isDemoMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-900'}`}
                         placeholder="品番参照"
                     />
                 </div>
@@ -173,7 +177,8 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                         name="serviceSheetName"
                         value={settings.serviceSheetName || ''}
                         onChange={handleChange}
-                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                        disabled={isDemoMode}
+                        className={`w-full border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all ${isDemoMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-900'}`}
                         placeholder="ServiceItems"
                     />
                 </div>
@@ -242,7 +247,7 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-800 bg-surface rounded-b-2xl">
+        <div className={`p-4 border-t border-gray-800 rounded-b-2xl ${isDemoMode ? 'bg-[#0a192f]' : 'bg-[#111318]'}`}>
             <button 
                 onClick={handleSave}
                 className="w-full bg-primary text-onPrimary py-3 rounded-xl font-bold text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 hover:bg-primary/90"
