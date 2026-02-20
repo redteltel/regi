@@ -37,6 +37,15 @@ const isDemoMode = window.location.pathname.includes('/demo-regi/');
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
+
+  // Update body background color based on mode
+  useEffect(() => {
+    if (isDemoMode) {
+      document.body.style.backgroundColor = '#0a192f';
+    } else {
+      document.body.style.backgroundColor = '#111318';
+    }
+  }, []);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -420,7 +429,7 @@ const App: React.FC = () => {
             
             <div className="space-y-4">
                 {cart.length === 0 ? (
-                  <div className={`flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-800 rounded-xl ${isDemoMode ? 'bg-demoSurface/50' : 'bg-surface/50'}`}>
+                  <div className={`flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-800 rounded-xl ${isDemoMode ? 'bg-[#0a192f]/50' : 'bg-[#111318]/50'}`}>
                     <ShoppingCart className="w-10 h-10 mb-3 opacity-40 text-gray-500" />
                     <p className="text-sm font-medium text-gray-400">商品がありません (No items)</p>
                     <div className="flex gap-2 mt-4">
@@ -486,7 +495,7 @@ const App: React.FC = () => {
                   ))
                 )}
                 
-                <div className={`mt-8 p-4 rounded-xl border border-gray-800 ${isDemoMode ? 'bg-demoSurface' : 'bg-surface'}`}>
+                <div className={`mt-8 p-4 rounded-xl border border-gray-800 ${isDemoMode ? 'bg-[#0a192f]' : 'bg-[#111318]'}`}>
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
                     <span>Items Total (Subtotal)</span>
                     <span>¥{itemsTotal.toLocaleString()}</span>
@@ -747,7 +756,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`h-[100dvh] w-screen flex flex-col ${isDemoMode ? 'bg-demoSurface' : 'bg-surface'} text-onSurface overflow-hidden transition-colors duration-500`}>
+    <div className={`h-[100dvh] w-screen flex flex-col ${isDemoMode ? 'bg-[#0a192f]' : 'bg-[#111318]'} text-onSurface overflow-hidden transition-colors duration-500`}>
       {/* Demo Mode Badge */}
       {isDemoMode && (
         <div className="fixed top-0 right-0 z-[100] bg-red-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-lg pointer-events-none">
@@ -775,7 +784,7 @@ const App: React.FC = () => {
       />
 
       {appState !== AppState.PREVIEW && (
-        <div className={`flex justify-between items-center p-4 ${isDemoMode ? 'bg-demoSurface/80' : 'bg-surface/80'} backdrop-blur-md z-10 shrink-0 transition-colors duration-500`}>
+        <div className={`flex justify-between items-center p-4 ${isDemoMode ? 'bg-[#0a192f]/90' : 'bg-[#111318]/90'} backdrop-blur-md z-10 shrink-0 transition-colors duration-500`}>
           <div className="flex flex-col">
               <div className="flex items-center gap-2">
                   <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
