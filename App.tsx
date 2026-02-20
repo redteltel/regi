@@ -30,10 +30,25 @@ const DEFAULT_SETTINGS: StoreSettings = {
 };
 
 // Unique key for this specific app deployment to ensure isolation from other apps on same domain
-const SETTINGS_STORAGE_KEY = 'pixelpos_regi_store_settings';
+// Separate keys for Production and Demo environments
+const SETTINGS_STORAGE_KEY = window.location.pathname.includes('/demo-regi/') 
+  ? 'pixelpos_config_demo' 
+  : 'pixelpos_config_prod';
 
 // Demo Mode Detection
 const isDemoMode = window.location.pathname.includes('/demo-regi/');
+
+// Demo Specific Defaults
+const DEMO_DEFAULT_SETTINGS: StoreSettings = {
+  ...DEFAULT_SETTINGS,
+  storeName: "デモ店舗 (パナランド)",
+  spreadsheetId: "11ROHRTwszS3amhW0m-6n1UM8QmMNsgmK9bcDtTfOS14",
+  spreadsheetName: "デモデータ",
+  sheetName: "品番参照",
+  serviceSheetName: "ServiceItems"
+};
+
+const CURRENT_DEFAULT_SETTINGS = isDemoMode ? DEMO_DEFAULT_SETTINGS : DEFAULT_SETTINGS;
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SCANNING);
@@ -50,7 +65,7 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   
   // Settings State
-  const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(CURRENT_DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
   const [showMasterEditor, setShowMasterEditor] = useState(false);
 
@@ -95,7 +110,7 @@ const App: React.FC = () => {
         try {
             const parsed = JSON.parse(savedSettings);
             // Merge with default to ensure new fields exist if loading old settings
-            setStoreSettings({ ...DEFAULT_SETTINGS, ...parsed });
+            setStoreSettings({ ...CURRENT_DEFAULT_SETTINGS, ...parsed });
         } catch (e) {
             console.error("Failed to load settings", e);
         }
