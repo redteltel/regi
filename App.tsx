@@ -155,23 +155,23 @@ const App: React.FC = () => {
   }, [appState, cart.length]);
 
   // --- REVISED Calculation Logic (Tax Exclusive / 外税) ---
-  // Formula: floor(subtotal * 0.10), Total = subtotal + tax - discount
+  // Formula: Tax = floor((subtotal - discount) * 0.10), Total = (subtotal - discount) + tax
 
   // 1. Items Total (Taxable Base)
   const itemsTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const subTotal = itemsTotal; // Alias for clarity
 
-  // 2. Tax (10% floor)
-  const tax = Math.floor(subTotal * 0.10);
-
-  // 3. Initial Total (Before Discount)
-  const initialTotal = subTotal + tax;
-
-  // 4. Discount
+  // 2. Discount
   const discountVal = parseInt(discount || '0', 10);
 
+  // 3. Taxable Amount (Subtotal - Discount)
+  const taxableAmount = Math.max(0, subTotal - discountVal);
+
+  // 4. Tax (10% floor of Taxable Amount)
+  const tax = Math.floor(taxableAmount * 0.10);
+
   // 5. Final Total
-  const totalAmount = Math.max(0, initialTotal - discountVal);
+  const totalAmount = taxableAmount + tax;
 
   // Auto-sync cashReceived with totalAmount
   useEffect(() => {
@@ -515,18 +515,6 @@ const App: React.FC = () => {
                     <span>Items Total (Subtotal)</span>
                     <span>¥{itemsTotal.toLocaleString()}</span>
                   </div>
-                  
-                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
-                    <span>Tax (10%)</span>
-                    <span>¥{tax.toLocaleString()}</span>
-                  </div>
-
-                  <div className="border-t border-gray-800 my-2"></div>
-
-                  <div className="flex justify-between items-center text-sm mb-2 text-gray-300 font-medium">
-                    <span>Total (Before Discount)</span>
-                    <span>¥{initialTotal.toLocaleString()}</span>
-                  </div>
 
                   {/* Discount Input */}
                   <div className="flex justify-between items-center text-sm mb-2">
@@ -543,6 +531,13 @@ const App: React.FC = () => {
                          />
                      </div>
                   </div>
+                  
+                  <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
+                    <span>Tax (10%)</span>
+                    <span>¥{tax.toLocaleString()}</span>
+                  </div>
+
+                  <div className="border-t border-gray-800 my-2"></div>
 
                   <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-700">
                     <span>Final Total</span>
@@ -754,6 +749,14 @@ const App: React.FC = () => {
               )}
 
               <div className="flex gap-3">
+                  <button 
+                    onClick={() => window.print()}
+                    className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-700 text-white"
+                  >
+                    <Share size={20} />
+                    PDF/共有
+                  </button>
+
                   <button 
                     onClick={handlePrint}
                     className={`flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${

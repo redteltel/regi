@@ -347,13 +347,12 @@ export class PrinterService {
     add(ALIGN_RIGHT);
     
     add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
-    add(this.encode(`消費税(10%): ${tax.toLocaleString()}円\n`));
 
     if (discount > 0) {
-        const initialTotal = subTotal + tax;
-        add(this.encode(`合計(値引前): ${initialTotal.toLocaleString()}円\n`));
         add(this.encode(`値引: - ${discount.toLocaleString()}円\n`));
     }
+
+    add(this.encode(`消費税(10%): ${tax.toLocaleString()}円\n`));
     
     if (mode === 'RECEIPT') {
         add([LF]);
