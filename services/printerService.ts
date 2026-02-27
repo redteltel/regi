@@ -52,7 +52,7 @@ export class PrinterService {
 
           // Construct RawBT Intent URL
           // scheme: rawbt:base64,
-          const intentUrl = `rawbt:${base64}`;
+          const intentUrl = `rawbt:base64,${base64}`;
           
           // Open Intent
           window.location.href = intentUrl;
@@ -413,6 +413,8 @@ export class PrinterService {
     };
 
     // --- 1. Print Original ---
+    // Logo printing disabled for lightweight transmission
+    /*
     if (logoUrl) {
         try {
             this.log("Processing logo image from: " + logoUrl);
@@ -424,13 +426,18 @@ export class PrinterService {
             console.warn("Logo print failed:", e);
         }
     }
+    */
     generateOneReceipt(false);
 
-    // Cut Paper (Partial Cut if supported, or just feed)
-    add([LF, LF]);
+    // Feed between receipts
+    add([LF, LF, LF]);
 
     // --- 2. Print Copy ---
     generateOneReceipt(true);
+
+    // Final Feed and Cut
+    add([LF, LF, LF]);
+    add([0x1D, 0x56, 0x42, 0x00]); // GS V B 0 (Cut)
 
     // Send to Printer
     await this.print(new Uint8Array(cmds), settings.printerType);
