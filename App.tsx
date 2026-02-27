@@ -6,7 +6,7 @@ import MasterEditor from './components/MasterEditor';
 import { AppState, CartItem, Product, PrinterStatus, StoreSettings } from './types';
 import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache } from './services/sheetService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { LOGO_URL } from './logoData';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -797,29 +797,19 @@ const App: React.FC = () => {
 
             {/* Footer */}
             <div className="w-full shrink-0 bg-white p-4 pb-10 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-30 sticky bottom-0">
-              {!printerStatus.isConnected ? (
+              {!printerStatus.isConnected && storeSettings.printerType === 'BLUETOOTH' && (
                 <div className="flex flex-col gap-2 mb-3">
                     <button 
                       onClick={handleConnectBluetooth}
                       className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]"
                     >
                       <Bluetooth size={20} />
-                      Bluetooth接続
-                    </button>
-                    <div className="flex items-center gap-2 text-xs text-gray-400 justify-center">
-                        <span className="h-px w-12 bg-gray-300"></span>
-                        OR
-                        <span className="h-px w-12 bg-gray-300"></span>
-                    </div>
-                    <button 
-                      onClick={handleConnectUsb}
-                      className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]"
-                    >
-                      <Cable size={20} />
-                      USB接続
+                      Bluetooth接続 (MP-B20)
                     </button>
                 </div>
-              ) : (
+              )}
+              
+              {printerStatus.isConnected && (
                 <div 
                   className="w-full bg-green-50 border border-green-200 text-green-700 py-2 rounded-xl font-medium flex items-center justify-center gap-2 mb-3 cursor-pointer text-sm"
                   onClick={() => {
@@ -829,7 +819,7 @@ const App: React.FC = () => {
                      }
                   }}
                 >
-                  {printerStatus.type === 'USB' ? <Cable size={16} /> : <Bluetooth size={16} />}
+                  <Bluetooth size={16} />
                   Connected to {printerStatus.name}
                 </div>
               )}
@@ -845,9 +835,7 @@ const App: React.FC = () => {
 
                   <button 
                     onClick={handlePrint}
-                    className={`flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${
-                      !printerStatus.isConnected ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-blue-600 text-white'
-                    }`}
+                    className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
                   >
                     <Printer size={20} />
                     印刷
@@ -911,7 +899,7 @@ const App: React.FC = () => {
                     : 'bg-gray-800 border-gray-700 text-gray-400'
                 }`}
               >
-                {printerStatus.type === 'USB' ? <Cable size={12} /> : <Bluetooth size={12} />}
+                <Bluetooth size={12} />
                 {printerStatus.isConnected ? 'Ready' : 'No Printer'}
               </button>
           </div>
