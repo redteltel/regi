@@ -1,4 +1,4 @@
-import { CartItem, StoreSettings } from '../types';
+import { CartItem, StoreSettings, PrinterType } from '../types';
 import Encoding from 'encoding-japanese';
 
 // ESC/POS Commands
@@ -21,101 +21,99 @@ const KANJI_MODE_ON = [FS, 0x26]; // FS & - Select Kanji character mode
 const JIS_CODE_SYSTEM = [FS, 0x43, 0x01]; // FS C 1 - Select Shift-JIS code system
 const COUNTRY_JAPAN = [ESC, 0x52, 0x08]; // ESC R 8 - Select international character set (Japan)
 
+// MP-B20 UUIDs
+const SERVICE_UUID = '000018f0-0000-1000-8000-00805f9b34fb';
+const CHAR_UUID = '00002af1-0000-1000-8000-00805f9b34fb';
+
 export class PrinterService {
   public onLog: ((msg: string) => void) | null = null;
   public onDisconnect: (() => void) | null = null;
-  private buffer: number[] = [];
-  private timer: any = null;
+  
+  private device: BluetoothDevice | null = null;
+  private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
 
   setLogger(logger: (msg: string) => void) { this.onLog = logger; }
   setOnDisconnect(callback: () => void) { this.onDisconnect = callback; }
   log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
-  async connect(): Promise<any> {
-    return new Promise((resolve) => {
-      this.buffer = [];
-      this.log("SUCCESS: RawBT Link Ready!");
-      const mockDevice = {
-        name: "MP-B20 (RawBT)",
-        id: "rawbt-intent",
-        gatt: {
-          connected: true,
-          connect: async () => mockDevice.gatt,
-          disconnect: () => { 
-            this.log("Disconnected.");
-            if (this.onDisconnect) this.onDisconnect(); 
-          }
-        }
-      };
-      resolve(mockDevice);
-    });
+  // --- Bluetooth (MP-B20) ---
+  async connectBluetooth(): Promise<BluetoothDevice> {
+    this.log("Requesting Bluetooth Device...");
+    try {
+        const device = await navigator.bluetooth.requestDevice({
+            filters: [{ namePrefix: 'MP-B20' }],
+            optionalServices: [SERVICE_UUID]
+        });
+
+        this.log("Connecting to GATT Server...");
+        const server = await device.gatt?.connect();
+        if (!server) throw new Error("GATT Server not found");
+
+        this.log("Getting Service...");
+        const service = await server.getPrimaryService(SERVICE_UUID);
+
+        this.log("Getting Characteristic...");
+        this.characteristic = await service.getCharacteristic(CHAR_UUID);
+        this.device = device;
+
+        device.addEventListener('gattserverdisconnected', this.handleDisconnect.bind(this));
+        
+        this.log("Bluetooth Connected!");
+        return device;
+    } catch (error: any) {
+        this.log("Connection failed: " + error.message);
+        throw error;
+    }
   }
 
-  async connectBluetooth(): Promise<any> {
-    this.log("Initializing RawBT Link (BT Mode)...");
-    return this.connect();
-  }
-
-  async connectUsb(): Promise<string> {
-    this.log("Initializing RawBT Link (USB Mode)...");
-    await this.connect();
-    return "MP-B20 (RawBT)";
+  private handleDisconnect() {
+      this.log("Bluetooth Disconnected.");
+      this.device = null;
+      this.characteristic = null;
+      if (this.onDisconnect) this.onDisconnect();
   }
 
   disconnect() {
-    this.log("Disconnected.");
-    if (this.onDisconnect) this.onDisconnect();
+    if (this.device && this.device.gatt?.connected) {
+        this.device.gatt.disconnect();
+    }
   }
 
   isConnected(): boolean {
-    return true;
+    return !!(this.device && this.device.gatt?.connected && this.characteristic);
   }
 
-  async restoreBluetoothConnection(): Promise<boolean> {
-    return true;
-  }
-
-  async print(data: any) {
-    let bytes: Uint8Array;
-    if (data instanceof Uint8Array) {
-      bytes = data;
-    } else if (data && data.buffer) {
-      bytes = new Uint8Array(data.buffer);
-    } else if (Array.isArray(data)) {
-      bytes = new Uint8Array(data);
-    } else {
-      bytes = new TextEncoder().encode(String(data));
-    }
-    
-    for(let i=0; i<bytes.length; i++) {
-       this.buffer.push(bytes[i]);
-    }
-    this.log("Buffering data... " + this.buffer.length + " bytes");
-    
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => {
-      this.flush();
-    }, 1500);
-  }
-
-  flush() {
-    if (this.buffer.length === 0) return;
-    this.log("Finalizing receipt for RawBT...");
-    try {
-      let binary = '';
-      for (let i = 0; i < this.buffer.length; i++) {
-        binary += String.fromCharCode(this.buffer[i]);
+  // --- Printing Logic ---
+  async print(data: Uint8Array, type: PrinterType) {
+      if (type === 'BLUETOOTH') {
+          if (!this.characteristic) throw new Error("Bluetooth not connected");
+          
+          // Write in chunks (max 512 bytes usually safe for BLE, but MP-B20 might handle more/less)
+          const CHUNK_SIZE = 100; 
+          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+              const chunk = data.slice(i, i + CHUNK_SIZE);
+              await this.characteristic.writeValue(chunk);
+          }
+      } else if (type === 'SUNMI') {
+          if (window.SunmiInnerPrinter) {
+              // Convert to Base64
+              let binary = '';
+              const len = data.byteLength;
+              for (let i = 0; i < len; i++) {
+                  binary += String.fromCharCode(data[i]);
+              }
+              const base64 = btoa(binary);
+              
+              try {
+                  window.SunmiInnerPrinter.sendRAWData(base64);
+              } catch (e) {
+                  console.error("Sunmi print error:", e);
+                  throw new Error("Sunmi print failed. Check interface.");
+              }
+          } else {
+              throw new Error("Sunmi Printer interface not found.");
+          }
       }
-      const base64data = btoa(binary);
-      // RawBT Intent: Pass raw base64 data. 
-      const intentUrl = "intent:base64," + base64data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
-      
-      this.buffer = [];
-      window.location.href = intentUrl;
-      this.log("SUCCESS: Receipt sent via RawBT!");
-    } catch (e: any) {
-      this.log("Print Error: " + e.message);
-    }
   }
 
   private encode(text: string): number[] {
@@ -219,7 +217,9 @@ export class PrinterService {
       paymentDeadline: string = '',
       discount: number = 0,
       logoUrl: string | null = null,
-      settings: StoreSettings
+      settings: StoreSettings,
+      finalTax?: number,
+      storeMemo?: string
   ) {
     this.log("Generating Receipt (Shift_JIS)...");
     
@@ -234,9 +234,204 @@ export class PrinterService {
     add(KANJI_MODE_ON); // FS & (Enable Kanji)
     add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
     
-    add(ALIGN_CENTER);
+    // --- Helper Function to Generate One Receipt ---
+    const generateOneReceipt = (isCopy: boolean) => {
+        add(ALIGN_CENTER);
 
-    // Print Logo if provided
+        // Print Logo if provided (Only on Original or both? Let's do both for consistency)
+        if (logoUrl) {
+            // Note: Re-using image commands might be tricky if not cached, 
+            // but convertImageToEscPos is async. 
+            // For simplicity, we skip logo on copy or re-process it?
+            // Let's skip logo on copy to save paper/time, or just text title.
+            // Or better, we can't easily await inside this sync helper if we structure it this way.
+            // So we will handle logo outside or just print text.
+        }
+        
+        // Title
+        add(SIZE_DOUBLE);
+        let title = "領収書";
+        if (mode === 'FORMAL') title = "領 収 証";
+        else if (mode === 'INVOICE') title = "請 求 書";
+        else if (mode === 'ESTIMATION') title = "御 見 積 書";
+        
+        add(this.encode(title + (isCopy ? " (控え)\n" : "\n")));
+        add(SIZE_NORMAL);
+        add([LF]);
+
+        // Date
+        add(ALIGN_RIGHT);
+        add(this.encode(`${new Date().toLocaleString()}\n`));
+        add([LF]);
+
+        // Formal/Invoice/Estimation Details
+        if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+            add(ALIGN_LEFT);
+            add(this.encode(`${recipientName || "          "} 様\n`));
+            add([LF]);
+            
+            if (mode === 'INVOICE') {
+                add(ALIGN_RIGHT);
+                add(this.encode("下記の通りご請求申し上げます。\n"));
+            } else if (mode === 'ESTIMATION') {
+                add(ALIGN_RIGHT);
+                add(this.encode("下記の通り御見積申し上げます。\n"));
+            }
+
+            add(ALIGN_CENTER);
+            add(SIZE_DOUBLE);
+            add(EMPHASIS_ON);
+            // Use "円" suffix
+            add(this.encode(`${total.toLocaleString()}円\n`));
+            add(EMPHASIS_OFF);
+            add(SIZE_NORMAL);
+            add([LF]);
+            
+            if (mode === 'FORMAL') {
+                add(ALIGN_LEFT);
+                add(this.encode(`但  ${proviso || "お品代"}として\n`));
+                add(this.encode("上記正に領収いたしました\n"));
+                add([LF]);
+            }
+            
+            if (mode === 'INVOICE' && paymentDeadline) {
+                add(ALIGN_RIGHT);
+                add(this.encode(`お支払期限: ${paymentDeadline}\n`));
+                add([LF]);
+            }
+            
+            if (mode === 'ESTIMATION') {
+                add(ALIGN_RIGHT);
+                const d = new Date();
+                d.setMonth(d.getMonth() + 1);
+                add(this.encode(`有効期限: ${d.toLocaleDateString()}\n`));
+                add([LF]);
+            }
+        }
+
+        add(ALIGN_CENTER);
+        add(this.encode("--------------------------------\n"));
+        
+        // Items
+        add(ALIGN_LEFT);
+        for (const item of items) {
+            add(this.encode(`${item.name}\n`));
+            
+            // Part Number Print
+            if (item.partNumber) {
+                add(this.encode(`  (品番: ${item.partNumber})\n`));
+            }
+
+            const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
+            const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
+            
+            // Calculate visual width for alignment (Shift_JIS)
+            let lineLen = 0;
+            for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
+            let totalLen = 0;
+            for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
+
+            const spaces = 32 - (lineLen + totalLen); 
+            const padding = spaces > 0 ? " ".repeat(spaces) : " ";
+            add(this.encode(`${line}${padding}${totalStr}\n`));
+        }
+        
+        add(ALIGN_CENTER);
+        add(this.encode("--------------------------------\n"));
+        
+        // Total Breakdown
+        add(ALIGN_RIGHT);
+        
+        add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
+        
+        const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
+        add(this.encode(`消費税(10%): ${taxToDisplay.toLocaleString()}円\n`));
+
+        if (discount > 0) {
+            const initialTotal = subTotal + tax;
+            add(this.encode(`合計(値引前): ${initialTotal.toLocaleString()}円\n`));
+            add(this.encode(`値引(税込): - ${discount.toLocaleString()}円\n`));
+        }
+        
+        if (mode === 'RECEIPT') {
+            add([LF]);
+            add(EMPHASIS_ON);
+            add(SIZE_DOUBLE);
+            add(this.encode(`合計: ${total.toLocaleString()}円\n`));
+            add(EMPHASIS_OFF);
+            add(SIZE_NORMAL);
+        }
+
+        if (discount > 0 && finalTax !== undefined) {
+            add(this.encode(`(内消費税等: ${finalTax.toLocaleString()}円)\n`));
+        }
+        add([LF]);
+
+        // Footer: Store Info from Settings
+        add(ALIGN_CENTER);
+        add(EMPHASIS_ON);
+        add(this.encode(`${settings.storeName}\n`));
+        add(EMPHASIS_OFF);
+        add(this.encode(`〒${settings.zipCode}\n${settings.address1}\n`));
+        if (settings.address2) {
+            add(this.encode(`${settings.address2}\n`));
+        }
+        add(this.encode(`電話: ${settings.tel}\n`));
+        add(this.encode(`登録番号: ${settings.registrationNum}\n`));
+        
+        if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+            add(ALIGN_RIGHT);
+            add(this.encode("(印)\n"));
+            add(ALIGN_CENTER);
+        }
+
+        if (mode === 'FORMAL' && total >= 50000) {
+            add([LF]);
+            add(ALIGN_RIGHT);
+            add(this.encode("----------\n"));
+            add(this.encode("| 収入印紙 |\n"));
+            add(this.encode("----------\n"));
+            add(ALIGN_CENTER);
+        }
+
+        add([LF]);
+        
+        // --- NEW BANK INFO LOGIC ---
+        if (settings.bankName) {
+            add(ALIGN_LEFT);
+            add(this.encode("--------------------------------\n"));
+            add(this.encode("【お振込先】\n"));
+            add(this.encode(`${settings.bankName} ${settings.branchName}\n`));
+            add(this.encode(`${settings.accountType} ${settings.accountNumber}\n`));
+            add(this.encode(`${settings.accountHolder}\n`));
+            add(this.encode("--------------------------------\n"));
+            add(ALIGN_CENTER);
+            add([LF]);
+        }
+
+        if (mode === 'INVOICE') {
+            add(this.encode("ご請求書を送付いたします。\n"));
+        } else if (mode === 'ESTIMATION') {
+            // No specific footer
+        } else {
+            add(this.encode("毎度ありがとうございます!\n"));
+        }
+
+        // Memo for Copy
+        if (isCopy && storeMemo) {
+            add([LF]);
+            add(ALIGN_LEFT);
+            add(this.encode("--------------------------------\n"));
+            add(this.encode("【店舗メモ】\n"));
+            add(this.encode(`${storeMemo}\n`));
+            add(this.encode("--------------------------------\n"));
+            add(ALIGN_CENTER);
+        }
+        
+        add([LF, LF, LF, LF]);
+    };
+
+    // --- 1. Print Original ---
     if (logoUrl) {
         try {
             this.log("Processing logo image from: " + logoUrl);
@@ -248,175 +443,16 @@ export class PrinterService {
             console.warn("Logo print failed:", e);
         }
     }
-    
-    // Title
-    add(SIZE_DOUBLE);
-    if (mode === 'FORMAL') {
-        add(this.encode("領 収 証\n"));
-    } else if (mode === 'INVOICE') {
-        add(this.encode("請 求 書\n"));
-    } else if (mode === 'ESTIMATION') {
-        add(this.encode("御 見 積 書\n"));
-    } else {
-        add(this.encode("領収書\n"));
-    }
-    add(SIZE_NORMAL);
-    add([LF]);
+    generateOneReceipt(false);
 
-    // Date
-    add(ALIGN_RIGHT);
-    add(this.encode(`${new Date().toLocaleString()}\n`));
-    add([LF]);
+    // Cut Paper (Partial Cut if supported, or just feed)
+    add([LF, LF]);
 
-    // Formal/Invoice/Estimation Details
-    if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-        add(ALIGN_LEFT);
-        add(this.encode(`${recipientName || "          "} 様\n`));
-        add([LF]);
-        
-        if (mode === 'INVOICE') {
-             add(ALIGN_RIGHT);
-             add(this.encode("下記の通りご請求申し上げます。\n"));
-        } else if (mode === 'ESTIMATION') {
-             add(ALIGN_RIGHT);
-             add(this.encode("下記の通り御見積申し上げます。\n"));
-        }
+    // --- 2. Print Copy ---
+    generateOneReceipt(true);
 
-        add(ALIGN_CENTER);
-        add(SIZE_DOUBLE);
-        add(EMPHASIS_ON);
-        // Use "円" suffix
-        add(this.encode(`${total.toLocaleString()}円\n`));
-        add(EMPHASIS_OFF);
-        add(SIZE_NORMAL);
-        add([LF]);
-        
-        if (mode === 'FORMAL') {
-            add(ALIGN_LEFT);
-            add(this.encode(`但  ${proviso || "お品代"}として\n`));
-            add(this.encode("上記正に領収いたしました\n"));
-            add([LF]);
-        }
-        
-        if (mode === 'INVOICE' && paymentDeadline) {
-             add(ALIGN_RIGHT);
-             add(this.encode(`お支払期限: ${paymentDeadline}\n`));
-             add([LF]);
-        }
-        
-        if (mode === 'ESTIMATION') {
-             add(ALIGN_RIGHT);
-             const d = new Date();
-             d.setMonth(d.getMonth() + 1);
-             add(this.encode(`有効期限: ${d.toLocaleDateString()}\n`));
-             add([LF]);
-        }
-    }
-
-    add(ALIGN_CENTER);
-    add(this.encode("--------------------------------\n"));
-    
-    // Items
-    add(ALIGN_LEFT);
-    for (const item of items) {
-        add(this.encode(`${item.name}\n`));
-        
-        // Part Number Print
-        if (item.partNumber) {
-            add(this.encode(`  (品番: ${item.partNumber})\n`));
-        }
-
-        const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
-        const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
-        
-        // Calculate visual width for alignment (Shift_JIS)
-        let lineLen = 0;
-        for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
-        let totalLen = 0;
-        for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
-
-        const spaces = 32 - (lineLen + totalLen); 
-        const padding = spaces > 0 ? " ".repeat(spaces) : " ";
-        add(this.encode(`${line}${padding}${totalStr}\n`));
-    }
-    
-    add(ALIGN_CENTER);
-    add(this.encode("--------------------------------\n"));
-    
-    // Total Breakdown
-    add(ALIGN_RIGHT);
-    
-    add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
-
-    if (discount > 0) {
-        add(this.encode(`値引: - ${discount.toLocaleString()}円\n`));
-    }
-
-    add(this.encode(`消費税(10%): ${tax.toLocaleString()}円\n`));
-    
-    if (mode === 'RECEIPT') {
-        add([LF]);
-        add(EMPHASIS_ON);
-        add(SIZE_DOUBLE);
-        add(this.encode(`合計: ${total.toLocaleString()}円\n`));
-        add(EMPHASIS_OFF);
-        add(SIZE_NORMAL);
-    }
-    add([LF]);
-
-    // Footer: Store Info from Settings
-    add(ALIGN_CENTER);
-    add(EMPHASIS_ON);
-    add(this.encode(`${settings.storeName}\n`));
-    add(EMPHASIS_OFF);
-    add(this.encode(`〒${settings.zipCode}\n${settings.address1}\n`));
-    if (settings.address2) {
-        add(this.encode(`${settings.address2}\n`));
-    }
-    add(this.encode(`電話: ${settings.tel}\n`));
-    add(this.encode(`登録番号: ${settings.registrationNum}\n`));
-    
-    if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-        add(ALIGN_RIGHT);
-        add(this.encode("(印)\n"));
-        add(ALIGN_CENTER);
-    }
-
-    if (mode === 'FORMAL' && total >= 50000) {
-        add([LF]);
-        add(ALIGN_RIGHT);
-        add(this.encode("----------\n"));
-        add(this.encode("| 収入印紙 |\n"));
-        add(this.encode("----------\n"));
-        add(ALIGN_CENTER);
-    }
-
-    add([LF]);
-    
-    // --- NEW BANK INFO LOGIC ---
-    if (settings.bankName) {
-        add(ALIGN_LEFT);
-        add(this.encode("--------------------------------\n"));
-        add(this.encode("【お振込先】\n"));
-        add(this.encode(`${settings.bankName} ${settings.branchName}\n`));
-        add(this.encode(`${settings.accountType} ${settings.accountNumber}\n`));
-        add(this.encode(`${settings.accountHolder}\n`));
-        add(this.encode("--------------------------------\n"));
-        add(ALIGN_CENTER);
-        add([LF]);
-    }
-
-    if (mode === 'INVOICE') {
-         add(this.encode("ご請求書を送付いたします。\n"));
-    } else if (mode === 'ESTIMATION') {
-         // No specific footer
-    } else {
-         add(this.encode("毎度ありがとうございます!\n"));
-    }
-    
-    add([LF, LF, LF, LF]);
-
-    await this.print(new Uint8Array(cmds));
+    // Send to Printer
+    await this.print(new Uint8Array(cmds), settings.printerType);
   }
 }
 

@@ -8,12 +8,14 @@ import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache } from './services/sheetService';
 import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Cable, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { LOGO_URL } from './logoData';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // Default Settings
 const DEFAULT_SETTINGS: StoreSettings = {
   storeName: "パナランドヨシダ",
-  zipCode: "863-0015",
-  address1: "熊本県天草市旭町４３",
+  zipCode: "863-2172",
+  address1: "天草市旭町４３",
   address2: "",
   tel: "0969-24-0218",
   registrationNum: "T6810624772686",
@@ -84,6 +86,7 @@ const App: React.FC = () => {
   const [recipientName, setRecipientName] = useState('');
   const [proviso, setProviso] = useState('');
   const [paymentDeadline, setPaymentDeadline] = useState('');
+  const [storeMemo, setStoreMemo] = useState('');
 
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>({
     isConnected: false,
@@ -154,24 +157,27 @@ const App: React.FC = () => {
     }
   }, [appState, cart.length]);
 
-  // --- REVISED Calculation Logic (Tax Exclusive / 外税) ---
-  // Formula: Tax = floor((subtotal - discount) * 0.10), Total = (subtotal - discount) + tax
-
-  // 1. Items Total (Taxable Base)
+  // --- REVISED Calculation Logic (Tax Inclusive Discount / 税込値引) ---
+  // 1. Items Total (Taxable Base - Tax Excluded)
   const itemsTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const subTotal = itemsTotal; // Alias for clarity
 
-  // 2. Discount
+  // 2. Initial Tax (10% floor)
+  const initialTax = Math.floor(itemsTotal * 0.10);
+
+  // 3. Initial Total (Tax Inclusive)
+  const initialTotal = itemsTotal + initialTax;
+
+  // 4. Discount (Tax Inclusive)
   const discountVal = parseInt(discount || '0', 10);
 
-  // 3. Taxable Amount (Subtotal - Discount)
-  const taxableAmount = Math.max(0, subTotal - discountVal);
+  // 5. Final Total (Payment Amount)
+  const totalAmount = Math.max(0, initialTotal - discountVal);
 
-  // 4. Tax (10% floor of Taxable Amount)
-  const tax = Math.floor(taxableAmount * 0.10);
-
-  // 5. Final Total
-  const totalAmount = taxableAmount + tax;
+  // 6. Tax Calculation (Back-calculated from Final Total)
+  // User Formula: Total / 1.1 = TaxExcluded, Total - TaxExcluded = Tax
+  const finalTaxExcluded = Math.floor(totalAmount / 1.1);
+  const finalTax = totalAmount - finalTaxExcluded;
 
   // Auto-sync cashReceived with totalAmount
   useEffect(() => {
@@ -181,7 +187,7 @@ const App: React.FC = () => {
     }
   }, [totalAmount, isCashManuallyEdited]);
 
-  // 6. Calculate Change
+  // 7. Calculate Change
   const cashVal = parseInt(cashReceived || '0', 10);
   const changeVal = cashVal - totalAmount;
 
@@ -324,7 +330,7 @@ const App: React.FC = () => {
       await printerService.printReceipt(
         cart,
         subTotal,
-        tax,
+        initialTax,
         totalAmount,
         receiptMode,
         recipientName,
@@ -332,7 +338,9 @@ const App: React.FC = () => {
         paymentDeadline,
         discountVal, 
         LOGO_URL,
-        storeSettings // Pass Settings
+        storeSettings, // Pass Settings
+        finalTax, // Pass Final Tax
+        storeMemo // Pass Store Memo
       );
 
       if (navigator.vibrate) navigator.vibrate([100]);
@@ -359,7 +367,49 @@ const App: React.FC = () => {
     }
   };
 
-  // PDF Export removed to fix build errors
+  const handleSharePDF = async () => {
+    const input = document.getElementById('receipt-preview');
+    if (!input) return;
+
+    try {
+      setIsProcessing(true);
+      const canvas = await html2canvas(input, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      
+      // PDF width 80mm.
+      const pdfWidth = 80;
+      const imgProps = canvas;
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pdfWidth, pdfHeight + 10] // Add some padding
+      });
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      const pdfBlob = pdf.output('blob');
+      const fileName = `receipt_${new Date().getTime()}.pdf`;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Receipt',
+          text: 'Here is your receipt.',
+        });
+      } else {
+        // Fallback to download
+        pdf.save(fileName);
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('PDF生成または共有に失敗しました。');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
 
   const renderContent = () => {
@@ -534,7 +584,7 @@ const App: React.FC = () => {
                   
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
                     <span>Tax (10%)</span>
-                    <span>¥{tax.toLocaleString()}</span>
+                    <span>¥{(discountVal > 0 ? finalTax : initialTax).toLocaleString()}</span>
                   </div>
 
                   <div className="border-t border-gray-800 my-2"></div>
@@ -688,19 +738,59 @@ const App: React.FC = () => {
                  </div>
                )}
 
-               <Receipt 
-                 items={cart} 
-                 subTotal={subTotal} 
-                 tax={tax} 
-                 total={totalAmount}
-                 mode={receiptMode}
-                 recipientName={recipientName}
-                 proviso={proviso}
-                 paymentDeadline={paymentDeadline}
-                 discount={discountVal}
-                 logo={LOGO_URL} 
-                 settings={storeSettings} // Pass Settings
-               />
+               {/* Store Memo Input */}
+               <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-blue-100">
+                  <label className="block text-xs font-bold text-gray-500 mb-1">店舗控え用メモ (Store Memo)</label>
+                  <textarea 
+                    value={storeMemo}
+                    onChange={(e) => setStoreMemo(e.target.value)}
+                    placeholder="控えにのみ印字されます"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none min-h-[60px]"
+                  />
+               </div>
+
+               {/* Receipt Preview Container (Includes Original and Copy) */}
+               <div id="receipt-preview" className="space-y-8">
+                   {/* Original */}
+                   <Receipt 
+                     items={cart} 
+                     subTotal={subTotal} 
+                     tax={initialTax} 
+                     finalTax={finalTax}
+                     total={totalAmount}
+                     mode={receiptMode}
+                     recipientName={recipientName}
+                     proviso={proviso}
+                     paymentDeadline={paymentDeadline}
+                     discount={discountVal}
+                     logo={LOGO_URL} 
+                     settings={storeSettings} 
+                   />
+
+                   {/* Copy */}
+                   <div className="relative">
+                       <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gray-200 text-gray-500 text-[10px] px-2 py-0.5 rounded-full z-10">
+                           以下、店舗控え
+                       </div>
+                       <div className="border-t-2 border-dashed border-gray-300 mb-4"></div>
+                       <Receipt 
+                         items={cart} 
+                         subTotal={subTotal} 
+                         tax={initialTax} 
+                         finalTax={finalTax}
+                         total={totalAmount}
+                         mode={receiptMode}
+                         recipientName={recipientName}
+                         proviso={proviso}
+                         paymentDeadline={paymentDeadline}
+                         discount={discountVal}
+                         logo={LOGO_URL} 
+                         settings={storeSettings} 
+                         isCopy={true}
+                         memo={storeMemo}
+                       />
+                   </div>
+               </div>
                
                <div className="text-center text-gray-400 text-xs mt-4">
                  {receiptMode === 'FORMAL' && totalAmount >= 50000 
@@ -750,7 +840,7 @@ const App: React.FC = () => {
 
               <div className="flex gap-3">
                   <button 
-                    onClick={() => window.print()}
+                    onClick={handleSharePDF}
                     className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-700 text-white"
                   >
                     <Share size={20} />

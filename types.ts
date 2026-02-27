@@ -18,7 +18,7 @@ export enum AppState {
 
 export interface PrinterStatus {
   isConnected: boolean;
-  type: 'BLUETOOTH' | 'USB' | null;
+  type: 'BLUETOOTH' | null;
   name: string | null;
   device: BluetoothDevice | any | null;
   characteristic: BluetoothRemoteGATTCharacteristic | null;
@@ -28,6 +28,8 @@ export type ScannedResult = {
   partNumber: string;
   confidence: number;
 };
+
+export type PrinterType = 'PDF' | 'BLUETOOTH' | 'SUNMI';
 
 export interface StoreSettings {
   storeName: string;
@@ -46,10 +48,22 @@ export interface StoreSettings {
   spreadsheetName: string; // Just for display/memo
   sheetName: string; // For Product DB
   serviceSheetName: string; // For Service Items
+  // Printer Settings
+  printerType: PrinterType;
 }
 
 // Web Bluetooth & Serial API Type Declarations
 declare global {
+  interface Window {
+    SunmiInnerPrinter?: {
+      printString: (text: string) => void;
+      printBitmap: (base64: string, width: number, height: number) => void;
+      lineWrap: (n: number) => void;
+      sendRAWData: (base64: string) => void;
+      cutPaper: () => void;
+    };
+  }
+
   interface Navigator {
     bluetooth: Bluetooth;
     serial: Serial;

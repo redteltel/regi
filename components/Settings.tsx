@@ -49,6 +49,30 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
         </div>
         
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          {/* Printer Selection Section */}
+          <div className="space-y-4">
+             <h3 className="text-sm font-bold text-secondary flex items-center gap-2 border-b border-gray-800 pb-2">
+                <Printer size={16} /> プリンター設定
+            </h3>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">出力先 (Output Destination)</label>
+              <select
+                name="printerType"
+                value={settings.printerType || 'PDF'}
+                onChange={handleChange}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all appearance-none"
+              >
+                  <option value="PDF">標準 (PDF/共有)</option>
+                  <option value="BLUETOOTH">MP-B20 (Bluetooth)</option>
+                  <option value="SUNMI">Sunmi (InnerPrinter)</option>
+              </select>
+              <p className="text-[10px] text-gray-500 mt-1">
+                ※ MP-B20: Web Bluetooth APIを使用<br/>
+                ※ Sunmi: 端末内蔵プリンターを使用
+              </p>
+            </div>
+          </div>
+
           {/* Store Info Section */}
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-secondary flex items-center gap-2 border-b border-gray-800 pb-2">

@@ -4,7 +4,8 @@ import { CartItem, StoreSettings } from '../types';
 interface ReceiptProps {
   items: CartItem[];
   subTotal: number;
-  tax: number;
+  tax: number; // Initial Tax (before discount)
+  finalTax?: number; // Re-calculated Tax (after discount)
   total: number;
   mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION';
   recipientName: string;
@@ -13,12 +14,15 @@ interface ReceiptProps {
   discount?: number;
   logo?: string | null;
   settings: StoreSettings;
+  isCopy?: boolean;
+  memo?: string;
 }
 
 const Receipt: React.FC<ReceiptProps> = ({ 
   items, 
   subTotal, 
   tax, 
+  finalTax,
   total, 
   mode,
   recipientName,
@@ -26,7 +30,9 @@ const Receipt: React.FC<ReceiptProps> = ({
   paymentDeadline,
   discount = 0,
   logo = null,
-  settings
+  settings,
+  isCopy = false,
+  memo = ''
 }) => {
   const needsStamp = mode === 'FORMAL' && total >= 50000;
   const [imgError, setImgError] = useState(false);
@@ -45,7 +51,7 @@ const Receipt: React.FC<ReceiptProps> = ({
   };
 
   return (
-    <div id="receipt-preview" className="bg-white text-black p-8 rounded-sm shadow-xl max-w-sm mx-auto font-mono text-sm leading-relaxed mb-4 border-t-8 border-gray-200 relative">
+    <div className="bg-white text-black p-8 rounded-sm shadow-xl max-w-sm mx-auto font-mono text-sm leading-relaxed mb-4 border-t-8 border-gray-200 relative">
       
       {/* Header */}
       <div className="text-center mb-6">
@@ -59,8 +65,9 @@ const Receipt: React.FC<ReceiptProps> = ({
            />
         )}
         
-        <h2 className="text-2xl font-bold mb-2 tracking-widest">
+        <h2 className="text-2xl font-bold mb-2 tracking-widest flex items-center justify-center gap-2">
           {getTitle()}
+          {isCopy && <span className="text-sm font-normal border border-black px-1 rounded">控え</span>}
         </h2>
         {mode === 'INVOICE' && <p className="text-sm font-bold mb-1 tracking-wide">(INVOICE)</p>}
         {mode === 'ESTIMATION' && <p className="text-sm font-bold mb-1 tracking-wide">(ESTIMATION)</p>}
@@ -153,12 +160,12 @@ const Receipt: React.FC<ReceiptProps> = ({
       {/* Totals */}
       <div className="border-t border-dashed border-gray-400 pt-3 mb-6 space-y-1">
         <div className="flex justify-between text-gray-600">
-          <span>小計</span>
+          <span>小計 (税抜)</span>
           <span>{subTotal.toLocaleString()}円</span>
         </div>
         <div className="flex justify-between text-gray-600">
           <span>消費税(10%)</span>
-          <span>{tax.toLocaleString()}円</span>
+          <span>{(discount > 0 && finalTax !== undefined ? finalTax : tax).toLocaleString()}円</span>
         </div>
 
         {discount > 0 && (
@@ -168,7 +175,7 @@ const Receipt: React.FC<ReceiptProps> = ({
                <span>{(subTotal + tax).toLocaleString()}円</span>
             </div>
             <div className="flex justify-between text-red-600">
-               <span>値引</span>
+               <span>値引 (税込)</span>
                <span>- {discount.toLocaleString()}円</span>
             </div>
           </>
@@ -179,6 +186,12 @@ const Receipt: React.FC<ReceiptProps> = ({
             <span>合計</span>
             <span>{total.toLocaleString()}円</span>
           </div>
+        )}
+
+        {discount > 0 && finalTax !== undefined && (
+             <div className="text-right text-[10px] text-gray-500 mt-1">
+                (内消費税等: {finalTax.toLocaleString()}円)
+             </div>
         )}
       </div>
 
@@ -221,6 +234,16 @@ const Receipt: React.FC<ReceiptProps> = ({
          mode === 'ESTIMATION' ? 'ご検討のほどお願い申し上げます。' : 
          '毎度ありがとうございます！'}
       </div>
+
+      {/* Memo Section for Copy */}
+      {isCopy && (
+          <div className="mt-4 pt-4 border-t border-dashed border-gray-300">
+              <p className="text-xs font-bold mb-1">【店舗メモ】</p>
+              <div className="border border-gray-300 rounded p-2 min-h-[60px] text-xs whitespace-pre-wrap">
+                  {memo}
+              </div>
+          </div>
+      )}
     </div>
   );
 };
