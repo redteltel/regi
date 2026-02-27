@@ -37,6 +37,10 @@ const SETTINGS_STORAGE_KEY = window.location.pathname.includes('/demo-regi/')
   ? 'pixelpos_config_demo' 
   : 'pixelpos_config_prod';
 
+const AUTOSAVE_STORAGE_KEY = window.location.pathname.includes('/demo-regi/')
+  ? 'pixelpos_autosave_demo'
+  : 'pixelpos_autosave_prod';
+
 // Demo Mode Detection
 const isDemoMode = window.location.pathname.includes('/demo-regi/');
 
@@ -127,6 +131,28 @@ const App: React.FC = () => {
         }
     }
 
+    // Load Autosaved State
+    const autosavedState = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+    if (autosavedState) {
+        try {
+            const parsed = JSON.parse(autosavedState);
+            if (parsed.cart && parsed.cart.length > 0) {
+                setCart(parsed.cart);
+                setDiscount(parsed.discount || '');
+                setCashReceived(parsed.cashReceived || '');
+                setIsCashManuallyEdited(parsed.isCashManuallyEdited || false);
+                setReceiptMode(parsed.receiptMode || 'RECEIPT');
+                setRecipientName(parsed.recipientName || '');
+                setProviso(parsed.proviso || '');
+                setPaymentDeadline(parsed.paymentDeadline || '');
+                setStoreMemo(parsed.storeMemo || '');
+                setAppState(parsed.appState || AppState.LIST);
+            }
+        } catch (e) {
+            console.error("Failed to load autosave", e);
+        }
+    }
+
     // Ensure no debug logs appear in UI
     printerService.setOnDisconnect(() => {
       console.log("App detected printer disconnect");
@@ -140,6 +166,31 @@ const App: React.FC = () => {
     // Fetch Service Items on mount
     loadServiceItems();
   }, []);
+
+  // Autosave Effect
+  useEffect(() => {
+      if (cart.length > 0) {
+          const stateToSave = {
+              cart,
+              discount,
+              cashReceived,
+              isCashManuallyEdited,
+              receiptMode,
+              recipientName,
+              proviso,
+              paymentDeadline,
+              storeMemo,
+              appState
+          };
+          localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(stateToSave));
+      } else {
+          // If cart is empty, we might want to clear autosave, 
+          // but let's keep it until explicit finish to be safe, 
+          // or only save if there is something meaningful.
+          // Actually, if cart is empty, it's effectively a cleared state.
+          // But user might be in SCANNING mode with empty cart.
+      }
+  }, [cart, discount, cashReceived, isCashManuallyEdited, receiptMode, recipientName, proviso, paymentDeadline, storeMemo, appState]);
 
   const handleSaveSettings = (newSettings: StoreSettings) => {
       // Check if spreadsheet settings changed
@@ -344,7 +395,11 @@ const App: React.FC = () => {
       setRecipientName('');
       setProviso('');
       setPaymentDeadline('');
+      setStoreMemo('');
       setAppState(AppState.SCANNING);
+      
+      // Clear Autosave
+      localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
     }
   };
 
