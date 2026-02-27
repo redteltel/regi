@@ -165,7 +165,7 @@ const Receipt: React.FC<ReceiptProps> = ({
         </div>
         <div className="flex justify-between text-gray-600">
           <span>消費税(10%)</span>
-          <span>{(discount > 0 && finalTax !== undefined ? finalTax : tax).toLocaleString()}円</span>
+          <span>{(finalTax !== undefined ? finalTax : tax).toLocaleString()}円</span>
         </div>
 
         {discount > 0 && (

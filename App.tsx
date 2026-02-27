@@ -584,7 +584,7 @@ const App: React.FC = () => {
                   
                   <div className="flex justify-between items-center text-sm mb-2 text-gray-400">
                     <span>Tax (10%)</span>
-                    <span>¥{(discountVal > 0 ? finalTax : initialTax).toLocaleString()}</span>
+                    <span>¥{finalTax.toLocaleString()}</span>
                   </div>
 
                   <div className="border-t border-gray-800 my-2"></div>

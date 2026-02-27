@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StoreSettings } from '../types';
-import { X, Save, Store, Landmark, FileSpreadsheet, Edit2 } from 'lucide-react';
+import { X, Save, Store, Landmark, FileSpreadsheet, Edit2, Printer } from 'lucide-react';
 
 interface SettingsProps {
   isOpen: boolean;
