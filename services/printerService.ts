@@ -36,67 +36,27 @@ export class PrinterService {
   setOnDisconnect(callback: () => void) { this.onDisconnect = callback; }
   log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
-  // --- Bluetooth (MP-B20) ---
-  async connectBluetooth(): Promise<BluetoothDevice> {
-    this.log("Requesting Bluetooth Device...");
-    try {
-        const device = await navigator.bluetooth.requestDevice({
-            filters: [
-                { services: [SERVICE_UUID] },
-                { namePrefix: 'MP-B20' }
-            ],
-            optionalServices: [SERVICE_UUID]
-        });
-
-        this.log("Connecting to GATT Server...");
-        const server = await device.gatt?.connect();
-        if (!server) throw new Error("GATT Server not found");
-
-        this.log("Getting Service...");
-        const service = await server.getPrimaryService(SERVICE_UUID);
-
-        this.log("Getting Characteristic...");
-        this.characteristic = await service.getCharacteristic(CHAR_UUID);
-        this.device = device;
-
-        device.addEventListener('gattserverdisconnected', this.handleDisconnect.bind(this));
-        
-        this.log("Bluetooth Connected!");
-        return device;
-    } catch (error: any) {
-        this.log("Connection failed: " + error.message);
-        throw error;
-    }
-  }
-
-  private handleDisconnect() {
-      this.log("Bluetooth Disconnected.");
-      this.device = null;
-      this.characteristic = null;
-      if (this.onDisconnect) this.onDisconnect();
-  }
-
-  disconnect() {
-    if (this.device && this.device.gatt?.connected) {
-        this.device.gatt.disconnect();
-    }
-  }
-
-  isConnected(): boolean {
-    return !!(this.device && this.device.gatt?.connected && this.characteristic);
-  }
-
-  // --- Printing Logic ---
+  // --- RawBT (MP-B20 via Android Intent) ---
+  // Instead of Web Bluetooth, we construct a rawbt: intent URL with base64 data.
+  // This is more stable on Android devices.
+  
   async print(data: Uint8Array, type: PrinterType) {
       if (type === 'BLUETOOTH') {
-          if (!this.characteristic) throw new Error("Bluetooth not connected");
-          
-          // Write in chunks (max 512 bytes usually safe for BLE, but MP-B20 might handle more/less)
-          const CHUNK_SIZE = 100; 
-          for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-              const chunk = data.slice(i, i + CHUNK_SIZE);
-              await this.characteristic.writeValue(chunk);
+          // Convert data to Base64
+          let binary = '';
+          const len = data.byteLength;
+          for (let i = 0; i < len; i++) {
+              binary += String.fromCharCode(data[i]);
           }
+          const base64 = btoa(binary);
+
+          // Construct RawBT Intent URL
+          // scheme: rawbt:base64,
+          const intentUrl = `rawbt:${base64}`;
+          
+          // Open Intent
+          window.location.href = intentUrl;
+          
       } else if (type === 'SUNMI') {
           if (window.SunmiInnerPrinter) {
               // Convert to Base64
@@ -117,6 +77,24 @@ export class PrinterService {
               throw new Error("Sunmi Printer interface not found.");
           }
       }
+  }
+
+  // No connection needed for RawBT (Intent fires and forgets)
+  async connectBluetooth(): Promise<any> {
+      return Promise.resolve({ name: 'RawBT Printer' });
+  }
+
+  isConnected(): boolean {
+      // Always true for RawBT as it's fire-and-forget via Intent
+      return true;
+  }
+  
+  disconnect() {
+      // No-op
+  }
+  
+  restoreBluetoothConnection() {
+      return Promise.resolve(true);
   }
 
   private encode(text: string): number[] {

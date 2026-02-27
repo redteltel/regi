@@ -112,6 +112,14 @@ const App: React.FC = () => {
     if (savedSettings) {
         try {
             const parsed = JSON.parse(savedSettings);
+            
+            // --- MIGRATION LOGIC: Force Update Zip Code if old default ---
+            if (parsed.zipCode === "863-0015") {
+                parsed.zipCode = "863-2172";
+                parsed.address1 = "天草市旭町４３"; // Ensure address matches too
+                localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(parsed));
+            }
+            
             // Merge with default to ensure new fields exist if loading old settings
             setStoreSettings({ ...CURRENT_DEFAULT_SETTINGS, ...parsed });
         } catch (e) {
@@ -292,33 +300,9 @@ const App: React.FC = () => {
 
     if (cart.length === 0) return;
     
-    // Check if Bluetooth connection is needed
-    if (storeSettings.printerType === 'BLUETOOTH' && !printerService.isConnected()) {
-        try {
-            await handleConnectBluetooth();
-            // If connection failed or cancelled, return
-            if (!printerService.isConnected()) return;
-        } catch (e) {
-            return;
-        }
-    }
-
-    let isReady = printerStatus.isConnected && printerService.isConnected();
-
-    if (!isReady && printerStatus.type === 'BLUETOOTH') {
-       const restored = await printerService.restoreBluetoothConnection();
-       if (restored) {
-         setPrinterStatus(prev => ({ ...prev, isConnected: true }));
-         isReady = true;
-       }
-    }
-
-    if (!isReady) {
-      alert("プリンタと接続されていません。設定を確認してください。");
-      setPrinterStatus(prev => ({ ...prev, isConnected: false, type: null }));
-      return; 
-    }
-
+    // For RawBT, we don't need explicit connection checks as it uses Intents.
+    // For Sunmi, it checks internal interface.
+    
     setIsProcessing(true);
     if (navigator.vibrate) navigator.vibrate(50);
 
@@ -342,7 +326,8 @@ const App: React.FC = () => {
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
       console.error(e);
-      setPrinterStatus(prev => ({ ...prev, isConnected: false }));
+      // For RawBT, errors might not be caught here if intent launches successfully
+      // But we alert anyway if something throws
       alert(`印刷エラー:\n${e.message}`);
     } finally {
       setIsProcessing(false);
@@ -797,33 +782,6 @@ const App: React.FC = () => {
 
             {/* Footer */}
             <div className="w-full shrink-0 bg-white p-4 pb-10 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-30 sticky bottom-0">
-              {!printerStatus.isConnected && storeSettings.printerType === 'BLUETOOTH' && (
-                <div className="flex flex-col gap-2 mb-3">
-                    <button 
-                      onClick={handleConnectBluetooth}
-                      className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]"
-                    >
-                      <Bluetooth size={20} />
-                      Bluetooth接続 (MP-B20)
-                    </button>
-                </div>
-              )}
-              
-              {printerStatus.isConnected && (
-                <div 
-                  className="w-full bg-green-50 border border-green-200 text-green-700 py-2 rounded-xl font-medium flex items-center justify-center gap-2 mb-3 cursor-pointer text-sm"
-                  onClick={() => {
-                     if(window.confirm("プリンタを切断しますか？")) {
-                        printerService.disconnect();
-                        setPrinterStatus(prev => ({ ...prev, isConnected: false, type: null }));
-                     }
-                  }}
-                >
-                  <Bluetooth size={16} />
-                  Connected to {printerStatus.name}
-                </div>
-              )}
-
               <div className="flex gap-3">
                   <button 
                     onClick={handleSharePDF}

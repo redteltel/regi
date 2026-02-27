@@ -63,11 +63,11 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all appearance-none"
               >
                   <option value="PDF">標準 (PDF/共有)</option>
-                  <option value="BLUETOOTH">MP-B20 (Bluetooth)</option>
+                  <option value="BLUETOOTH">MP-B20 (RawBT経由)</option>
                   <option value="SUNMI">Sunmi (InnerPrinter)</option>
               </select>
               <p className="text-[10px] text-gray-500 mt-1">
-                ※ MP-B20: Web Bluetooth APIを使用<br/>
+                ※ MP-B20: RawBTアプリ経由で印刷します<br/>
                 ※ Sunmi: 端末内蔵プリンターを使用
               </p>
             </div>
