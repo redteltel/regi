@@ -208,21 +208,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleConnectUsb = async () => {
-    try {
-      const name = await printerService.connectUsb();
-      setPrinterStatus({
-        isConnected: true,
-        type: 'USB',
-        name: name,
-        device: null,
-        characteristic: null
-      });
-    } catch (e: any) {
-      handleConnError(e);
-    }
-  };
-
   const handleConnError = (e: any) => {
     console.error(e);
     const msg = e.message || "Unknown error";
@@ -307,6 +292,17 @@ const App: React.FC = () => {
 
     if (cart.length === 0) return;
     
+    // Check if Bluetooth connection is needed
+    if (storeSettings.printerType === 'BLUETOOTH' && !printerService.isConnected()) {
+        try {
+            await handleConnectBluetooth();
+            // If connection failed or cancelled, return
+            if (!printerService.isConnected()) return;
+        } catch (e) {
+            return;
+        }
+    }
+
     let isReady = printerStatus.isConnected && printerService.isConnected();
 
     if (!isReady && printerStatus.type === 'BLUETOOTH') {
@@ -318,7 +314,7 @@ const App: React.FC = () => {
     }
 
     if (!isReady) {
-      alert("プリンタと接続されていません。再接続してください。");
+      alert("プリンタと接続されていません。設定を確認してください。");
       setPrinterStatus(prev => ({ ...prev, isConnected: false, type: null }));
       return; 
     }

@@ -41,7 +41,10 @@ export class PrinterService {
     this.log("Requesting Bluetooth Device...");
     try {
         const device = await navigator.bluetooth.requestDevice({
-            filters: [{ namePrefix: 'MP-B20' }],
+            filters: [
+                { services: [SERVICE_UUID] },
+                { namePrefix: 'MP-B20' }
+            ],
             optionalServices: [SERVICE_UUID]
         });
 
