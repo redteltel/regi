@@ -41,7 +41,7 @@ export class PrinterService {
   // This is more stable on Android devices.
   
   async print(data: Uint8Array, type: PrinterType) {
-      if (type === 'BLUETOOTH') {
+      if (type === 'BLUETOOTH' || type === 'SUNMI') {
           // Convert data to Base64
           let binary = '';
           const len = data.byteLength;
@@ -57,25 +57,6 @@ export class PrinterService {
           // Open Intent
           window.location.href = intentUrl;
           
-      } else if (type === 'SUNMI') {
-          if (window.SunmiInnerPrinter) {
-              // Convert to Base64
-              let binary = '';
-              const len = data.byteLength;
-              for (let i = 0; i < len; i++) {
-                  binary += String.fromCharCode(data[i]);
-              }
-              const base64 = btoa(binary);
-              
-              try {
-                  window.SunmiInnerPrinter.sendRAWData(base64);
-              } catch (e) {
-                  console.error("Sunmi print error:", e);
-                  throw new Error("Sunmi print failed. Check interface.");
-              }
-          } else {
-              throw new Error("Sunmi Printer interface not found.");
-          }
       }
   }
 
