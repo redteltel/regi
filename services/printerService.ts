@@ -83,6 +83,7 @@ export class PrinterService {
   private encode(text: string): number[] {
     // Always use Shift-JIS conversion for both MP-B20 and SUNMI
     // User requested explicit Shift-JIS encoding for SUNMI as well.
+    // This ensures text is converted to CP932 bytes before transmission.
     const sjisData = Encoding.convert(text, {
       to: 'SJIS',
       from: 'UNICODE',
