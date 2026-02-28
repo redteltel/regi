@@ -204,8 +204,10 @@ export class PrinterService {
     add([ESC, AT]); // Initialize
     
     if (settings.printerType === 'SUNMI') {
-         // UTF-8 Mode for Sunmi via RawBT (ESC t H)
-         add([0x1B, 0x74, 0x48]); 
+         // UTF-8 Mode for Sunmi via RawBT (FS C H)
+         // User requested 1B 40 (Init) then 1C 43 48.
+         // 1B 40 is already added above as [ESC, AT].
+         add([0x1C, 0x43, 0x48]); 
     } else {
          // Japanese Shift-JIS Mode for MP-B20
          add(COUNTRY_JAPAN); // ESC R 8
