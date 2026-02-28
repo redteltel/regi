@@ -40,6 +40,12 @@ export class PrinterService {
   // Instead of Web Bluetooth, we construct a rawbt: intent URL with base64 data.
   // This is more stable on Android devices.
   
+  // Helper to get Sunmi Printer Interface
+  private getSunmiPrinter() {
+      // Check for both capitalized and lowercase variants as implementation varies
+      return window.SunmiInnerPrinter || window.sunmiInnerPrinter;
+  }
+
   async print(data: Uint8Array, type: PrinterType) {
       if (type === 'BLUETOOTH') {
           // Convert data to Base64
@@ -58,7 +64,8 @@ export class PrinterService {
           window.location.href = intentUrl;
           
       } else if (type === 'SUNMI') {
-          if (window.SunmiInnerPrinter) {
+          const printer = this.getSunmiPrinter();
+          if (printer && typeof printer.sendRAWData === 'function') {
               // Convert to Base64
               let binary = '';
               const len = data.byteLength;
@@ -68,19 +75,14 @@ export class PrinterService {
               const base64 = btoa(binary);
               
               try {
-                  window.SunmiInnerPrinter.sendRAWData(base64);
-              } catch (e) {
+                  printer.sendRAWData(base64);
+              } catch (e: any) {
                   console.error("Sunmi print error:", e);
-                  throw new Error("Sunmi print failed. Check interface.");
+                  throw new Error("Sunmi print failed: " + e.message);
               }
           } else {
-              console.warn("Sunmi Printer interface not found. Trying RawBT fallback...");
-              // Fallback to RawBT if internal printer not found (just in case)
-              // But user asked to remove RawBT dependency for Sunmi, so maybe just error?
-              // User said "RawBT経由での印刷がタイムアウト...するため、この方式を廃止してください"
-              // So I should probably throw error or just do nothing if not found, 
-              // but let's stick to the requested logic: use SunmiInnerPrinter.
-              throw new Error("Sunmi Printer interface not found.");
+              console.error("Sunmi Printer interface not found.");
+              throw new Error("Sunmi Printer interface not found. Please ensure you are running this on a Sunmi device.");
           }
       }
   }
