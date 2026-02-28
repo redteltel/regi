@@ -81,13 +81,8 @@ export class PrinterService {
   }
 
   private encode(text: string): number[] {
-    // SUNMI: Use UTF-8 and do NOT convert to Shift-JIS
-    if (this.currentType === 'SUNMI') {
-        const encoder = new TextEncoder();
-        return Array.from(encoder.encode(text));
-    }
-
-    // MP-B20: Default Shift-JIS conversion
+    // Always use Shift-JIS conversion for both MP-B20 and SUNMI
+    // User requested explicit Shift-JIS encoding for SUNMI as well.
     const sjisData = Encoding.convert(text, {
       to: 'SJIS',
       from: 'UNICODE',
@@ -203,17 +198,10 @@ export class PrinterService {
     // Header & Initialization
     add([ESC, AT]); // Initialize
     
-    if (settings.printerType === 'SUNMI') {
-         // UTF-8 Mode for Sunmi via RawBT (FS C H)
-         // User requested 1B 40 (Init) then 1C 43 48.
-         // 1B 40 is already added above as [ESC, AT].
-         add([0x1C, 0x43, 0x48]); 
-    } else {
-         // Japanese Shift-JIS Mode for MP-B20
-         add(COUNTRY_JAPAN); // ESC R 8
-         add(KANJI_MODE_ON); // FS & (Enable Kanji)
-         add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
-    }
+    // Always set Japanese Shift-JIS Mode (for both MP-B20 and SUNMI)
+    add(COUNTRY_JAPAN); // ESC R 8
+    add(KANJI_MODE_ON); // FS & (Enable Kanji)
+    add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
     
     // --- Helper Function to Generate One Receipt ---
     const generateOneReceipt = (isCopy: boolean) => {
