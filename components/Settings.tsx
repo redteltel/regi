@@ -64,11 +64,11 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
               >
                   <option value="PDF">標準 (PDF/共有)</option>
                   <option value="BLUETOOTH">MP-B20 (RawBT経由)</option>
-                  <option value="SUNMI">Sunmi (Internal)</option>
+                  <option value="SUNMI">Sunmi (RawBT経由)</option>
               </select>
               <p className="text-[10px] text-gray-500 mt-1">
                 ※ MP-B20: RawBTアプリ経由で印刷します<br/>
-                ※ Sunmi: 端末内蔵プリンターを使用
+                ※ Sunmi: RawBTアプリ経由で印刷します
               </p>
             </div>
           </div>

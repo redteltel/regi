@@ -40,54 +40,8 @@ export class PrinterService {
   // Instead of Web Bluetooth, we construct a rawbt: intent URL with base64 data.
   // This is more stable on Android devices.
   
-  // Helper to get Sunmi Printer Interface
-  private getSunmiPrinter() {
-      // Check for both capitalized and lowercase variants as implementation varies
-      return window.SunmiInnerPrinter || window.sunmiInnerPrinter;
-  }
-
-  private async waitForSunmiPrinter(timeoutMs = 3000): Promise<any> {
-      const start = Date.now();
-      
-      return new Promise((resolve, reject) => {
-          // 1. Immediate check
-          const printer = this.getSunmiPrinter();
-          if (printer) {
-              resolve(printer);
-              return;
-          }
-
-          // 2. Event Listener (SunmiInnerPrinterLoaded)
-          const onLoaded = () => {
-              const p = this.getSunmiPrinter();
-              if (p) {
-                  resolve(p);
-                  return;
-              }
-          };
-          window.addEventListener('SunmiInnerPrinterLoaded', onLoaded, { once: true });
-
-          // 3. Polling fallback
-          const interval = setInterval(() => {
-              const p = this.getSunmiPrinter();
-              if (p) {
-                  clearInterval(interval);
-                  window.removeEventListener('SunmiInnerPrinterLoaded', onLoaded);
-                  resolve(p);
-                  return;
-              }
-              if (Date.now() - start > timeoutMs) {
-                  clearInterval(interval);
-                  window.removeEventListener('SunmiInnerPrinterLoaded', onLoaded);
-                  reject(new Error("Sunmi Printer interface not found"));
-                  return;
-              }
-          }, 100);
-      });
-  }
-
   async print(data: Uint8Array, type: PrinterType) {
-      if (type === 'BLUETOOTH') {
+      if (type === 'BLUETOOTH' || type === 'SUNMI') {
           // Convert data to Base64
           let binary = '';
           const len = data.byteLength;
@@ -103,31 +57,6 @@ export class PrinterService {
           // Open Intent
           window.location.href = intentUrl;
           
-      } else if (type === 'SUNMI') {
-          try {
-              const printer = await this.waitForSunmiPrinter();
-              if (printer && typeof printer.sendRAWData === 'function') {
-                  // Convert to Base64
-                  let binary = '';
-                  const len = data.byteLength;
-                  for (let i = 0; i < len; i++) {
-                      binary += String.fromCharCode(data[i]);
-                  }
-                  const base64 = btoa(binary);
-                  
-                  try {
-                      printer.sendRAWData(base64);
-                  } catch (e: any) {
-                      console.error("Sunmi print error:", e);
-                      throw new Error("Sunmi print failed: " + e.message);
-                  }
-              } else {
-                  throw new Error("Sunmi Printer interface invalid.");
-              }
-          } catch (e: any) {
-              console.error("Sunmi Printer interface not found.");
-              throw new Error("Sunmi Printer interface not found.");
-          }
       }
   }
 
