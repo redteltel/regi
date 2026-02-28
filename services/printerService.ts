@@ -81,9 +81,13 @@ export class PrinterService {
   }
 
   private encode(text: string): number[] {
-    // Always use Shift-JIS conversion for both MP-B20 and SUNMI
-    // User requested explicit Shift-JIS encoding for SUNMI as well.
-    // This ensures text is converted to CP932 bytes before transmission.
+    // SUNMI: Use UTF-8 for RawBT Image Mode
+    if (this.currentType === 'SUNMI') {
+        const encoder = new TextEncoder();
+        return Array.from(encoder.encode(text));
+    }
+
+    // MP-B20: Default Shift-JIS conversion
     const sjisData = Encoding.convert(text, {
       to: 'SJIS',
       from: 'UNICODE',
@@ -200,8 +204,7 @@ export class PrinterService {
     add([ESC, AT]); // Initialize
     
     if (settings.printerType === 'SUNMI') {
-        // SUNMI: FS & (Kanji Mode) only, as requested to fix mojibake
-        add([0x1C, 0x26]);
+        // SUNMI: No special commands. RawBT Image Mode handles UTF-8 text.
     } else {
         // MP-B20: Standard Japanese Init
         add(COUNTRY_JAPAN); // ESC R 8
