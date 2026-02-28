@@ -342,7 +342,7 @@ const App: React.FC = () => {
       setAppState(AppState.PREVIEW);
   };
 
-  // Printing Logic - Text Mode with Shift-JIS (via printerService)
+  // Printing Logic - Image Mode (via printerService)
   const handlePrint = async () => {
     if (isDemoMode) {
         alert("デモ版のため印刷機能は制限されています");
@@ -351,34 +351,30 @@ const App: React.FC = () => {
 
     if (cart.length === 0) return;
     
-    // For RawBT, we don't need explicit connection checks as it uses Intents.
-    // For Sunmi, it checks internal interface.
-    
     setIsProcessing(true);
     if (navigator.vibrate) navigator.vibrate(50);
 
     try {
+      // Capture the receipt image (Original only)
+      const input = document.getElementById('receipt-original');
+      if (!input) throw new Error("Receipt element not found");
+
+      const canvas = await html2canvas(input, { 
+          scale: 2, // Higher scale for better print quality
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff' // Ensure white background
+      });
+      const imgData = canvas.toDataURL('image/png');
+
       await printerService.printReceipt(
-        cart,
-        subTotal,
-        initialTax,
-        totalAmount,
-        receiptMode,
-        recipientName,
-        proviso,
-        paymentDeadline,
-        discountVal, 
-        LOGO_URL,
-        storeSettings, // Pass Settings
-        finalTax, // Pass Final Tax
-        storeMemo // Pass Store Memo
+        imgData,
+        storeSettings
       );
 
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
       console.error(e);
-      // For RawBT, errors might not be caught here if intent launches successfully
-      // But we alert anyway if something throws
       alert(`印刷エラー:\n${e.message}`);
     } finally {
       setIsProcessing(false);
@@ -799,20 +795,22 @@ const App: React.FC = () => {
                {/* Receipt Preview Container (Includes Original and Copy) */}
                <div id="receipt-preview" className="space-y-8">
                    {/* Original */}
-                   <Receipt 
-                     items={cart} 
-                     subTotal={subTotal} 
-                     tax={initialTax} 
-                     finalTax={finalTax}
-                     total={totalAmount}
-                     mode={receiptMode}
-                     recipientName={recipientName}
-                     proviso={proviso}
-                     paymentDeadline={paymentDeadline}
-                     discount={discountVal}
-                     logo={LOGO_URL} 
-                     settings={storeSettings} 
-                   />
+                   <div id="receipt-original">
+                     <Receipt 
+                       items={cart} 
+                       subTotal={subTotal} 
+                       tax={initialTax} 
+                       finalTax={finalTax}
+                       total={totalAmount}
+                       mode={receiptMode}
+                       recipientName={recipientName}
+                       proviso={proviso}
+                       paymentDeadline={paymentDeadline}
+                       discount={discountVal}
+                       logo={LOGO_URL} 
+                       settings={storeSettings} 
+                     />
+                   </div>
 
                    {/* Copy */}
                    <div className="relative">
