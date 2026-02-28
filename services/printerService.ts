@@ -31,9 +31,11 @@ export class PrinterService {
   
   private device: BluetoothDevice | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private currentType: PrinterType = 'BLUETOOTH';
 
   setLogger(logger: (msg: string) => void) { this.onLog = logger; }
   setOnDisconnect(callback: () => void) { this.onDisconnect = callback; }
+  setPrinterType(type: PrinterType) { this.currentType = type; }
   log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
   // --- RawBT (MP-B20 via Android Intent) ---
@@ -79,6 +81,16 @@ export class PrinterService {
   }
 
   private encode(text: string): number[] {
+    // SUNMI: Ensure Shift-JIS conversion
+    if (this.currentType === 'SUNMI') {
+        return Encoding.convert(text, {
+          to: 'SJIS',
+          from: 'UNICODE',
+          type: 'array'
+        });
+    }
+
+    // MP-B20: Default Shift-JIS conversion
     const sjisData = Encoding.convert(text, {
       to: 'SJIS',
       from: 'UNICODE',
@@ -183,6 +195,7 @@ export class PrinterService {
       finalTax?: number,
       storeMemo?: string
   ) {
+    this.setPrinterType(settings.printerType);
     this.log("Generating Receipt (Shift_JIS)...");
     
     const cmds: number[] = [];
