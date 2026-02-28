@@ -203,9 +203,7 @@ export class PrinterService {
     // Header & Initialization
     add([ESC, AT]); // Initialize
     
-    if (settings.printerType === 'SUNMI') {
-        // SUNMI: No special commands. RawBT Image Mode handles UTF-8 text.
-    } else {
+    if (settings.printerType !== 'SUNMI') {
         // MP-B20: Standard Japanese Init
         add(COUNTRY_JAPAN); // ESC R 8
         add(KANJI_MODE_ON); // FS & (Enable Kanji)
