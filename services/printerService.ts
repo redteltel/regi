@@ -198,10 +198,15 @@ export class PrinterService {
     // Header & Initialization
     add([ESC, AT]); // Initialize
     
-    // Always set Japanese Shift-JIS Mode (for both MP-B20 and SUNMI)
-    add(COUNTRY_JAPAN); // ESC R 8
-    add(KANJI_MODE_ON); // FS & (Enable Kanji)
-    add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
+    if (settings.printerType === 'SUNMI') {
+        // SUNMI: FS & (Kanji Mode) only, as requested to fix mojibake
+        add([0x1C, 0x26]);
+    } else {
+        // MP-B20: Standard Japanese Init
+        add(COUNTRY_JAPAN); // ESC R 8
+        add(KANJI_MODE_ON); // FS & (Enable Kanji)
+        add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
+    }
     
     // --- Helper Function to Generate One Receipt ---
     const generateOneReceipt = (isCopy: boolean) => {
