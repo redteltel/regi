@@ -377,9 +377,16 @@ const App: React.FC = () => {
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
       console.error(e);
-      // For RawBT, errors might not be caught here if intent launches successfully
-      // But we alert anyway if something throws
-      alert(`印刷エラー:\n${e.message}`);
+      // Check for Sunmi interface error and fallback
+      if (e.message && e.message.includes("Sunmi Printer interface not found")) {
+          if (window.confirm("プリンターが見つかりません。PDF共有に切り替えますか？")) {
+              handleSharePDF();
+          }
+      } else {
+          // For RawBT, errors might not be caught here if intent launches successfully
+          // But we alert anyway if something throws
+          alert(`印刷エラー:\n${e.message}`);
+      }
     } finally {
       setIsProcessing(false);
     }
