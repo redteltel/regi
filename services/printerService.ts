@@ -81,13 +81,8 @@ export class PrinterService {
   }
 
   private encode(text: string): number[] {
-    // SUNMI: Use UTF-8 for RawBT Image Mode
-    if (this.currentType === 'SUNMI') {
-        const encoder = new TextEncoder();
-        return Array.from(encoder.encode(text));
-    }
-
-    // MP-B20: Default Shift-JIS conversion
+    // Both SUNMI and MP-B20 use Shift-JIS for this text-mode implementation
+    // to support the requested Japanese mode switching commands.
     const sjisData = Encoding.convert(text, {
       to: 'SJIS',
       from: 'UNICODE',
@@ -177,9 +172,23 @@ export class PrinterService {
     });
   }
 
-  async printReceipt(imageDataUrl: string, settings: StoreSettings) {
+  async printReceipt(
+      items: CartItem[], 
+      subTotal: number, 
+      tax: number, 
+      total: number,
+      mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION' = 'RECEIPT',
+      recipientName: string = '',
+      proviso: string = '',
+      paymentDeadline: string = '',
+      discount: number = 0,
+      logoUrl: string | null = null,
+      settings: StoreSettings,
+      finalTax?: number,
+      storeMemo?: string
+  ) {
     this.setPrinterType(settings.printerType);
-    this.log("Generating Receipt Image...");
+    this.log("Generating Receipt (Shift_JIS)...");
     
     const cmds: number[] = [];
     const add = (data: number[]) => {
@@ -189,15 +198,236 @@ export class PrinterService {
     // Header & Initialization
     add([ESC, AT]); // Initialize
     
-    // Convert Image to ESC/POS
-    try {
-        const imageCmds = await this.convertImageToEscPos(imageDataUrl);
-        add(ALIGN_CENTER);
-        add(imageCmds);
-    } catch (e) {
-        console.error("Image conversion failed", e);
-        throw e;
+    if (settings.printerType === 'SUNMI') {
+        // SUNMI Specific Initialization for Japanese
+        add([FS, 0x26]); // FS & (Kanji Mode)
+        add([ESC, 0x74, 0x01]); // ESC t 1 (Katakana/Japanese Character Code Table)
+    } else {
+        // MP-B20: Standard Japanese Init
+        add(COUNTRY_JAPAN); // ESC R 8
+        add(KANJI_MODE_ON); // FS & (Enable Kanji)
+        add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
     }
+    
+    // --- Helper Function to Generate One Receipt ---
+    const generateOneReceipt = (isCopy: boolean) => {
+        add(ALIGN_CENTER);
+
+        // Print Logo if provided (Only on Original or both? Let's do both for consistency)
+        if (logoUrl) {
+            // Note: Re-using image commands might be tricky if not cached, 
+            // but convertImageToEscPos is async. 
+            // For simplicity, we skip logo on copy or re-process it?
+            // Let's skip logo on copy to save paper/time, or just text title.
+            // Or better, we can't easily await inside this sync helper if we structure it this way.
+            // So we will handle logo outside or just print text.
+        }
+        
+        // Title
+        add(SIZE_DOUBLE);
+        let title = "領収書";
+        if (mode === 'FORMAL') title = "領 収 証";
+        else if (mode === 'INVOICE') title = "請 求 書";
+        else if (mode === 'ESTIMATION') title = "御 見 積 書";
+        
+        add(this.encode(title + (isCopy ? " (控え)\n" : "\n")));
+        add(SIZE_NORMAL);
+        add([LF]);
+
+        // Date
+        add(ALIGN_RIGHT);
+        add(this.encode(`${new Date().toLocaleString()}\n`));
+        add([LF]);
+
+        // Formal/Invoice/Estimation Details
+        if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+            add(ALIGN_LEFT);
+            add(this.encode(`${recipientName || "          "} 様\n`));
+            add([LF]);
+            
+            if (mode === 'INVOICE') {
+                add(ALIGN_RIGHT);
+                add(this.encode("下記の通りご請求申し上げます。\n"));
+            } else if (mode === 'ESTIMATION') {
+                add(ALIGN_RIGHT);
+                add(this.encode("下記の通り御見積申し上げます。\n"));
+            }
+
+            add(ALIGN_CENTER);
+            add(SIZE_DOUBLE);
+            add(EMPHASIS_ON);
+            // Use "円" suffix
+            add(this.encode(`${total.toLocaleString()}円\n`));
+            add(EMPHASIS_OFF);
+            add(SIZE_NORMAL);
+            add([LF]);
+            
+            if (mode === 'FORMAL') {
+                add(ALIGN_LEFT);
+                add(this.encode(`但  ${proviso || "お品代"}として\n`));
+                add(this.encode("上記正に領収いたしました\n"));
+                add([LF]);
+            }
+            
+            if (mode === 'INVOICE' && paymentDeadline) {
+                add(ALIGN_RIGHT);
+                add(this.encode(`お支払期限: ${paymentDeadline}\n`));
+                add([LF]);
+            }
+            
+            if (mode === 'ESTIMATION') {
+                add(ALIGN_RIGHT);
+                const d = new Date();
+                d.setMonth(d.getMonth() + 1);
+                add(this.encode(`有効期限: ${d.toLocaleDateString()}\n`));
+                add([LF]);
+            }
+        }
+
+        add(ALIGN_CENTER);
+        add(this.encode("--------------------------------\n"));
+        
+        // Items
+        add(ALIGN_LEFT);
+        for (const item of items) {
+            add(this.encode(`${item.name}\n`));
+            
+            // Part Number Print
+            if (item.partNumber) {
+                add(this.encode(`  (品番: ${item.partNumber})\n`));
+            }
+
+            const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
+            const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
+            
+            // Calculate visual width for alignment (Shift_JIS)
+            let lineLen = 0;
+            for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
+            let totalLen = 0;
+            for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
+
+            const spaces = 32 - (lineLen + totalLen); 
+            const padding = spaces > 0 ? " ".repeat(spaces) : " ";
+            add(this.encode(`${line}${padding}${totalStr}\n`));
+        }
+        
+        add(ALIGN_CENTER);
+        add(this.encode("--------------------------------\n"));
+        
+        // Total Breakdown
+        add(ALIGN_RIGHT);
+        
+        add(this.encode(`小計: ${subTotal.toLocaleString()}円\n`));
+        
+        const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
+        add(this.encode(`消費税(10%): ${taxToDisplay.toLocaleString()}円\n`));
+
+        if (discount > 0) {
+            const initialTotal = subTotal + tax;
+            add(this.encode(`合計(値引前): ${initialTotal.toLocaleString()}円\n`));
+            add(this.encode(`値引(税込): - ${discount.toLocaleString()}円\n`));
+        }
+        
+        if (mode === 'RECEIPT') {
+            add([LF]);
+            add(EMPHASIS_ON);
+            add(SIZE_DOUBLE);
+            add(this.encode(`合計: ${total.toLocaleString()}円\n`));
+            add(EMPHASIS_OFF);
+            add(SIZE_NORMAL);
+        }
+
+        if (discount > 0 && finalTax !== undefined) {
+            add(this.encode(`(内消費税等: ${finalTax.toLocaleString()}円)\n`));
+        }
+        add([LF]);
+
+        // Footer: Store Info from Settings
+        add(ALIGN_CENTER);
+        add(EMPHASIS_ON);
+        add(this.encode(`${settings.storeName}\n`));
+        add(EMPHASIS_OFF);
+        add(this.encode(`〒${settings.zipCode}\n${settings.address1}\n`));
+        if (settings.address2) {
+            add(this.encode(`${settings.address2}\n`));
+        }
+        add(this.encode(`電話: ${settings.tel}\n`));
+        add(this.encode(`登録番号: ${settings.registrationNum}\n`));
+        
+        if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+            add(ALIGN_RIGHT);
+            add(this.encode("(印)\n"));
+            add(ALIGN_CENTER);
+        }
+
+        if (mode === 'FORMAL' && total >= 50000) {
+            add([LF]);
+            add(ALIGN_RIGHT);
+            add(this.encode("----------\n"));
+            add(this.encode("| 収入印紙 |\n"));
+            add(this.encode("----------\n"));
+            add(ALIGN_CENTER);
+        }
+
+        add([LF]);
+        
+        // --- NEW BANK INFO LOGIC ---
+        if (settings.bankName) {
+            add(ALIGN_LEFT);
+            add(this.encode("--------------------------------\n"));
+            add(this.encode("【お振込先】\n"));
+            add(this.encode(`${settings.bankName} ${settings.branchName}\n`));
+            add(this.encode(`${settings.accountType} ${settings.accountNumber}\n`));
+            add(this.encode(`${settings.accountHolder}\n`));
+            add(this.encode("--------------------------------\n"));
+            add(ALIGN_CENTER);
+            add([LF]);
+        }
+
+        if (mode === 'INVOICE') {
+            add(this.encode("ご請求書を送付いたします。\n"));
+        } else if (mode === 'ESTIMATION') {
+            // No specific footer
+        } else {
+            add(this.encode("毎度ありがとうございます!\n"));
+        }
+
+        // Memo for Copy
+        if (isCopy && storeMemo) {
+            add([LF]);
+            add(ALIGN_LEFT);
+            add(this.encode("--------------------------------\n"));
+            add(this.encode("【店舗メモ】\n"));
+            add(this.encode(`${storeMemo}\n`));
+            add(this.encode("--------------------------------\n"));
+            add(ALIGN_CENTER);
+        }
+        
+        add([LF, LF, LF, LF]);
+    };
+
+    // --- 1. Print Original ---
+    // Logo printing disabled for lightweight transmission
+    /*
+    if (logoUrl) {
+        try {
+            this.log("Processing logo image from: " + logoUrl);
+            const imageCmds = await this.convertImageToEscPos(logoUrl);
+            add(ALIGN_CENTER);
+            add(imageCmds);
+            add([LF]);
+        } catch (e) {
+            console.warn("Logo print failed:", e);
+        }
+    }
+    */
+    generateOneReceipt(false);
+
+    // Feed between receipts
+    // add([LF, LF, LF]);
+
+    // --- 2. Print Copy ---
+    // generateOneReceipt(true);
 
     // Final Feed and Cut
     add([LF, LF, LF]);
