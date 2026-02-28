@@ -6,7 +6,7 @@ import MasterEditor from './components/MasterEditor';
 import { AppState, CartItem, Product, PrinterStatus, StoreSettings } from './types';
 import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache } from './services/sheetService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon, Trash2 } from 'lucide-react';
 import { LOGO_URL } from './logoData';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -518,7 +518,18 @@ const App: React.FC = () => {
             )}
 
             <div className="flex justify-between items-end mb-4">
-                <h2 className="text-2xl font-bold text-primary">Cart ({cart.length})</h2>
+                <div className="flex items-center gap-3">
+                    <h2 className="text-2xl font-bold text-primary">Cart ({cart.length})</h2>
+                    {cart.length > 0 && (
+                        <button 
+                            onClick={handleFinish}
+                            className="p-2 bg-red-900/30 text-red-400 rounded-full hover:bg-red-900/50 transition-colors"
+                            title="カートをクリア"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    )}
+                </div>
                 <button 
                   onClick={() => setShowServiceModal(true)}
                   className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-secondary text-xs rounded-full flex items-center gap-1.5 transition-colors border border-gray-700"
@@ -688,7 +699,7 @@ const App: React.FC = () => {
                 className="flex items-center gap-1 text-gray-600 font-medium active:opacity-60 bg-gray-100 px-3 py-1.5 rounded-full"
               >
                 <Home size={16} />
-                <span className="text-xs">完了</span>
+                <span className="text-xs">次の会計へ</span>
               </button>
             </div>
             
