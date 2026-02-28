@@ -81,13 +81,10 @@ export class PrinterService {
   }
 
   private encode(text: string): number[] {
-    // SUNMI: Ensure Shift-JIS conversion
+    // SUNMI: Use UTF-8 and do NOT convert to Shift-JIS
     if (this.currentType === 'SUNMI') {
-        return Encoding.convert(text, {
-          to: 'SJIS',
-          from: 'UNICODE',
-          type: 'array'
-        });
+        const encoder = new TextEncoder();
+        return Array.from(encoder.encode(text));
     }
 
     // MP-B20: Default Shift-JIS conversion
@@ -203,11 +200,18 @@ export class PrinterService {
         cmds.push(...data);
     };
     
-    // Header & Initialization for Japanese
+    // Header & Initialization
     add([ESC, AT]); // Initialize
-    add(COUNTRY_JAPAN); // ESC R 8
-    add(KANJI_MODE_ON); // FS & (Enable Kanji)
-    add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
+    
+    if (settings.printerType === 'SUNMI') {
+         // UTF-8 Mode for Sunmi via RawBT (ESC t H)
+         add([0x1B, 0x74, 0x48]); 
+    } else {
+         // Japanese Shift-JIS Mode for MP-B20
+         add(COUNTRY_JAPAN); // ESC R 8
+         add(KANJI_MODE_ON); // FS & (Enable Kanji)
+         add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
+    }
     
     // --- Helper Function to Generate One Receipt ---
     const generateOneReceipt = (isCopy: boolean) => {
