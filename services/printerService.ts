@@ -188,6 +188,142 @@ export class PrinterService {
       storeMemo?: string
   ) {
     this.setPrinterType(settings.printerType);
+    this.log("Generating Receipt...");
+
+    // --- SUNMI: HTML Intent Mode ---
+    if (settings.printerType === 'SUNMI') {
+        const title = mode === 'FORMAL' ? "領 収 証" : 
+                      mode === 'INVOICE' ? "請 求 書" : 
+                      mode === 'ESTIMATION' ? "御 見 積 書" : "領収書";
+        
+        const dateStr = new Date().toLocaleString();
+        const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
+        
+        let html = `
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body { font-family: sans-serif; font-size: 14px; margin: 0; padding: 0; color: #000; }
+                .center { text-align: center; }
+                .right { text-align: right; }
+                .left { text-align: left; }
+                .bold { font-weight: bold; }
+                .title { font-size: 24px; margin-bottom: 10px; }
+                .line { border-bottom: 1px dashed #000; margin: 5px 0; }
+                .item { display: flex; justify-content: space-between; margin-bottom: 2px; }
+                .total-area { font-size: 18px; margin-top: 10px; }
+                .footer { margin-top: 20px; font-size: 12px; }
+            </style>
+        </head>
+        <body>
+            <div class="center title">${title}</div>
+            <div class="right">${dateStr}</div>
+            <br>
+        `;
+
+        if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+            html += `<div class="left">${recipientName || "          "} 様</div><br>`;
+            
+            if (mode === 'INVOICE') html += `<div class="right">下記の通りご請求申し上げます。</div>`;
+            if (mode === 'ESTIMATION') html += `<div class="right">下記の通り御見積申し上げます。</div>`;
+            
+            html += `
+            <div class="center total-area bold">${total.toLocaleString()}円</div>
+            <br>
+            `;
+            
+            if (mode === 'FORMAL') {
+                html += `<div class="left">但 ${proviso || "お品代"}として</div>`;
+                html += `<div class="left">上記正に領収いたしました</div><br>`;
+            }
+            if (mode === 'INVOICE' && paymentDeadline) {
+                html += `<div class="right">お支払期限: ${paymentDeadline}</div><br>`;
+            }
+            if (mode === 'ESTIMATION') {
+                const d = new Date();
+                d.setMonth(d.getMonth() + 1);
+                html += `<div class="right">有効期限: ${d.toLocaleDateString()}</div><br>`;
+            }
+        }
+
+        html += `<div class="line"></div>`;
+        
+        items.forEach(item => {
+            html += `<div class="left bold">${item.name}</div>`;
+            if (item.partNumber) html += `<div class="left" style="font-size:10px; margin-left:10px;">(品番: ${item.partNumber})</div>`;
+            html += `
+            <div class="item">
+                <span>${item.quantity} x ${item.price.toLocaleString()}</span>
+                <span>${(item.price * item.quantity).toLocaleString()}</span>
+            </div>
+            `;
+        });
+
+        html += `<div class="line"></div>`;
+        
+        html += `<div class="item"><span>小計</span><span>${subTotal.toLocaleString()}</span></div>`;
+        html += `<div class="item"><span>消費税(10%)</span><span>${taxToDisplay.toLocaleString()}</span></div>`;
+        
+        if (discount > 0) {
+            const initialTotal = subTotal + tax;
+            html += `<div class="item"><span>合計(値引前)</span><span>${initialTotal.toLocaleString()}</span></div>`;
+            html += `<div class="item" style="color:red;"><span>値引</span><span>- ${discount.toLocaleString()}</span></div>`;
+        }
+        
+        if (mode === 'RECEIPT') {
+            html += `<div class="item total-area bold"><span>合計</span><span>${total.toLocaleString()}円</span></div>`;
+        }
+        
+        if (discount > 0 && finalTax !== undefined) {
+             html += `<div class="right" style="font-size:10px;">(内消費税等: ${finalTax.toLocaleString()}円)</div>`;
+        }
+
+        html += `<br><div class="center footer bold">${settings.storeName}</div>`;
+        html += `<div class="center footer">〒${settings.zipCode}<br>${settings.address1}</div>`;
+        if (settings.address2) html += `<div class="center footer">${settings.address2}</div>`;
+        html += `<div class="center footer">電話: ${settings.tel}<br>登録番号: ${settings.registrationNum}</div>`;
+        
+        if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+            html += `<div class="right footer">(印)</div>`;
+        }
+        
+        if (mode === 'FORMAL' && total >= 50000) {
+            html += `<br><div class="right">----------<br>| 収入印紙 |<br>----------</div>`;
+        }
+
+        if (settings.bankName) {
+            html += `<div class="line"></div>`;
+            html += `<div class="left footer">【お振込先】<br>${settings.bankName} ${settings.branchName}<br>${settings.accountType} ${settings.accountNumber}<br>${settings.accountHolder}</div>`;
+        }
+
+        html += `<br><div class="center footer">`;
+        if (mode === 'INVOICE') html += "ご請求書を送付いたします。";
+        else if (mode === 'ESTIMATION') html += "";
+        else html += "毎度ありがとうございます!";
+        html += `</div>`;
+        
+        html += `</body></html>`;
+
+        // Encode HTML to Base64
+        // Use UTF-8 encoding for the HTML string
+        const encoder = new TextEncoder();
+        const data = encoder.encode(html);
+        let binary = '';
+        for (let i = 0; i < data.length; i++) {
+            binary += String.fromCharCode(data[i]);
+        }
+        const base64Html = btoa(binary);
+
+        // Construct Intent URL for RawBT
+        // Using 'intent:' scheme with type 'text/html'
+        const intentUrl = `intent:${base64Html}#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;`;
+        
+        window.location.href = intentUrl;
+        return;
+    }
+
+    // --- MP-B20 / Others: ESC/POS Mode (Shift_JIS) ---
     this.log("Generating Receipt (Shift_JIS)...");
     
     const cmds: number[] = [];
@@ -198,16 +334,10 @@ export class PrinterService {
     // Header & Initialization
     add([ESC, AT]); // Initialize
     
-    if (settings.printerType === 'SUNMI') {
-        // SUNMI Specific Initialization for Japanese
-        add([FS, 0x26]); // FS & (Kanji Mode)
-        add([ESC, 0x74, 0x01]); // ESC t 1 (Katakana/Japanese Character Code Table)
-    } else {
-        // MP-B20: Standard Japanese Init
-        add(COUNTRY_JAPAN); // ESC R 8
-        add(KANJI_MODE_ON); // FS & (Enable Kanji)
-        add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
-    }
+    // MP-B20: Standard Japanese Init
+    add(COUNTRY_JAPAN); // ESC R 8
+    add(KANJI_MODE_ON); // FS & (Enable Kanji)
+    add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
     
     // --- Helper Function to Generate One Receipt ---
     const generateOneReceipt = (isCopy: boolean) => {
@@ -392,7 +522,8 @@ export class PrinterService {
             add(this.encode("毎度ありがとうございます!\n"));
         }
 
-        // Memo for Copy
+        // Memo for Copy (Disabled for now)
+        /*
         if (isCopy && storeMemo) {
             add([LF]);
             add(ALIGN_LEFT);
@@ -402,31 +533,15 @@ export class PrinterService {
             add(this.encode("--------------------------------\n"));
             add(ALIGN_CENTER);
         }
+        */
         
         add([LF, LF, LF, LF]);
     };
 
     // --- 1. Print Original ---
-    // Logo printing disabled for lightweight transmission
-    /*
-    if (logoUrl) {
-        try {
-            this.log("Processing logo image from: " + logoUrl);
-            const imageCmds = await this.convertImageToEscPos(logoUrl);
-            add(ALIGN_CENTER);
-            add(imageCmds);
-            add([LF]);
-        } catch (e) {
-            console.warn("Logo print failed:", e);
-        }
-    }
-    */
     generateOneReceipt(false);
 
-    // Feed between receipts
-    // add([LF, LF, LF]);
-
-    // --- 2. Print Copy ---
+    // --- 2. Print Copy (Disabled) ---
     // generateOneReceipt(true);
 
     // Final Feed and Cut
