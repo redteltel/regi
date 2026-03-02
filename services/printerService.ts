@@ -201,13 +201,17 @@ export class PrinterService {
     add([ESC, AT]); // Initialize
 
     if (settings.printerType === 'SUNMI') {
-        // SUNMI Specific Initialization for Japanese
+        // SUNMI Specific Initialization for Japanese (Shift-JIS)
         // 1B 40 (Init) is already added above
-        // 1C 26 (FS & - Kanji Mode)
+        
+        // 1C 26 (FS & - Kanji Mode) - Essential for Japanese on SUNMI
         add([FS, 0x26]); 
-        // 1B 52 08 (ESC R 8 - International Character Set: Japan)
-        add([ESC, 0x52, 0x08]);
-        // 1B 74 01 (ESC t 1 - Character Code Table: Katakana)
+        
+        // 1C 43 01 (FS C 1 - Shift-JIS Code System)
+        // This is the key command used by MP-B20 and recommended for Shift-JIS on some ESC/POS printers
+        add([FS, 0x43, 0x01]);
+
+        // 1B 74 01 (ESC t 1 - Katakana) - Optional but good for safety
         add([ESC, 0x74, 0x01]);
     } else {
         // MP-B20: Standard Japanese Init
