@@ -366,10 +366,16 @@ export class PrinterService {
         const base64Html = btoa(binary);
 
         // Construct Intent URL for RawBT
-        // We use the data URI format with correct MIME type and charset
-        // Added S.browser_fallback_url to prevent Play Store redirect
-        const dataUri = `data:text/html;charset=utf-8;base64,${base64Html}`;
-        const intentUrl = `intent:${dataUri}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=;end;`;
+        // User requested change to fix white screen in In-APP browser
+        // 1. Use data:text/html;base64, prefix
+        // 2. encodeURIComponent the whole data URI to be safe
+        // 3. Add S.rawbt_auto_print=true (or similar flag) to skip preview
+        
+        const dataUri = `data:text/html;base64,${base64Html}`;
+        const encodedDataUri = encodeURIComponent(dataUri);
+        
+        // Using intent: scheme with encoded data URI
+        const intentUrl = `intent:${encodedDataUri}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=;S.rawbt_auto_print=true;end;`;
         
         window.location.href = intentUrl;
         return;
