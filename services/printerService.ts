@@ -366,9 +366,9 @@ export class PrinterService {
         const base64Html = btoa(binary);
 
         // Construct Intent URL for RawBT
-        // Using 'intent:' scheme with type 'text/html'
-        // This is the standard way to invoke RawBT from a web app on Android
-        const intentUrl = `intent:${base64Html}#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;`;
+        // User requested change to rawbt: scheme to avoid Play Store fallback issues
+        // We use the data URI format which RawBT supports for direct content printing
+        const intentUrl = `rawbt:data:text/html;base64,${base64Html}`;
         
         window.location.href = intentUrl;
         return;
