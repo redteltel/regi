@@ -366,8 +366,8 @@ export class PrinterService {
     else if (mode === 'ESTIMATION') {} 
     else text += "毎度ありがとうございます!\n";
 
-    // Final Feed (User requested \n\n\n)
-    text += "\n\n\n";
+    // Final Feed (User requested 4 lines to ensure print clears cutter/tear bar)
+    text += "\n\n\n\n";
 
     // Convert text to Shift-JIS array
     const sjisData = Encoding.convert(text, {
@@ -377,18 +377,17 @@ export class PrinterService {
     });
 
     // Initialization Commands based on Printer Type
-    let initCmds: number[] = [];
+    let combinedData: number[] = [];
     
     if (settings.printerType === 'SUNMI') {
-        // SUNMI: \x1C\x26 (Kanji Mode ON) + \x1B\x52\x08 (Japan)
-        initCmds = [0x1C, 0x26, 0x1B, 0x52, 0x08];
+        // SUNMI: \x1C\x26 (Kanji Mode ON) + \x1B\x52\x08 (Japan) + Shift-JIS Data
+        const initCmds = [0x1C, 0x26, 0x1B, 0x52, 0x08];
+        combinedData = [...initCmds, ...sjisData];
     } else {
-        // MP-B20 (and others): Pure text, rely on RawBT's "typical initialization"
-        initCmds = [];
+        // MP-B20 (and others): Pure Shift-JIS text, NO init commands
+        // User reported content disappearance with commands, so we send pure text data.
+        combinedData = [...sjisData];
     }
-    
-    // Combine init commands and text data
-    const combinedData = [...initCmds, ...sjisData];
 
     // Percent-encode the binary data for URL
     let encodedStr = '';
