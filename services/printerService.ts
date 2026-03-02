@@ -230,15 +230,9 @@ export class PrinterService {
     this.setPrinterType(settings.printerType);
     this.log("Generating Receipt...");
 
-    // --- SUNMI: Simple Text Mode ---
+    // --- SUNMI: Simple Text Mode (Shift-JIS) ---
     if (settings.printerType === 'SUNMI') {
         let text = "";
-        
-        // Initialization Commands (User Requested)
-        // \x1B\x40 (Init)
-        // \x1C\x26 (Kanji Mode ON)
-        // \x1B\x52\x08 (Japan Character Set)
-        text += "\x1B\x40\x1C\x26\x1B\x52\x08";
 
         const title = mode === 'FORMAL' ? "領 収 証" : 
                       mode === 'INVOICE' ? "請 求 書" : 
@@ -374,9 +368,34 @@ export class PrinterService {
         // Final Feed (User requested \n\n\n)
         text += "\n\n\n";
 
-        // Construct RawBT URL
-        // rawbt:http://localhost/print?text=${encodeURIComponent(text)}
-        const intentUrl = `rawbt:http://localhost/print?text=${encodeURIComponent(text)}`;
+        // Convert text to Shift-JIS array
+        const sjisData = Encoding.convert(text, {
+            to: 'SJIS',
+            from: 'UNICODE',
+            type: 'array'
+        });
+
+        // Initialization Commands (User Requested)
+        // \x1C\x26 (Kanji Mode ON)
+        // \x1B\x52\x08 (Japan Character Set)
+        // Note: \x1B\x40 (Init) is often good to have first
+        const initCmds = [0x1B, 0x40, 0x1C, 0x26, 0x1B, 0x52, 0x08];
+        
+        // Combine init commands and text data
+        const combinedData = [...initCmds, ...sjisData];
+
+        // Percent-encode the binary data for URL
+        let encodedStr = '';
+        for (let i = 0; i < combinedData.length; i++) {
+            let hex = combinedData[i].toString(16).toUpperCase();
+            if (hex.length < 2) hex = '0' + hex;
+            encodedStr += '%' + hex;
+        }
+
+        // Construct RawBT URL with encoded binary data
+        // rawbt:http://localhost/print?text=...
+        // RawBT should interpret percent-encoded bytes correctly if we don't specify charset=utf-8
+        const intentUrl = `rawbt:http://localhost/print?text=${encodedStr}`;
         
         window.location.href = intentUrl;
         return;
