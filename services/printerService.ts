@@ -230,149 +230,153 @@ export class PrinterService {
     this.setPrinterType(settings.printerType);
     this.log("Generating Receipt...");
 
-    // --- SUNMI: HTML Intent Mode ---
+    // --- SUNMI: Simple Text Mode ---
     if (settings.printerType === 'SUNMI') {
+        let text = "";
+        
+        // Initialization Commands (User Requested)
+        // \x1B\x40 (Init)
+        // \x1C\x26 (Kanji Mode ON)
+        // \x1B\x52\x08 (Japan Character Set)
+        text += "\x1B\x40\x1C\x26\x1B\x52\x08";
+
         const title = mode === 'FORMAL' ? "領 収 証" : 
                       mode === 'INVOICE' ? "請 求 書" : 
                       mode === 'ESTIMATION' ? "御 見 積 書" : "領収書";
         
-        const dateStr = new Date().toLocaleString();
-        const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
-        
-        let html = `<!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body { 
-                    font-family: sans-serif; 
-                    font-size: 16px; 
-                    font-weight: bold;
-                    margin: 0; 
-                    padding: 0; 
-                    color: #000; 
-                    width: 100%;
-                }
-                .center { text-align: center; }
-                .right { text-align: right; }
-                .left { text-align: left; }
-                .bold { font-weight: bold; }
-                .title { font-size: 24px; margin-bottom: 10px; }
-                .line { border-bottom: 2px solid #000; margin: 5px 0; }
-                .item { display: flex; justify-content: space-between; margin-bottom: 2px; }
-                .total-area { font-size: 20px; margin-top: 10px; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 5px 0; }
-                .footer { margin-top: 20px; font-size: 14px; }
-                .small { font-size: 12px; }
-            </style>
-        </head>
-        <body>
-            <div class="center title">${title}</div>
-            <div class="right">${dateStr}</div>
-            <br>
-        `;
+        // Helper for visual length (simple approximation)
+        const getLen = (str: string) => {
+            let len = 0;
+            for (let i = 0; i < str.length; i++) {
+                len += (str.charCodeAt(i) > 255 ? 2 : 1);
+            }
+            return len;
+        };
 
+        // Helper for centering
+        const center = (str: string) => {
+            const spaces = Math.max(0, Math.floor((32 - getLen(str)) / 2));
+            return " ".repeat(spaces) + str + "\n";
+        };
+
+        // Helper for right align
+        const right = (str: string) => {
+            const spaces = Math.max(0, 32 - getLen(str));
+            return " ".repeat(spaces) + str + "\n";
+        };
+
+        // Header
+        text += center(title + (false ? " (控え)" : "")); // Copy disabled
+        text += "\n";
+        text += right(new Date().toLocaleString());
+        text += "\n";
+
+        // Recipient / details
         if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-            html += `<div class="left">${recipientName || "          "} 様</div><br>`;
+            text += (recipientName || "          ") + " 様\n\n";
             
-            if (mode === 'INVOICE') html += `<div class="right">下記の通りご請求申し上げます。</div>`;
-            if (mode === 'ESTIMATION') html += `<div class="right">下記の通り御見積申し上げます。</div>`;
-            
-            html += `
-            <div class="center total-area bold">${total.toLocaleString()}円</div>
-            <br>
-            `;
+            if (mode === 'INVOICE') text += right("下記の通りご請求申し上げます。");
+            if (mode === 'ESTIMATION') text += right("下記の通り御見積申し上げます。");
+
+            text += center(total.toLocaleString() + "円");
+            text += "\n";
             
             if (mode === 'FORMAL') {
-                html += `<div class="left">但 ${proviso || "お品代"}として</div>`;
-                html += `<div class="left">上記正に領収いたしました</div><br>`;
+                text += `但 ${proviso || "お品代"}として\n`;
+                text += "上記正に領収いたしました\n\n";
             }
             if (mode === 'INVOICE' && paymentDeadline) {
-                html += `<div class="right">お支払期限: ${paymentDeadline}</div><br>`;
+                text += right(`お支払期限: ${paymentDeadline}`);
+                text += "\n";
             }
             if (mode === 'ESTIMATION') {
                 const d = new Date();
                 d.setMonth(d.getMonth() + 1);
-                html += `<div class="right">有効期限: ${d.toLocaleDateString()}</div><br>`;
+                text += right(`有効期限: ${d.toLocaleDateString()}`);
+                text += "\n";
             }
         }
 
-        html += `<div class="line"></div>`;
-        
-        items.forEach(item => {
-            html += `<div class="left bold">${item.name}</div>`;
-            if (item.partNumber) html += `<div class="left small" style="margin-left:10px;">(品番: ${item.partNumber})</div>`;
-            html += `
-            <div class="item">
-                <span>${item.quantity} x ${item.price.toLocaleString()}</span>
-                <span>${(item.price * item.quantity).toLocaleString()}</span>
-            </div>
-            `;
-        });
+        text += center("--------------------------------");
 
-        html += `<div class="line"></div>`;
-        
-        html += `<div class="item"><span>小計</span><span>${subTotal.toLocaleString()}</span></div>`;
-        html += `<div class="item"><span>消費税(10%)</span><span>${taxToDisplay.toLocaleString()}</span></div>`;
-        
+        // Items
+        for (const item of items) {
+            text += item.name + "\n";
+            if (item.partNumber) {
+                text += `  (品番: ${item.partNumber})\n`;
+            }
+            const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
+            const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
+            
+            const spaceLen = 32 - (getLen(line) + getLen(totalStr));
+            const padding = " ".repeat(Math.max(1, spaceLen));
+            text += line + padding + totalStr + "\n";
+        }
+
+        text += center("--------------------------------");
+
+        // Totals
+        text += right(`小計: ${subTotal.toLocaleString()}円`);
+        const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
+        text += right(`消費税(10%): ${taxToDisplay.toLocaleString()}円`);
+
         if (discount > 0) {
             const initialTotal = subTotal + tax;
-            html += `<div class="item"><span>合計(値引前)</span><span>${initialTotal.toLocaleString()}</span></div>`;
-            html += `<div class="item" style="color:red;"><span>値引</span><span>- ${discount.toLocaleString()}</span></div>`;
-        }
-        
-        if (mode === 'RECEIPT') {
-            html += `<div class="item total-area bold"><span>合計</span><span>${total.toLocaleString()}円</span></div>`;
-        }
-        
-        if (discount > 0 && finalTax !== undefined) {
-             html += `<div class="right small">(内消費税等: ${finalTax.toLocaleString()}円)</div>`;
+            text += right(`合計(値引前): ${initialTotal.toLocaleString()}円`);
+            text += right(`値引(税込): - ${discount.toLocaleString()}円`);
         }
 
-        html += `<br><div class="center footer bold">${settings.storeName}</div>`;
-        html += `<div class="center footer">〒${settings.zipCode}<br>${settings.address1}</div>`;
-        if (settings.address2) html += `<div class="center footer">${settings.address2}</div>`;
-        html += `<div class="center footer">電話: ${settings.tel}<br>登録番号: ${settings.registrationNum}</div>`;
-        
+        if (mode === 'RECEIPT') {
+            text += "\n";
+            text += center(`合計: ${total.toLocaleString()}円`);
+        }
+
+        if (discount > 0 && finalTax !== undefined) {
+            text += right(`(内消費税等: ${finalTax.toLocaleString()}円)`);
+        }
+        text += "\n";
+
+        // Footer
+        text += center(settings.storeName);
+        text += center(`〒${settings.zipCode}`);
+        text += center(settings.address1);
+        if (settings.address2) text += center(settings.address2);
+        text += center(`電話: ${settings.tel}`);
+        text += center(`登録番号: ${settings.registrationNum}`);
+
         if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-            html += `<div class="right footer">(印)</div>`;
+            text += right("(印)");
         }
-        
+
         if (mode === 'FORMAL' && total >= 50000) {
-            html += `<br><div class="right">----------<br>| 収入印紙 |<br>----------</div>`;
+            text += "\n";
+            text += right("----------");
+            text += right("| 収入印紙 |");
+            text += right("----------");
         }
+
+        text += "\n";
 
         if (settings.bankName) {
-            html += `<div class="line"></div>`;
-            html += `<div class="left footer">【お振込先】<br>${settings.bankName} ${settings.branchName}<br>${settings.accountType} ${settings.accountNumber}<br>${settings.accountHolder}</div>`;
+            text += center("--------------------------------");
+            text += "【お振込先】\n";
+            text += `${settings.bankName} ${settings.branchName}\n`;
+            text += `${settings.accountType} ${settings.accountNumber}\n`;
+            text += `${settings.accountHolder}\n`;
+            text += center("--------------------------------");
+            text += "\n";
         }
 
-        html += `<br><div class="center footer">`;
-        if (mode === 'INVOICE') html += "ご請求書を送付いたします。";
-        else if (mode === 'ESTIMATION') html += "";
-        else html += "毎度ありがとうございます!";
-        html += `</div>`;
-        
-        html += `</body></html>`;
+        if (mode === 'INVOICE') text += "ご請求書を送付いたします。\n";
+        else if (mode === 'ESTIMATION') {} 
+        else text += "毎度ありがとうございます!\n";
 
-        // Encode HTML to Base64
-        // Use UTF-8 encoding for the HTML string
-        // const encoder = new TextEncoder();
-        // const data = encoder.encode(html);
-        // let binary = '';
-        // for (let i = 0; i < data.length; i++) {
-        //     binary += String.fromCharCode(data[i]);
-        // }
-        // const base64Html = btoa(binary);
+        // Final Feed (User requested \n\n\n)
+        text += "\n\n\n";
 
-        // Construct Intent URL for RawBT
-        // User requested change to use Action Intent with S.text for HTML content
-        // This avoids base64 rendering issues and ensures correct HTML parsing
-        
-        const encodedHtml = encodeURIComponent(html);
-        
-        // intent:#Intent;action=ru.a402d.rawbtprinter.action.PRINT;type=text/html;S.text=...;S.rawbt_auto_print=true;end;
-        const intentUrl = `intent:#Intent;action=ru.a402d.rawbtprinter.action.PRINT;type=text/html;S.text=${encodedHtml};S.rawbt_auto_print=true;package=ru.a402d.rawbtprinter;end;`;
+        // Construct RawBT URL
+        // rawbt:http://localhost/print?text=${encodeURIComponent(text)}
+        const intentUrl = `rawbt:http://localhost/print?text=${encodeURIComponent(text)}`;
         
         window.location.href = intentUrl;
         return;
