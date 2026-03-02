@@ -43,41 +43,116 @@ export class PrinterService {
   // This is more stable on Android devices.
   
   async print(data: Uint8Array, type: PrinterType) {
-      if (type === 'BLUETOOTH' || type === 'SUNMI') {
-          // Convert data to Base64
-          let binary = '';
-          const len = data.byteLength;
-          for (let i = 0; i < len; i++) {
-              binary += String.fromCharCode(data[i]);
-          }
-          const base64 = btoa(binary);
+      if (type === 'SUNMI') {
+          // Direct SUNMI Inner Printer Control (AIDL via JS Interface)
+          // We assume a JS interface 'SunmiInnerPrinter' or similar is injected by the wrapper app.
+          // Common methods: sendRAWData(base64), printRawData(base64), etc.
+          
+          const printer = (window as any).SunmiInnerPrinter || (window as any).InnerPrinter;
+          
+          if (printer) {
+              try {
+                  // Convert Uint8Array to Base64 string
+                  let binary = '';
+                  const len = data.byteLength;
+                  for (let i = 0; i < len; i++) {
+                      binary += String.fromCharCode(data[i]);
+                  }
+                  const base64 = btoa(binary);
 
-          // Construct RawBT Intent URL
-          // scheme: rawbt:base64,
-          const intentUrl = `rawbt:base64,${base64}`;
+                  // Try common method names for sending raw data
+                  if (printer.sendRAWData) {
+                      printer.sendRAWData(base64);
+                  } else if (printer.printRawData) {
+                      printer.printRawData(base64);
+                  } else if (printer.printOriginalText) {
+                       // Fallback for some wrappers that might take text, but we have binary...
+                       // Ideally we need raw binary for ESC/POS commands.
+                       console.warn("SunmiInnerPrinter found but no known raw print method.");
+                  } else {
+                      console.warn("SunmiInnerPrinter found but method unknown.");
+                  }
+              } catch (e) {
+                  console.error("Failed to print via SunmiInnerPrinter", e);
+              }
+          } else {
+              console.warn("SunmiInnerPrinter interface not found. Ensure you are running in a supported environment.");
+              alert("プリンターが見つかりません。(SunmiInnerPrinter missing)");
+          }
+          return;
+      } else if (type === 'BLUETOOTH') {
+          // MP-B20: Web Bluetooth API
+          if (!this.characteristic) {
+              try {
+                  await this.connectBluetooth();
+              } catch (e) {
+                  console.error("Bluetooth connection failed", e);
+                  return;
+              }
+          }
           
-          // Open Intent
-          window.location.href = intentUrl;
-          
+          if (this.characteristic) {
+              try {
+                  // Write data in chunks to avoid MTU limits
+                  const CHUNK_SIZE = 512; // Safe chunk size
+                  for (let i = 0; i < data.byteLength; i += CHUNK_SIZE) {
+                      const chunk = data.slice(i, i + CHUNK_SIZE);
+                      await this.characteristic.writeValue(chunk);
+                  }
+              } catch (e) {
+                  console.error("Bluetooth write failed", e);
+                  // Attempt reconnect?
+              }
+          }
       }
   }
 
-  // No connection needed for RawBT (Intent fires and forgets)
+  // Web Bluetooth Connection Logic (Restored for MP-B20)
   async connectBluetooth(): Promise<any> {
-      return Promise.resolve({ name: 'RawBT Printer' });
+      try {
+          this.device = await navigator.bluetooth.requestDevice({
+              filters: [{ services: [SERVICE_UUID] }]
+          });
+
+          if (!this.device) throw new Error("No device selected");
+          
+          this.device.addEventListener('gattserverdisconnected', this.handleDisconnect.bind(this));
+
+          const server = await this.device.gatt?.connect();
+          if (!server) throw new Error("GATT server connection failed");
+
+          const service = await server.getPrimaryService(SERVICE_UUID);
+          this.characteristic = await service.getCharacteristic(CHAR_UUID);
+
+          this.log(`Connected to ${this.device.name}`);
+          return this.device;
+      } catch (error) {
+          this.log(`Connection error: ${error}`);
+          throw error;
+      }
+  }
+
+  private handleDisconnect() {
+      this.log("Bluetooth disconnected");
+      this.device = null;
+      this.characteristic = null;
+      if (this.onDisconnect) this.onDisconnect();
   }
 
   isConnected(): boolean {
-      // Always true for RawBT as it's fire-and-forget via Intent
-      return true;
+      return !!this.characteristic;
   }
   
   disconnect() {
-      // No-op
+      if (this.device && this.device.gatt?.connected) {
+          this.device.gatt.disconnect();
+      }
   }
   
   restoreBluetoothConnection() {
-      return Promise.resolve(true);
+      // Web Bluetooth requires user gesture for reconnection usually, 
+      // but we can check if already connected.
+      return Promise.resolve(this.isConnected());
   }
 
   private encode(text: string): number[] {
