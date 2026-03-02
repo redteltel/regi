@@ -376,10 +376,8 @@ export class PrinterService {
         });
 
         // Initialization Commands (User Requested)
-        // \x1C\x26 (Kanji Mode ON)
-        // \x1B\x52\x08 (Japan Character Set)
-        // Note: \x1B\x40 (Init) is often good to have first
-        const initCmds = [0x1B, 0x40, 0x1C, 0x26, 0x1B, 0x52, 0x08];
+        // Only \x1C\x26 (Kanji Mode ON) to avoid conflict with RawBT's auto-init
+        const initCmds = [0x1C, 0x26];
         
         // Combine init commands and text data
         const combinedData = [...initCmds, ...sjisData];
