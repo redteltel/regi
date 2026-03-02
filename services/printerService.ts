@@ -239,7 +239,7 @@ export class PrinterService {
         const dateStr = new Date().toLocaleString();
         const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
         
-        let html = `
+        let html = `<!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
@@ -366,9 +366,10 @@ export class PrinterService {
         const base64Html = btoa(binary);
 
         // Construct Intent URL for RawBT
-        // User requested change to rawbt: scheme to avoid Play Store fallback issues
-        // We use the data URI format which RawBT supports for direct content printing
-        const intentUrl = `rawbt:data:text/html;base64,${base64Html}`;
+        // We use the data URI format with correct MIME type and charset
+        // Added S.browser_fallback_url to prevent Play Store redirect
+        const dataUri = `data:text/html;charset=utf-8;base64,${base64Html}`;
+        const intentUrl = `intent:${dataUri}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=;end;`;
         
         window.location.href = intentUrl;
         return;
