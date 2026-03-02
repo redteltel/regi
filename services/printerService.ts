@@ -357,25 +357,22 @@ export class PrinterService {
 
         // Encode HTML to Base64
         // Use UTF-8 encoding for the HTML string
-        const encoder = new TextEncoder();
-        const data = encoder.encode(html);
-        let binary = '';
-        for (let i = 0; i < data.length; i++) {
-            binary += String.fromCharCode(data[i]);
-        }
-        const base64Html = btoa(binary);
+        // const encoder = new TextEncoder();
+        // const data = encoder.encode(html);
+        // let binary = '';
+        // for (let i = 0; i < data.length; i++) {
+        //     binary += String.fromCharCode(data[i]);
+        // }
+        // const base64Html = btoa(binary);
 
         // Construct Intent URL for RawBT
-        // User requested change to fix white screen in In-APP browser
-        // 1. Use data:text/html;base64, prefix
-        // 2. encodeURIComponent the whole data URI to be safe
-        // 3. Add S.rawbt_auto_print=true (or similar flag) to skip preview
+        // User requested change to use Action Intent with S.text for HTML content
+        // This avoids base64 rendering issues and ensures correct HTML parsing
         
-        const dataUri = `data:text/html;base64,${base64Html}`;
-        const encodedDataUri = encodeURIComponent(dataUri);
+        const encodedHtml = encodeURIComponent(html);
         
-        // Using intent: scheme with encoded data URI
-        const intentUrl = `intent:${encodedDataUri}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=;S.rawbt_auto_print=true;end;`;
+        // intent:#Intent;action=ru.a402d.rawbtprinter.action.PRINT;type=text/html;S.text=...;S.rawbt_auto_print=true;end;
+        const intentUrl = `intent:#Intent;action=ru.a402d.rawbtprinter.action.PRINT;type=text/html;S.text=${encodedHtml};S.rawbt_auto_print=true;package=ru.a402d.rawbtprinter;end;`;
         
         window.location.href = intentUrl;
         return;
