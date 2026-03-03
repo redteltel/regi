@@ -11,9 +11,19 @@ import { LOGO_URL } from './logoData';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
+// Auto-switch store name after April 1st, 2026
+const getStoreName = () => {
+  const now = new Date();
+  // Month is 0-indexed: 3 = April
+  if (now.getFullYear() > 2026 || (now.getFullYear() === 2026 && now.getMonth() >= 3)) {
+    return "パナランドフクシマ";
+  }
+  return "パナランドヨシダ";
+};
+
 // Default Settings
 const DEFAULT_SETTINGS: StoreSettings = {
-  storeName: "パナランドヨシダ",
+  storeName: getStoreName(),
   zipCode: "863-2172",
   address1: "天草市旭町４３",
   address2: "",

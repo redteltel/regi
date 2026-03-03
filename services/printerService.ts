@@ -54,7 +54,7 @@ export class PrinterService {
 
           // Construct RawBT Intent URL
           // scheme: rawbt:base64,
-          const intentUrl = `rawbt:base64,${base64}`;
+          const intentUrl = `rawbt:base64,${base64}?charset=UTF-8`;
           
           // Open Intent
           window.location.href = intentUrl;
@@ -81,19 +81,9 @@ export class PrinterService {
   }
 
   private encode(text: string): number[] {
-    // SUNMI: Use UTF-8 for RawBT Image Mode
-    if (this.currentType === 'SUNMI') {
-        const encoder = new TextEncoder();
-        return Array.from(encoder.encode(text));
-    }
-
-    // MP-B20: Default Shift-JIS conversion
-    const sjisData = Encoding.convert(text, {
-      to: 'SJIS',
-      from: 'UNICODE',
-      type: 'array'
-    });
-    return sjisData;
+    // Always use UTF-8 for RawBT (and SUNMI)
+    const encoder = new TextEncoder();
+    return Array.from(encoder.encode(text));
   }
 
   // Convert Image (URL or Base64) to ESC/POS Raster Bit Image (GS v 0)
@@ -200,17 +190,14 @@ export class PrinterService {
         cmds.push(...data);
     };
     
+    // --- 1. UTF-8 BOM for RawBT ---
+    add([0xEF, 0xBB, 0xBF]);
+
     // Header & Initialization
     add([ESC, AT]); // Initialize
+    add(COUNTRY_JAPAN); // ESC R 8
     
-    if (settings.printerType === 'SUNMI') {
-        // SUNMI: No special commands. RawBT Image Mode handles UTF-8 text.
-    } else {
-        // MP-B20: Standard Japanese Init
-        add(COUNTRY_JAPAN); // ESC R 8
-        add(KANJI_MODE_ON); // FS & (Enable Kanji)
-        add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
-    }
+    // Note: Removed FS & (Kanji Mode) and FS C 1 (Shift-JIS) for UTF-8 TrueType mode
     
     // --- Helper Function to Generate One Receipt ---
     const generateOneReceipt = (isCopy: boolean) => {
