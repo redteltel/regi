@@ -16,7 +16,6 @@ interface ReceiptProps {
   settings: StoreSettings;
   isCopy?: boolean;
   memo?: string;
-  isPdf?: boolean;
 }
 
 const Receipt: React.FC<ReceiptProps> = ({ 
@@ -33,8 +32,7 @@ const Receipt: React.FC<ReceiptProps> = ({
   logo = null,
   settings,
   isCopy = false,
-  memo = '',
-  isPdf = false
+  memo = ''
 }) => {
   const needsStamp = mode === 'FORMAL' && total >= 50000;
   const [imgError, setImgError] = useState(false);
@@ -53,7 +51,7 @@ const Receipt: React.FC<ReceiptProps> = ({
   };
 
   return (
-    <div className={`bg-white text-black ${isPdf ? 'p-2 max-w-full' : 'p-8 max-w-sm border-t-8 border-gray-200'} mx-auto font-mono ${isPdf ? 'text-lg leading-relaxed' : 'text-sm leading-relaxed'} mb-4 relative`}>
+    <div className="bg-white text-black p-8 rounded-sm shadow-xl max-w-sm mx-auto font-mono text-sm leading-relaxed mb-4 border-t-8 border-gray-200 relative">
       
       {/* Header */}
       <div className="text-center mb-6">
@@ -67,7 +65,7 @@ const Receipt: React.FC<ReceiptProps> = ({
            />
         )}
         
-        <h2 className={`${isPdf ? 'text-4xl mb-4' : 'text-2xl mb-2'} font-bold tracking-widest flex items-center justify-center gap-2`}>
+        <h2 className="text-2xl font-bold mb-2 tracking-widest flex items-center justify-center gap-2">
           {getTitle()}
           {isCopy && <span className="text-sm font-normal border border-black px-1 rounded">控え</span>}
         </h2>
@@ -85,7 +83,7 @@ const Receipt: React.FC<ReceiptProps> = ({
       {(mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') && (
         <div className="mb-6 border-b-2 border-black pb-4">
           <div className="flex justify-between items-end mb-4">
-            <span className={`${isPdf ? 'text-2xl' : 'text-lg'} border-b border-black flex-1 mr-2 px-1`}>
+            <span className="text-lg border-b border-black flex-1 mr-2 px-1">
               {recipientName || '__________'} <span className="text-sm">様</span>
             </span>
           </div>
@@ -105,7 +103,7 @@ const Receipt: React.FC<ReceiptProps> = ({
             <span className="text-xs mr-2">
                 {mode === 'INVOICE' ? 'ご請求金額' : mode === 'ESTIMATION' ? '御見積金額' : '金額'}
             </span>
-            <span className={`${isPdf ? 'text-4xl' : 'text-2xl'} font-bold tracking-wider`}>{total.toLocaleString()}円</span>
+            <span className="text-2xl font-bold tracking-wider">{total.toLocaleString()}円</span>
           </div>
           
           {mode === 'FORMAL' && (
@@ -142,7 +140,7 @@ const Receipt: React.FC<ReceiptProps> = ({
         {items.map((item) => (
           <div key={item.id} className="flex flex-col border-b border-dashed border-gray-100 pb-2 last:border-0 last:pb-0">
             {/* Item Name */}
-            <span className={`${isPdf ? 'text-xl' : 'text-sm'} font-bold break-words`}>{item.name}</span>
+            <span className="font-bold text-sm break-words">{item.name}</span>
             
             {/* Part Number Display */}
             {item.partNumber && (
@@ -151,7 +149,7 @@ const Receipt: React.FC<ReceiptProps> = ({
                 </span>
             )}
 
-            <div className={`flex justify-between text-gray-600 ${isPdf ? 'text-lg' : 'text-xs'} mt-0.5`}>
+            <div className="flex justify-between text-gray-600 text-xs mt-0.5">
               <span>{item.quantity} x {item.price.toLocaleString()}円</span>
               <span>{(item.price * item.quantity).toLocaleString()}円</span>
             </div>
@@ -161,22 +159,22 @@ const Receipt: React.FC<ReceiptProps> = ({
 
       {/* Totals */}
       <div className="border-t border-dashed border-gray-400 pt-3 mb-6 space-y-1">
-        <div className={`flex justify-between text-gray-600 ${isPdf ? 'text-lg' : ''}`}>
+        <div className="flex justify-between text-gray-600">
           <span>小計 (税抜)</span>
           <span>{subTotal.toLocaleString()}円</span>
         </div>
-        <div className={`flex justify-between text-gray-600 ${isPdf ? 'text-lg' : ''}`}>
+        <div className="flex justify-between text-gray-600">
           <span>消費税(10%)</span>
           <span>{(finalTax !== undefined ? finalTax : tax).toLocaleString()}円</span>
         </div>
 
         {discount > 0 && (
           <>
-            <div className={`flex justify-between text-gray-600 border-t border-dashed border-gray-300 pt-1 mt-1 ${isPdf ? 'text-lg' : ''}`}>
+            <div className="flex justify-between text-gray-600 border-t border-dashed border-gray-300 pt-1 mt-1">
                <span>合計 (値引前)</span>
                <span>{(subTotal + tax).toLocaleString()}円</span>
             </div>
-            <div className={`flex justify-between text-red-600 ${isPdf ? 'text-lg' : ''}`}>
+            <div className="flex justify-between text-red-600">
                <span>値引 (税込)</span>
                <span>- {discount.toLocaleString()}円</span>
             </div>
@@ -184,7 +182,7 @@ const Receipt: React.FC<ReceiptProps> = ({
         )}
         
         {mode === 'RECEIPT' && (
-          <div className={`flex justify-between ${isPdf ? 'text-4xl mt-4' : 'text-xl mt-2'} font-bold border-t border-gray-200 pt-2`}>
+          <div className="flex justify-between text-xl font-bold border-t border-gray-200 pt-2 mt-2">
             <span>合計</span>
             <span>{total.toLocaleString()}円</span>
           </div>
@@ -199,8 +197,8 @@ const Receipt: React.FC<ReceiptProps> = ({
 
       {/* Footer: Store Info & Stamp */}
       <div className="mt-8 pt-4 border-t-2 border-gray-800 relative">
-        <div className={`${isPdf ? 'text-lg leading-8' : 'text-xs leading-5'}`}>
-            <p className={`${isPdf ? 'text-3xl mb-2' : 'text-sm'} font-bold`}>{settings.storeName}</p>
+        <div className="text-xs leading-5">
+            <p className="font-bold text-sm">{settings.storeName}</p>
             <p>〒{settings.zipCode}</p>
             <p>{settings.address1}</p>
             {settings.address2 && <p>{settings.address2}</p>}
