@@ -183,7 +183,7 @@ export class PrinterService {
       storeMemo?: string
   ) {
     this.setPrinterType(settings.printerType);
-    this.log("Generating Receipt (Shift_JIS)...");
+    this.log("Generating Receipt (UTF-8)...");
     
     const cmds: number[] = [];
     const add = (data: number[]) => {
