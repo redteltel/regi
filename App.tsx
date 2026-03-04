@@ -361,21 +361,37 @@ const App: React.FC = () => {
     if (navigator.vibrate) navigator.vibrate(50);
 
     try {
-      await printerService.printReceipt(
-        cart,
-        subTotal,
-        initialTax,
-        totalAmount,
-        receiptMode,
-        recipientName,
-        proviso,
-        paymentDeadline,
-        discountVal, 
-        LOGO_URL,
-        storeSettings, // Pass Settings
-        finalTax, // Pass Final Tax
-        storeMemo // Pass Store Memo
-      );
+      // Special handling for FORMAL mode (Image Print via RawBT)
+      if (receiptMode === 'FORMAL') {
+          const input = document.getElementById('receipt-horizontal-pdf');
+          if (!input) throw new Error("Receipt element not found");
+
+          // Generate Image
+          const canvas = await html2canvas(input, { scale: 2, useCORS: true });
+          const base64Data = canvas.toDataURL('image/png').split(',')[1];
+
+          // Construct RawBT Intent for Image
+          // rawbt:image/png;base64,...
+          const intentUrl = `rawbt:image/png;base64,${base64Data}`;
+          window.location.href = intentUrl;
+      } else {
+          // Standard Text/ESC/POS Printing (MP-B20 / Shift-JIS)
+          await printerService.printReceipt(
+            cart,
+            subTotal,
+            initialTax,
+            totalAmount,
+            receiptMode,
+            recipientName,
+            proviso,
+            paymentDeadline,
+            discountVal, 
+            LOGO_URL,
+            storeSettings, // Pass Settings
+            finalTax, // Pass Final Tax
+            storeMemo // Pass Store Memo
+          );
+      }
 
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
@@ -881,71 +897,75 @@ const App: React.FC = () => {
                </div>
             </div>
 
-            {/* Hidden Horizontal Receipt for PDF Generation (Formal Mode) */}
+            {/* Hidden Horizontal Receipt for PDF/Image Generation (Formal Mode) */}
             {/* 
                 Layout Strategy:
-                - Container: 1400px width x 580px height (Aspect Ratio ~2.4:1)
-                - This simulates a 58mm height strip that is ~140mm long.
-                - We use a grid or flex layout to maximize space.
+                - Container: 1400px width x 600px height
+                - Design: Traditional Japanese Receipt (Ryoshusho)
             */}
-            <div id="receipt-horizontal-pdf" className="fixed top-0 left-0 -z-50 opacity-0 pointer-events-none bg-white text-black font-sans box-border" style={{ width: '1400px', height: '580px', padding: '0' }}>
-                <div className="w-full h-full relative border-8 border-double border-gray-900 p-8 flex flex-col justify-between bg-white">
+            <div id="receipt-horizontal-pdf" className="fixed top-0 left-0 -z-50 opacity-0 pointer-events-none bg-white text-black font-sans box-border" style={{ width: '1400px', height: '600px', padding: '0' }}>
+                <div className="w-full h-full relative p-12 flex flex-col justify-between bg-white">
                     
-                    {/* Top Row: Title (Left) and Date (Right) */}
-                    <div className="flex justify-between items-start w-full">
+                    {/* Top Row */}
+                    <div className="flex justify-between items-end mb-8">
                         <div className="flex flex-col">
-                            <h1 className="text-8xl font-black tracking-widest text-gray-900 leading-none">領収書</h1>
-                            <div className="mt-2 text-2xl text-gray-500 font-bold tracking-widest pl-1">RECEIPT</div>
-                        </div>
-                        <div className="text-right">
-                            <div className="text-3xl font-bold text-gray-700">
+                            <h1 className="text-7xl font-serif font-bold tracking-widest text-gray-900 mb-2">領収証</h1>
+                            <div className="text-2xl font-serif text-gray-700 border-b border-gray-400 pb-1 px-2">
                                 {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
                             </div>
-                            <div className="text-xl text-gray-400 font-mono mt-1">No. {Date.now().toString().slice(-6)}</div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-xl text-gray-400 font-mono">No. {Date.now().toString().slice(-8)}</div>
                         </div>
                     </div>
 
-                    {/* Middle Row: Recipient (Left) and Amount (Center/Right) */}
-                    <div className="flex items-end justify-between w-full mt-4 mb-2">
+                    {/* Middle Row: Recipient & Amount */}
+                    <div className="flex-1 flex flex-col justify-center pl-16 pr-8">
                         {/* Recipient */}
-                        <div className="w-[40%] border-b-4 border-gray-900 pb-2 mb-4">
-                            <div className="flex items-end">
-                                <span className="text-5xl font-bold truncate px-2 text-gray-900 max-w-[400px]">
-                                    {recipientName || "　　　　　"}
-                                </span>
-                                <span className="text-4xl font-bold ml-2 whitespace-nowrap text-gray-900">様</span>
-                            </div>
+                        <div className="flex items-end mb-10">
+                            <span className="text-5xl font-serif min-w-[400px] border-b-2 border-gray-800 px-4 pb-2 text-gray-900">
+                                {recipientName || "　　　　　"}
+                            </span>
+                            <span className="text-4xl font-serif ml-4 text-gray-900">様</span>
                         </div>
 
-                        {/* Amount - MASSIVE */}
-                        <div className="flex-1 flex flex-col items-center justify-center -mt-8">
-                            <div className="flex items-baseline font-black text-gray-900 bg-gray-50 px-12 py-4 rounded-3xl border-2 border-gray-200 shadow-sm transform scale-110 origin-center">
-                                <span className="text-7xl mr-6 text-gray-800">¥</span>
-                                <span className="text-[11rem] leading-none tracking-tighter">{totalAmount.toLocaleString()}</span>
-                                <span className="text-7xl ml-6 text-gray-800">-</span>
+                        {/* Amount */}
+                        <div className="flex flex-col items-center w-full mb-8">
+                            <div className="flex items-baseline border-b-4 double border-gray-900 w-3/4 justify-center pb-2">
+                                <span className="text-5xl font-serif mr-8 text-gray-900">金</span>
+                                <span className="text-8xl font-serif font-bold tracking-tighter text-gray-900">{totalAmount.toLocaleString()}</span>
+                                <span className="text-5xl font-serif ml-8 text-gray-900">円</span>
                             </div>
-                            <div className="mt-2 text-4xl text-gray-600 font-bold">
+                            <div className="mt-4 text-3xl font-serif text-gray-700">
                                 {proviso || "但 お品代として"}
                             </div>
+                            <div className="text-xl font-serif text-gray-600 mt-1">
+                                上記正に領収いたしました
+                            </div>
                         </div>
                     </div>
 
-                    {/* Bottom Row: Store Info (Right) */}
-                    <div className="flex justify-end items-end w-full mt-auto">
-                        <div className="flex items-end gap-6">
-                            {/* Stamp */}
-                            <div className="w-28 h-28 border-4 border-red-400 rounded-full flex items-center justify-center text-red-400 font-bold text-2xl opacity-60 rotate-12 select-none">
+                    {/* Bottom Row: Stamp & Store Info */}
+                    <div className="flex justify-between items-end mt-auto">
+                        {/* Revenue Stamp Area (Left) */}
+                        <div className="w-32 h-40 border-2 border-dotted border-gray-400 flex flex-col items-center justify-center text-gray-400">
+                            <span className="text-sm">収入</span>
+                            <span className="text-sm">印紙</span>
+                        </div>
+
+                        {/* Store Info (Right, Boxed) */}
+                        <div className="border-2 border-gray-800 p-4 rounded-lg min-w-[400px] relative">
+                            {/* Hanko/Stamp Overlay */}
+                            <div className="absolute -top-6 -right-6 w-24 h-24 border-4 border-red-500 rounded-full flex items-center justify-center text-red-500 font-bold text-xl opacity-70 rotate-12 select-none mix-blend-multiply bg-white/50">
                                 検印
                             </div>
 
-                            {/* Store Details */}
-                            <div className="flex flex-col items-end text-right">
-                                <div className="text-5xl font-black text-gray-900 mb-3 tracking-tight">{storeSettings.storeName}</div>
-                                <div className="flex flex-col items-end space-y-1 text-gray-600 font-bold">
-                                    <div className="text-2xl">〒{storeSettings.zipCode} {storeSettings.address1}</div>
-                                    <div className="text-2xl">TEL: {storeSettings.tel}</div>
-                                    <div className="text-xl text-gray-400">登録番号: {storeSettings.registrationNum}</div>
-                                </div>
+                            <div className="text-3xl font-bold font-serif text-gray-900 mb-2">{storeSettings.storeName}</div>
+                            <div className="text-lg font-serif text-gray-800 space-y-1">
+                                <div>〒{storeSettings.zipCode}</div>
+                                <div>{storeSettings.address1}</div>
+                                <div>TEL {storeSettings.tel}</div>
+                                <div className="text-xs text-gray-500 mt-1">登録番号: {storeSettings.registrationNum}</div>
                             </div>
                         </div>
                     </div>
