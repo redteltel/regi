@@ -54,12 +54,7 @@ export class PrinterService {
 
           // Construct RawBT Intent URL
           // scheme: rawbt:base64,
-          let intentUrl = `rawbt:base64,${base64}`;
-          
-          // Sunmi specific: Add charset=UTF-8
-          if (type === 'SUNMI') {
-              intentUrl += '?charset=UTF-8';
-          }
+          const intentUrl = `rawbt:base64,${base64}`;
           
           // Open Intent
           window.location.href = intentUrl;
@@ -204,11 +199,6 @@ export class PrinterService {
     const add = (data: number[]) => {
         cmds.push(...data);
     };
-
-    // Sunmi specific: Add UTF-8 BOM
-    if (settings.printerType === 'SUNMI') {
-        add([0xEF, 0xBB, 0xBF]);
-    }
     
     // Header & Initialization
     add([ESC, AT]); // Initialize
