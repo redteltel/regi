@@ -882,57 +882,70 @@ const App: React.FC = () => {
             </div>
 
             {/* Hidden Horizontal Receipt for PDF Generation (Formal Mode) */}
-            <div id="receipt-horizontal-pdf" className="fixed top-0 left-0 -z-50 opacity-0 pointer-events-none bg-white text-black font-sans box-border" style={{ width: '1200px', height: '500px', padding: '0' }}>
-                <div className="w-full h-full flex flex-row relative border-8 border-double border-gray-800 p-6">
-                    {/* Left: Title (Vertical-ish or Block) */}
-                    <div className="w-[15%] flex items-center justify-center border-r-4 border-gray-800 bg-gray-100">
-                        <div className="text-6xl font-bold tracking-widest text-gray-900" style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}>
-                            領収書
+            {/* 
+                Layout Strategy:
+                - Container: 1400px width x 580px height (Aspect Ratio ~2.4:1)
+                - This simulates a 58mm height strip that is ~140mm long.
+                - We use a grid or flex layout to maximize space.
+            */}
+            <div id="receipt-horizontal-pdf" className="fixed top-0 left-0 -z-50 opacity-0 pointer-events-none bg-white text-black font-sans box-border" style={{ width: '1400px', height: '580px', padding: '0' }}>
+                <div className="w-full h-full relative border-8 border-double border-gray-900 p-8 flex flex-col justify-between bg-white">
+                    
+                    {/* Top Row: Title (Left) and Date (Right) */}
+                    <div className="flex justify-between items-start w-full">
+                        <div className="flex flex-col">
+                            <h1 className="text-8xl font-black tracking-widest text-gray-900 leading-none">領収書</h1>
+                            <div className="mt-2 text-2xl text-gray-500 font-bold tracking-widest pl-1">RECEIPT</div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-3xl font-bold text-gray-700">
+                                {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+                            </div>
+                            <div className="text-xl text-gray-400 font-mono mt-1">No. {Date.now().toString().slice(-6)}</div>
                         </div>
                     </div>
 
-                    {/* Center: Recipient & Amount */}
-                    <div className="w-[55%] flex flex-col justify-between px-8 py-4">
+                    {/* Middle Row: Recipient (Left) and Amount (Center/Right) */}
+                    <div className="flex items-end justify-between w-full mt-4 mb-2">
                         {/* Recipient */}
-                        <div className="mt-4">
-                            <div className="flex items-end border-b-4 border-gray-800 pb-2">
-                                <span className="text-5xl font-bold flex-1 truncate px-2 text-gray-900">
-                                    {recipientName || "　　　　　　"}
+                        <div className="w-[40%] border-b-4 border-gray-900 pb-2 mb-4">
+                            <div className="flex items-end">
+                                <span className="text-5xl font-bold truncate px-2 text-gray-900 max-w-[400px]">
+                                    {recipientName || "　　　　　"}
                                 </span>
-                                <span className="text-3xl font-bold ml-2 whitespace-nowrap text-gray-900">様</span>
+                                <span className="text-4xl font-bold ml-2 whitespace-nowrap text-gray-900">様</span>
                             </div>
                         </div>
 
-                        {/* Amount - EXTRA LARGE */}
-                        <div className="flex flex-col items-center justify-center flex-1 my-4">
-                            <div className="flex items-baseline font-bold text-gray-900 bg-gray-50 px-10 py-6 rounded-2xl border border-gray-200 shadow-sm">
-                                <span className="text-6xl mr-4">¥</span>
-                                <span className="text-[9rem] leading-none tracking-tighter">{totalAmount.toLocaleString()}</span>
-                                <span className="text-6xl ml-4">-</span>
+                        {/* Amount - MASSIVE */}
+                        <div className="flex-1 flex flex-col items-center justify-center -mt-8">
+                            <div className="flex items-baseline font-black text-gray-900 bg-gray-50 px-12 py-4 rounded-3xl border-2 border-gray-200 shadow-sm transform scale-110 origin-center">
+                                <span className="text-7xl mr-6 text-gray-800">¥</span>
+                                <span className="text-[11rem] leading-none tracking-tighter">{totalAmount.toLocaleString()}</span>
+                                <span className="text-7xl ml-6 text-gray-800">-</span>
                             </div>
-                            <div className="mt-4 text-3xl text-gray-600 font-medium">
+                            <div className="mt-2 text-4xl text-gray-600 font-bold">
                                 {proviso || "但 お品代として"}
                             </div>
                         </div>
                     </div>
 
-                    {/* Right: Store Info & Date */}
-                    <div className="w-[30%] flex flex-col justify-between pl-6 py-2 text-right border-l-4 border-gray-800 border-dashed">
-                        <div className="text-3xl font-medium text-gray-700 mt-2">
-                            {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
-                        </div>
-                        
-                        <div className="flex flex-col items-end space-y-2 mb-4">
-                            {/* Store Name - Bold & Large */}
-                            <div className="text-4xl font-extrabold text-gray-900 mb-4">{storeSettings.storeName}</div>
-                            
-                            <div className="text-2xl font-bold text-gray-600">〒{storeSettings.zipCode}</div>
-                            <div className="text-2xl font-medium text-gray-600">{storeSettings.address1}</div>
-                            <div className="text-2xl font-medium text-gray-600">{storeSettings.tel}</div>
-                            
-                            {/* Stamp Placeholder */}
-                            <div className="mt-6 w-24 h-24 border-4 border-red-300 rounded-full flex items-center justify-center text-red-300 font-bold text-xl opacity-50 rotate-12">
-                                印
+                    {/* Bottom Row: Store Info (Right) */}
+                    <div className="flex justify-end items-end w-full mt-auto">
+                        <div className="flex items-end gap-6">
+                            {/* Stamp */}
+                            <div className="w-28 h-28 border-4 border-red-400 rounded-full flex items-center justify-center text-red-400 font-bold text-2xl opacity-60 rotate-12 select-none">
+                                検印
+                            </div>
+
+                            {/* Store Details */}
+                            <div className="flex flex-col items-end text-right">
+                                <div className="text-5xl font-black text-gray-900 mb-3 tracking-tight">{storeSettings.storeName}</div>
+                                <div className="flex flex-col items-end space-y-1 text-gray-600 font-bold">
+                                    <div className="text-2xl">〒{storeSettings.zipCode} {storeSettings.address1}</div>
+                                    <div className="text-2xl">TEL: {storeSettings.tel}</div>
+                                    <div className="text-xl text-gray-400">登録番号: {storeSettings.registrationNum}</div>
+                                </div>
                             </div>
                         </div>
                     </div>
