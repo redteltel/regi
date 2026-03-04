@@ -13,7 +13,7 @@ import jsPDF from 'jspdf';
 
 // Default Settings
 const DEFAULT_SETTINGS: StoreSettings = {
-  storeName: "パナランドヨシダ",
+  storeName: "パナランドフクシマ",
   zipCode: "863-2172",
   address1: "天草市旭町４３",
   address2: "",
@@ -399,35 +399,67 @@ const App: React.FC = () => {
   };
 
   const handleSharePDF = async () => {
-    const input = document.getElementById('receipt-preview');
+    // Determine which element to capture based on mode
+    const isFormal = receiptMode === 'FORMAL';
+    const inputId = isFormal ? 'receipt-horizontal-pdf' : 'receipt-preview';
+    const input = document.getElementById(inputId);
+    
     if (!input) return;
 
     try {
       setIsProcessing(true);
-      const canvas = await html2canvas(input, { scale: 2, useCORS: true });
+      // Use higher scale for better quality
+      const canvas = await html2canvas(input, { scale: 3, useCORS: true });
       const imgData = canvas.toDataURL('image/png');
       
-      // PDF width 80mm.
-      const pdfWidth = 80;
       const imgProps = canvas;
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      let pdf;
+      
+      if (isFormal) {
+          // Horizontal Receipt (Ryoshusho)
+          // Maximize roll paper width (58mm) as the short edge.
+          // We generate a Landscape PDF where Height is 58mm.
+          // Width is calculated based on aspect ratio.
+          const pdfHeight = 58; 
+          const pdfWidth = (imgProps.width * pdfHeight) / imgProps.height;
+          
+          pdf = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: [pdfHeight, pdfWidth] // [height, width] for landscape? No, usually [width, height] but landscape swaps.
+            // Let's pass [pdfWidth, pdfHeight] and 'landscape' to be safe.
+            // Actually, if we want the result to be W x H, and W > H, 'landscape' is correct.
+          });
+          
+          // Add image filling the page
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      } else {
+          // Standard Vertical Receipt
+          // PDF width 80mm (standard thermal width, though MP-B20 is 58mm, 
+          // usually digital receipts are generated at 80mm for better readability on phones).
+          // If the user wants 58mm for everything, we could change this, 
+          // but the request specifically mentioned "Receipt (Ryoshusho) layout".
+          const pdfWidth = 80;
+          const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [pdfWidth, pdfHeight + 10] // Add some padding
-      });
+          pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: [pdfWidth, pdfHeight + 10] // Add some padding
+          });
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      }
       
       const pdfBlob = pdf.output('blob');
-      const fileName = `receipt_${new Date().getTime()}.pdf`;
+      const fileName = `receipt_${isFormal ? 'formal_' : ''}${new Date().getTime()}.pdf`;
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: 'Receipt',
+          title: isFormal ? '領収書' : 'Receipt',
           text: 'Here is your receipt.',
         });
       } else {
@@ -841,6 +873,50 @@ const App: React.FC = () => {
                     ? "※ 5万円以上のため印紙枠を表示しています" 
                     : "内容をご確認の上、印刷または共有してください。"}
                </div>
+            </div>
+
+            {/* Hidden Horizontal Receipt for PDF Generation (Formal Mode) */}
+            <div id="receipt-horizontal-pdf" className="fixed top-0 left-0 -z-50 opacity-0 pointer-events-none bg-white text-black font-sans box-border" style={{ width: '1400px', height: '580px', padding: '40px' }}>
+                <div className="w-full h-full flex flex-row justify-between relative border-4 border-gray-800 p-4">
+                    {/* Left: Title & Recipient */}
+                    <div className="flex flex-col justify-between w-[32%] h-full">
+                        <div className="text-6xl font-bold tracking-widest text-gray-900 mt-2">領収書</div>
+                        <div className="mb-6 w-full">
+                            <div className="flex items-end border-b-4 border-gray-800 pb-2">
+                                <span className="text-4xl font-bold flex-1 truncate px-2 text-gray-900">
+                                    {recipientName || "　　　　　　"}
+                                </span>
+                                <span className="text-3xl font-bold ml-2 whitespace-nowrap text-gray-900">様</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Center: Amount */}
+                    <div className="flex flex-col items-center justify-center w-[38%] h-full">
+                        <div className="flex items-baseline font-bold text-gray-900 bg-gray-100 px-8 py-4 rounded-xl">
+                            <span className="text-5xl mr-3">¥</span>
+                            <span className="text-[7rem] leading-none tracking-tighter">{totalAmount.toLocaleString()}</span>
+                            <span className="text-5xl ml-3">-</span>
+                        </div>
+                        <div className="mt-6 text-3xl text-gray-700 font-medium">
+                            {proviso || "但 お品代として"}
+                        </div>
+                    </div>
+
+                    {/* Right: Store Info */}
+                    <div className="flex flex-col items-end justify-between w-[30%] h-full text-right pl-4">
+                        <div className="text-2xl font-medium text-gray-600 mt-2">
+                            {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        </div>
+                        
+                        <div className="flex flex-col items-end space-y-2 mb-4">
+                            <div className="text-4xl font-bold text-gray-900 mb-2">{storeSettings.storeName}</div>
+                            <div className="text-2xl font-medium text-gray-600">〒{storeSettings.zipCode}</div>
+                            <div className="text-2xl font-medium text-gray-600">{storeSettings.address1}</div>
+                            <div className="text-2xl font-medium text-gray-600">{storeSettings.tel}</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Footer */}
