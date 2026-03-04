@@ -409,39 +409,44 @@ const App: React.FC = () => {
   };
 
   const handleSharePDF = async () => {
-    // Target the hidden PDF-optimized element
-    const input = document.getElementById('receipt-pdf-hidden');
+    const input = document.getElementById('receipt-preview');
     if (!input) return;
 
     try {
       setIsProcessing(true);
-      // High scale for sharpness
-      const canvas = await html2canvas(input, { scale: 3, useCORS: true });
+      const canvas = await html2canvas(input, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL('image/png');
       
-      // 58mm width for Sunmi V2S
-      const pdfWidth = 58;
+      // PDF width 80mm.
+      const pdfWidth = 80;
       const imgProps = canvas;
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [pdfWidth, pdfHeight] 
+        format: [pdfWidth, pdfHeight + 10] // Add some padding
       });
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
-      const base64 = pdf.output('datauristring').split(',')[1];
-      
-      // Send to RawBT via Intent (PDF Mode)
-      // This allows RawBT to render the PDF using system fonts/images correctly
-      const intentUrl = `rawbt:application/pdf;base64,${base64}`;
-      window.location.href = intentUrl;
+      const pdfBlob = pdf.output('blob');
+      const fileName = `receipt_${new Date().getTime()}.pdf`;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Receipt',
+          text: 'Here is your receipt.',
+        });
+      } else {
+        // Fallback to download
+        pdf.save(fileName);
+      }
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('PDF生成に失敗しました。');
+      alert('PDF生成または共有に失敗しました。');
     } finally {
       setIsProcessing(false);
     }
@@ -845,27 +850,6 @@ const App: React.FC = () => {
                  {receiptMode === 'FORMAL' && totalAmount >= 50000 
                     ? "※ 5万円以上のため印紙枠を表示しています" 
                     : "内容をご確認の上、印刷または共有してください。"}
-               </div>
-
-               {/* Hidden Receipt for PDF Generation (58mm optimized) */}
-               <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '580px' }}>
-                   <div id="receipt-pdf-hidden">
-                        <Receipt 
-                          items={cart} 
-                          subTotal={subTotal} 
-                          tax={initialTax} 
-                          finalTax={finalTax}
-                          total={totalAmount}
-                          mode={receiptMode}
-                          recipientName={recipientName}
-                          proviso={proviso}
-                          paymentDeadline={paymentDeadline}
-                          discount={discountVal}
-                          logo={LOGO_URL} 
-                          settings={storeSettings}
-                          isPdf={true}
-                        />
-                   </div>
                </div>
             </div>
 
