@@ -11,15 +11,19 @@ import { LOGO_URL } from './logoData';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// Default Settings
-const getAutoStoreName = () => {
+// Auto-switch store name after April 1st, 2026
+const getStoreName = () => {
   const now = new Date();
-  // Switch to Fukushima from April (Month index 3)
-  return (now.getMonth() + 1) >= 4 ? "パナランドフクシマ" : "パナランドヨシダ";
+  // Month is 0-indexed: 3 = April
+  if (now.getFullYear() > 2026 || (now.getFullYear() === 2026 && now.getMonth() >= 3)) {
+    return "パナランドフクシマ";
+  }
+  return "パナランドヨシダ";
 };
 
+// Default Settings
 const DEFAULT_SETTINGS: StoreSettings = {
-  storeName: getAutoStoreName(),
+  storeName: getStoreName(),
   zipCode: "863-2172",
   address1: "天草市旭町４３",
   address2: "",
@@ -361,37 +365,21 @@ const App: React.FC = () => {
     if (navigator.vibrate) navigator.vibrate(50);
 
     try {
-      // Special handling for FORMAL mode (Image Print via RawBT)
-      if (receiptMode === 'FORMAL') {
-          const input = document.getElementById('receipt-horizontal-pdf');
-          if (!input) throw new Error("Receipt element not found");
-
-          // Generate Image
-          const canvas = await html2canvas(input, { scale: 2, useCORS: true });
-          const base64Data = canvas.toDataURL('image/png').split(',')[1];
-
-          // Construct RawBT Intent for Image
-          // rawbt:image/png;base64,...
-          const intentUrl = `rawbt:image/png;base64,${base64Data}`;
-          window.location.href = intentUrl;
-      } else {
-          // Standard Text/ESC/POS Printing (MP-B20 / Shift-JIS)
-          await printerService.printReceipt(
-            cart,
-            subTotal,
-            initialTax,
-            totalAmount,
-            receiptMode,
-            recipientName,
-            proviso,
-            paymentDeadline,
-            discountVal, 
-            LOGO_URL,
-            storeSettings, // Pass Settings
-            finalTax, // Pass Final Tax
-            storeMemo // Pass Store Memo
-          );
-      }
+      await printerService.printReceipt(
+        cart,
+        subTotal,
+        initialTax,
+        totalAmount,
+        receiptMode,
+        recipientName,
+        proviso,
+        paymentDeadline,
+        discountVal, 
+        LOGO_URL,
+        storeSettings, // Pass Settings
+        finalTax, // Pass Final Tax
+        storeMemo // Pass Store Memo
+      );
 
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
@@ -421,76 +409,39 @@ const App: React.FC = () => {
   };
 
   const handleSharePDF = async () => {
-    // Determine which element to capture based on mode
-    const isFormal = receiptMode === 'FORMAL';
-    const inputId = isFormal ? 'receipt-horizontal-pdf' : 'receipt-preview';
-    const input = document.getElementById(inputId);
-    
+    // Target the hidden PDF-optimized element
+    const input = document.getElementById('receipt-pdf-hidden');
     if (!input) return;
 
     try {
       setIsProcessing(true);
-      // Use higher scale for better quality
+      // High scale for sharpness
       const canvas = await html2canvas(input, { scale: 3, useCORS: true });
       const imgData = canvas.toDataURL('image/png');
       
+      // 58mm width for Sunmi V2S
+      const pdfWidth = 58;
       const imgProps = canvas;
-      
-      let pdf;
-      
-      if (isFormal) {
-          // Horizontal Receipt (Ryoshusho)
-          // Maximize roll paper width (58mm) as the short edge.
-          // We generate a Landscape PDF where Height is 58mm.
-          // Width is calculated based on aspect ratio.
-          const pdfHeight = 58; 
-          const pdfWidth = (imgProps.width * pdfHeight) / imgProps.height;
-          
-          pdf = new jsPDF({
-            orientation: 'landscape',
-            unit: 'mm',
-            format: [pdfHeight, pdfWidth] // [height, width] for landscape? No, usually [width, height] but landscape swaps.
-            // Let's pass [pdfWidth, pdfHeight] and 'landscape' to be safe.
-            // Actually, if we want the result to be W x H, and W > H, 'landscape' is correct.
-          });
-          
-          // Add image filling the page
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      } else {
-          // Standard Vertical Receipt
-          // PDF width 80mm (standard thermal width, though MP-B20 is 58mm, 
-          // usually digital receipts are generated at 80mm for better readability on phones).
-          // If the user wants 58mm for everything, we could change this, 
-          // but the request specifically mentioned "Receipt (Ryoshusho) layout".
-          const pdfWidth = 80;
-          const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-          pdf = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: [pdfWidth, pdfHeight + 10] // Add some padding
-          });
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pdfWidth, pdfHeight] 
+      });
 
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      }
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
-      const pdfBlob = pdf.output('blob');
-      const fileName = `receipt_${isFormal ? 'formal_' : ''}${new Date().getTime()}.pdf`;
-      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      const base64 = pdf.output('datauristring').split(',')[1];
+      
+      // Send to RawBT via Intent (PDF Mode)
+      // This allows RawBT to render the PDF using system fonts/images correctly
+      const intentUrl = `rawbt:application/pdf;base64,${base64}`;
+      window.location.href = intentUrl;
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: isFormal ? '領収書' : 'Receipt',
-          text: 'Here is your receipt.',
-        });
-      } else {
-        // Fallback to download
-        pdf.save(fileName);
-      }
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('PDF生成または共有に失敗しました。');
+      alert('PDF生成に失敗しました。');
     } finally {
       setIsProcessing(false);
     }
@@ -895,81 +846,27 @@ const App: React.FC = () => {
                     ? "※ 5万円以上のため印紙枠を表示しています" 
                     : "内容をご確認の上、印刷または共有してください。"}
                </div>
-            </div>
 
-            {/* Hidden Horizontal Receipt for PDF/Image Generation (Formal Mode) */}
-            {/* 
-                Layout Strategy:
-                - Container: 1400px width x 600px height
-                - Design: Traditional Japanese Receipt (Ryoshusho)
-            */}
-            <div id="receipt-horizontal-pdf" className="fixed top-0 left-0 -z-50 opacity-0 pointer-events-none bg-white text-black font-sans box-border" style={{ width: '1400px', height: '600px', padding: '0' }}>
-                <div className="w-full h-full relative p-12 flex flex-col justify-between bg-white">
-                    
-                    {/* Top Row */}
-                    <div className="flex justify-between items-end mb-8">
-                        <div className="flex flex-col">
-                            <h1 className="text-7xl font-serif font-bold tracking-widest text-gray-900 mb-2">領収証</h1>
-                            <div className="text-2xl font-serif text-gray-700 border-b border-gray-400 pb-1 px-2">
-                                {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
-                            </div>
-                        </div>
-                        <div className="text-right">
-                            <div className="text-xl text-gray-400 font-mono">No. {Date.now().toString().slice(-8)}</div>
-                        </div>
-                    </div>
-
-                    {/* Middle Row: Recipient & Amount */}
-                    <div className="flex-1 flex flex-col justify-center pl-16 pr-8">
-                        {/* Recipient */}
-                        <div className="flex items-end mb-10">
-                            <span className="text-5xl font-serif min-w-[400px] border-b-2 border-gray-800 px-4 pb-2 text-gray-900">
-                                {recipientName || "　　　　　"}
-                            </span>
-                            <span className="text-4xl font-serif ml-4 text-gray-900">様</span>
-                        </div>
-
-                        {/* Amount */}
-                        <div className="flex flex-col items-center w-full mb-8">
-                            <div className="flex items-baseline border-b-4 double border-gray-900 w-3/4 justify-center pb-2">
-                                <span className="text-5xl font-serif mr-8 text-gray-900">金</span>
-                                <span className="text-8xl font-serif font-bold tracking-tighter text-gray-900">{totalAmount.toLocaleString()}</span>
-                                <span className="text-5xl font-serif ml-8 text-gray-900">円</span>
-                            </div>
-                            <div className="mt-4 text-3xl font-serif text-gray-700">
-                                {proviso || "但 お品代として"}
-                            </div>
-                            <div className="text-xl font-serif text-gray-600 mt-1">
-                                上記正に領収いたしました
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom Row: Stamp & Store Info */}
-                    <div className="flex justify-between items-end mt-auto">
-                        {/* Revenue Stamp Area (Left) */}
-                        <div className="w-32 h-40 border-2 border-dotted border-gray-400 flex flex-col items-center justify-center text-gray-400">
-                            <span className="text-sm">収入</span>
-                            <span className="text-sm">印紙</span>
-                        </div>
-
-                        {/* Store Info (Right, Boxed) */}
-                        <div className="border-2 border-gray-800 p-4 rounded-lg min-w-[400px] relative">
-                            {/* Hanko/Stamp Overlay */}
-                            <div className="absolute -top-6 -right-6 w-24 h-24 border-4 border-red-500 rounded-full flex items-center justify-center text-red-500 font-bold text-xl opacity-70 rotate-12 select-none mix-blend-multiply bg-white/50">
-                                検印
-                            </div>
-
-                            <div className="text-3xl font-bold font-serif text-gray-900 mb-2">{storeSettings.storeName}</div>
-                            <div className="text-lg font-serif text-gray-800 space-y-1">
-                                <div>〒{storeSettings.zipCode}</div>
-                                <div>{storeSettings.address1}</div>
-                                <div>TEL {storeSettings.tel}</div>
-                                <div className="text-xs text-gray-500 mt-1">登録番号: {storeSettings.registrationNum}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+               {/* Hidden Receipt for PDF Generation (58mm optimized) */}
+               <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '580px' }}>
+                   <div id="receipt-pdf-hidden">
+                        <Receipt 
+                          items={cart} 
+                          subTotal={subTotal} 
+                          tax={initialTax} 
+                          finalTax={finalTax}
+                          total={totalAmount}
+                          mode={receiptMode}
+                          recipientName={recipientName}
+                          proviso={proviso}
+                          paymentDeadline={paymentDeadline}
+                          discount={discountVal}
+                          logo={LOGO_URL} 
+                          settings={storeSettings}
+                          isPdf={true}
+                        />
+                   </div>
+               </div>
             </div>
 
             {/* Footer */}
