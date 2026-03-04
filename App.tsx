@@ -6,7 +6,7 @@ import MasterEditor from './components/MasterEditor';
 import { AppState, CartItem, Product, PrinterStatus, StoreSettings } from './types';
 import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache } from './services/sheetService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon, Trash2 } from 'lucide-react';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { LOGO_URL } from './logoData';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -351,6 +351,9 @@ const App: React.FC = () => {
 
     if (cart.length === 0) return;
     
+    // For RawBT, we don't need explicit connection checks as it uses Intents.
+    // For Sunmi, it checks internal interface.
+    
     setIsProcessing(true);
     if (navigator.vibrate) navigator.vibrate(50);
 
@@ -374,6 +377,8 @@ const App: React.FC = () => {
       if (navigator.vibrate) navigator.vibrate([100]);
     } catch (e: any) {
       console.error(e);
+      // For RawBT, errors might not be caught here if intent launches successfully
+      // But we alert anyway if something throws
       alert(`印刷エラー:\n${e.message}`);
     } finally {
       setIsProcessing(false);
@@ -513,18 +518,7 @@ const App: React.FC = () => {
             )}
 
             <div className="flex justify-between items-end mb-4">
-                <div className="flex items-center gap-3">
-                    <h2 className="text-2xl font-bold text-primary">Cart ({cart.length})</h2>
-                    {cart.length > 0 && (
-                        <button 
-                            onClick={handleFinish}
-                            className="p-2 bg-red-900/30 text-red-400 rounded-full hover:bg-red-900/50 transition-colors"
-                            title="カートをクリア"
-                        >
-                            <Trash2 size={16} />
-                        </button>
-                    )}
-                </div>
+                <h2 className="text-2xl font-bold text-primary">Cart ({cart.length})</h2>
                 <button 
                   onClick={() => setShowServiceModal(true)}
                   className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-secondary text-xs rounded-full flex items-center gap-1.5 transition-colors border border-gray-700"
@@ -694,7 +688,7 @@ const App: React.FC = () => {
                 className="flex items-center gap-1 text-gray-600 font-medium active:opacity-60 bg-gray-100 px-3 py-1.5 rounded-full"
               >
                 <Home size={16} />
-                <span className="text-xs">次の会計へ</span>
+                <span className="text-xs">完了</span>
               </button>
             </div>
             
@@ -794,22 +788,20 @@ const App: React.FC = () => {
                {/* Receipt Preview Container (Includes Original and Copy) */}
                <div id="receipt-preview" className="space-y-8">
                    {/* Original */}
-                   <div id="receipt-original">
-                     <Receipt 
-                       items={cart} 
-                       subTotal={subTotal} 
-                       tax={initialTax} 
-                       finalTax={finalTax}
-                       total={totalAmount}
-                       mode={receiptMode}
-                       recipientName={recipientName}
-                       proviso={proviso}
-                       paymentDeadline={paymentDeadline}
-                       discount={discountVal}
-                       logo={LOGO_URL} 
-                       settings={storeSettings} 
-                     />
-                   </div>
+                   <Receipt 
+                     items={cart} 
+                     subTotal={subTotal} 
+                     tax={initialTax} 
+                     finalTax={finalTax}
+                     total={totalAmount}
+                     mode={receiptMode}
+                     recipientName={recipientName}
+                     proviso={proviso}
+                     paymentDeadline={paymentDeadline}
+                     discount={discountVal}
+                     logo={LOGO_URL} 
+                     settings={storeSettings} 
+                   />
 
                    {/* Copy */}
                    <div className="relative">

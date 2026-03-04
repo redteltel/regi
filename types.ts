@@ -62,13 +62,6 @@ declare global {
       sendRAWData: (base64: string) => void;
       cutPaper: () => void;
     };
-    sunmiInnerPrinter?: {
-      printString: (text: string) => void;
-      printBitmap: (base64: string, width: number, height: number) => void;
-      lineWrap: (n: number) => void;
-      sendRAWData: (base64: string) => void;
-      cutPaper: () => void;
-    };
   }
 
   interface Navigator {

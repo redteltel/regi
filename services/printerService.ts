@@ -31,11 +31,9 @@ export class PrinterService {
   
   private device: BluetoothDevice | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
-  private currentType: PrinterType = 'BLUETOOTH';
 
   setLogger(logger: (msg: string) => void) { this.onLog = logger; }
   setOnDisconnect(callback: () => void) { this.onDisconnect = callback; }
-  setPrinterType(type: PrinterType) { this.currentType = type; }
   log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
   // --- RawBT (MP-B20 via Android Intent) ---
@@ -43,7 +41,7 @@ export class PrinterService {
   // This is more stable on Android devices.
   
   async print(data: Uint8Array, type: PrinterType) {
-      if (type === 'BLUETOOTH' || type === 'SUNMI') {
+      if (type === 'BLUETOOTH') {
           // Convert data to Base64
           let binary = '';
           const len = data.byteLength;
@@ -59,6 +57,25 @@ export class PrinterService {
           // Open Intent
           window.location.href = intentUrl;
           
+      } else if (type === 'SUNMI') {
+          if (window.SunmiInnerPrinter) {
+              // Convert to Base64
+              let binary = '';
+              const len = data.byteLength;
+              for (let i = 0; i < len; i++) {
+                  binary += String.fromCharCode(data[i]);
+              }
+              const base64 = btoa(binary);
+              
+              try {
+                  window.SunmiInnerPrinter.sendRAWData(base64);
+              } catch (e) {
+                  console.error("Sunmi print error:", e);
+                  throw new Error("Sunmi print failed. Check interface.");
+              }
+          } else {
+              throw new Error("Sunmi Printer interface not found.");
+          }
       }
   }
 
@@ -81,13 +98,6 @@ export class PrinterService {
   }
 
   private encode(text: string): number[] {
-    // SUNMI: Use UTF-8 for RawBT Image Mode
-    if (this.currentType === 'SUNMI') {
-        const encoder = new TextEncoder();
-        return Array.from(encoder.encode(text));
-    }
-
-    // MP-B20: Default Shift-JIS conversion
     const sjisData = Encoding.convert(text, {
       to: 'SJIS',
       from: 'UNICODE',
@@ -192,7 +202,6 @@ export class PrinterService {
       finalTax?: number,
       storeMemo?: string
   ) {
-    this.setPrinterType(settings.printerType);
     this.log("Generating Receipt (Shift_JIS)...");
     
     const cmds: number[] = [];
@@ -200,17 +209,11 @@ export class PrinterService {
         cmds.push(...data);
     };
     
-    // Header & Initialization
+    // Header & Initialization for Japanese
     add([ESC, AT]); // Initialize
-    
-    if (settings.printerType === 'SUNMI') {
-        // SUNMI: No special commands. RawBT Image Mode handles UTF-8 text.
-    } else {
-        // MP-B20: Standard Japanese Init
-        add(COUNTRY_JAPAN); // ESC R 8
-        add(KANJI_MODE_ON); // FS & (Enable Kanji)
-        add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
-    }
+    add(COUNTRY_JAPAN); // ESC R 8
+    add(KANJI_MODE_ON); // FS & (Enable Kanji)
+    add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
     
     // --- Helper Function to Generate One Receipt ---
     const generateOneReceipt = (isCopy: boolean) => {
@@ -427,10 +430,10 @@ export class PrinterService {
     generateOneReceipt(false);
 
     // Feed between receipts
-    // add([LF, LF, LF]);
+    add([LF, LF, LF]);
 
-    // --- 2. Print Copy (DISABLED) ---
-    // generateOneReceipt(true);
+    // --- 2. Print Copy ---
+    generateOneReceipt(true);
 
     // Final Feed and Cut
     add([LF, LF, LF]);
