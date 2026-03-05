@@ -452,8 +452,12 @@ export class PrinterService {
 
     await this.print(new Uint8Array(cmds), settings.printerType);
 
-    // Wait 5s
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Dialog for 2nd receipt
+    // "OK" -> Print Copy
+    // "Cancel" -> Skip
+    if (!window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
+        return;
+    }
 
     // --- 2. Print Copy ---
     cmds.length = 0;
