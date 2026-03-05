@@ -490,27 +490,58 @@ const App: React.FC = () => {
   };
 
   const handleiOSPrint = async () => {
-      // Use SII URL Print Agent
-      // Override printerType to SII_AGENT temporarily
-      const iosSettings = { ...storeSettings, printerType: 'SII_AGENT' as const };
-      
+      const input = document.getElementById('receipt-preview');
+      if (!input) return;
+
       setIsProcessing(true);
       try {
-        await printerService.printReceipt(
-          cart,
-          subTotal,
-          initialTax,
-          totalAmount,
-          receiptMode,
-          recipientName,
-          proviso,
-          paymentDeadline,
-          discountVal, 
-          LOGO_URL,
-          iosSettings, // Pass Modified Settings
-          finalTax, 
-          storeMemo
-        );
+        // 1. Generate PDF from HTML (Same logic as handleSharePDF)
+        const canvas = await html2canvas(input, { 
+            scale: 2, 
+            useCORS: true,
+            backgroundColor: '#ffffff', // Force white background
+            onclone: (document) => {
+                const element = document.getElementById('receipt-preview');
+                if (element) {
+                    element.style.backgroundColor = '#ffffff';
+                    element.style.color = '#000000';
+                    // Reduce bottom padding
+                    const receipts = element.querySelectorAll('.bg-white.text-black.p-8');
+                    receipts.forEach((r: any) => {
+                        r.style.paddingBottom = '4px';
+                        r.style.marginBottom = '0';
+                    });
+                }
+            }
+        });
+        const imgData = canvas.toDataURL('image/png');
+        
+        // PDF width 58mm (MP-B20 standard).
+        const pdfWidth = 58;
+        const imgProps = canvas;
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: [pdfWidth, pdfHeight] // Exact height
+        });
+
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+        // 2. Get Base64 Data
+        // output('datauristring') returns "data:application/pdf;base64,..."
+        const dataUri = pdf.output('datauristring');
+        const base64Data = dataUri.split(',')[1];
+
+        // 3. Construct URL Scheme
+        // siiprintagent://1.0/print?Format=pdf&Data=<encoded_base64>&ErrorDialog=yes&PaperWidth=58&CutType=partial
+        const encodedData = encodeURIComponent(base64Data);
+        const scheme = `siiprintagent://1.0/print?Format=pdf&ErrorDialog=yes&PaperWidth=58&CutType=partial&Data=${encodedData}`;
+
+        // 4. Launch App
+        window.location.href = scheme;
+
       } catch (e: any) {
         console.error(e);
         alert(`印刷エラー:\n${e.message}`);
