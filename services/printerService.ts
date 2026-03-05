@@ -425,19 +425,19 @@ export class PrinterService {
             add(ALIGN_CENTER);
         }
         
-        add([LF, LF, LF, LF]);
+        add([LF]);
     };
 
     // --- SII AGENT LOGIC (iPhone) ---
     if (settings.printerType === 'SII_AGENT') {
         addInit();
         generateOneReceipt(false);
-        add([LF, LF, LF]);
+        add([LF]);
         add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
         addInit();
         generateOneReceipt(true);
-        add([LF, LF, LF]);
+        add([LF]);
         add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
         await this.print(new Uint8Array(cmds), 'SII_AGENT');
@@ -447,7 +447,7 @@ export class PrinterService {
     // --- 1. Print Original ---
     addInit();
     generateOneReceipt(false);
-    add([LF, LF, LF]);
+    add([LF]);
     add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
     await this.print(new Uint8Array(cmds), settings.printerType);
@@ -463,7 +463,7 @@ export class PrinterService {
     cmds.length = 0;
     addInit();
     generateOneReceipt(true);
-    add([LF, LF, LF]);
+    add([LF]);
     add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
     await this.print(new Uint8Array(cmds), settings.printerType);
