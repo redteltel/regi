@@ -557,9 +557,10 @@ const App: React.FC = () => {
         const base64Data = dataUri.split(',')[1];
 
         // 3. Construct URL Scheme
-        // siiprintagent://1.0/print?Format=pdf&Data=<encoded_base64>&ErrorDialog=yes&PaperWidth=58&CutType=partial
+        // siiprintagent://1.0/print?Format=pdf&Data=<encoded_base64>&ErrorDialog=yes&PaperWidth=58&CutType=partial&CallbackSuccess=<url>
         const encodedData = encodeURIComponent(base64Data);
-        const scheme = `siiprintagent://1.0/print?Format=pdf&ErrorDialog=yes&PaperWidth=58&CutType=partial&Data=${encodedData}`;
+        const callbackUrl = encodeURIComponent('https://fukushima.10e.jp/regi/');
+        const scheme = `siiprintagent://1.0/print?Format=pdf&ErrorDialog=yes&PaperWidth=58&CutType=partial&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
 
         // 4. Launch App
         window.location.href = scheme;
