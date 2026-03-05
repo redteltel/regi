@@ -489,85 +489,90 @@ const App: React.FC = () => {
     }
   };
 
-  const handleiOSPrint = async () => {
-      // Use SII URL Print Agent
-      // Override printerType to SII_AGENT temporarily
-      const iosSettings = { ...storeSettings, printerType: 'SII_AGENT' as const };
-      
-      setIsProcessing(true);
-      try {
-        await printerService.printReceipt(
-          cart,
-          subTotal,
-          initialTax,
-          totalAmount,
-          receiptMode,
-          recipientName,
-          proviso,
-          paymentDeadline,
-          discountVal, 
-          LOGO_URL,
-          iosSettings, // Pass Modified Settings
-          finalTax, 
-          storeMemo
-        );
-      } catch (e: any) {
-        console.error(e);
-        alert(`印刷エラー:\n${e.message}`);
-      } finally {
-        setIsProcessing(false);
-      }
-  };
-
-  const handleiOSPreviewPDF = async () => {
+  const handleiOSWindowPrint = () => {
     const input = document.getElementById('receipt-preview');
     if (!input) return;
 
-    try {
-      setIsProcessing(true);
-      const canvas = await html2canvas(input, { 
-          scale: 2, 
-          useCORS: true,
-          backgroundColor: '#ffffff', // Force white background
-          onclone: (document) => {
-              const element = document.getElementById('receipt-preview');
-              if (element) {
-                  element.style.backgroundColor = '#ffffff';
-                  element.style.color = '#000000';
-                  // Reduce bottom padding
-                  const receipts = element.querySelectorAll('.bg-white.text-black.p-8');
-                  receipts.forEach((r: any) => {
-                      r.style.paddingBottom = '4px';
-                      r.style.marginBottom = '0';
-                  });
-              }
-          }
-      });
-      const imgData = canvas.toDataURL('image/png');
-      
-      // PDF width 58mm (MP-B20 standard).
-      const pdfWidth = 58;
-      const imgProps = canvas;
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [pdfWidth, pdfHeight] // Exact height
-      });
-
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      
-      const pdfBlob = pdf.output('blob');
-      const blobUrl = URL.createObjectURL(pdfBlob);
-      window.open(blobUrl, '_blank');
-
-    } catch (error) {
-      console.error('Error generating PDF preview:', error);
-      alert('PDFプレビュー生成に失敗しました。');
-    } finally {
-      setIsProcessing(false);
+    // Create a new window
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        alert('ポップアップがブロックされました。許可してください。');
+        return;
     }
+
+    // Get all stylesheets
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+        .map(node => node.outerHTML)
+        .join('');
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Receipt Print</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          ${styles}
+          <style>
+            body {
+              background-color: white !important;
+              color: black !important;
+              margin: 0;
+              padding: 0;
+              width: 100%;
+            }
+            #receipt-container {
+                width: 58mm; /* MP-B20 width */
+                margin: 0 auto;
+                padding: 0;
+            }
+            /* Force white background and black text */
+            .bg-white { background-color: white !important; }
+            .text-black { color: black !important; }
+            
+            /* Reset layout for print */
+            .shadow-xl { box-shadow: none !important; }
+            .max-w-sm { max-width: 100% !important; }
+            .mx-auto { margin: 0 !important; }
+            .mb-4 { margin-bottom: 20px !important; } /* Space between receipts */
+            .p-8 { padding: 5px !important; } /* Minimal padding for small paper */
+            .border-t-8 { border-top-width: 4px !important; }
+
+            /* Adjust font sizes for 58mm paper */
+            .text-sm { font-size: 11px !important; }
+            .text-xs { font-size: 9px !important; }
+            .text-base { font-size: 12px !important; }
+            .text-lg { font-size: 14px !important; }
+            .text-xl { font-size: 16px !important; }
+            .text-2xl { font-size: 18px !important; }
+            .text-4xl { font-size: 24px !important; }
+            .text-5xl { font-size: 28px !important; }
+            
+            /* Hide the dashed line separator container in preview if needed, 
+               but we want to print it. */
+            
+            @media print {
+              @page { margin: 0; }
+              body { margin: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div id="receipt-container">
+            ${input.innerHTML}
+          </div>
+          <script>
+            window.onload = () => {
+                setTimeout(() => {
+                    window.print();
+                }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
 
@@ -973,14 +978,14 @@ const App: React.FC = () => {
                   {/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream && (
                       <>
                         <button 
-                          onClick={handleiOSPreviewPDF}
+                          onClick={handleiOSWindowPrint}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-500 text-white"
                         >
                           <FileText size={20} />
                           PDF確認
                         </button>
                         <button 
-                          onClick={handleiOSPrint}
+                          onClick={handleiOSWindowPrint}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
                         >
                           <Printer size={20} />
