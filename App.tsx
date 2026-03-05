@@ -538,18 +538,25 @@ const App: React.FC = () => {
         });
         const imgData = canvas.toDataURL('image/png');
         
-        // PDF width 58mm (MP-B20 standard).
-        const pdfWidth = 58;
+        // MP-B20 Specs:
+        // Paper Width: 58mm
+        // Effective Print Width: 48mm
+        const paperWidth = 58;
+        const printWidth = 48;
+        const margin = (paperWidth - printWidth) / 2; // 5mm margin on each side
+
         const imgProps = canvas;
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        // Calculate height based on the print width (48mm) to maintain aspect ratio
+        const pdfHeight = (imgProps.height * printWidth) / imgProps.width;
 
         const pdf = new jsPDF({
           orientation: 'portrait',
           unit: 'mm',
-          format: [pdfWidth, pdfHeight] // Exact height
+          format: [paperWidth, pdfHeight] // Set PDF size to paper width (58mm)
         });
 
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        // Add image constrained to 48mm width, centered with 5mm margin
+        pdf.addImage(imgData, 'PNG', margin, 0, printWidth, pdfHeight);
 
         // 2. Get Base64 Data
         // output('datauristring') returns "data:application/pdf;base64,..."
@@ -1068,18 +1075,18 @@ const App: React.FC = () => {
                   {/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream && (
                       <>
                         <button 
-                          onClick={handleiOSWindowPrint}
+                          onClick={handleSharePDF}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-500 text-white"
                         >
-                          <FileText size={20} />
-                          PDF確認
+                          <Share size={20} />
+                          PDF/共有
                         </button>
                         <button 
                           onClick={handleiOSPrint}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
                         >
                           <Printer size={20} />
-                          iOS用印刷
+                          印刷
                         </button>
                       </>
                   )}
