@@ -513,6 +513,51 @@ const App: React.FC = () => {
       }
   };
 
+  const handleiOSPreviewPDF = async () => {
+    const input = document.getElementById('receipt-preview');
+    if (!input) return;
+
+    try {
+      setIsProcessing(true);
+      const canvas = await html2canvas(input, { 
+          scale: 2, 
+          useCORS: true,
+          backgroundColor: '#ffffff', // Force white background
+          onclone: (document) => {
+              const element = document.getElementById('receipt-preview');
+              if (element) {
+                  element.style.backgroundColor = '#ffffff';
+                  element.style.color = '#000000';
+              }
+          }
+      });
+      const imgData = canvas.toDataURL('image/png');
+      
+      // PDF width 58mm (MP-B20 standard).
+      const pdfWidth = 58;
+      const imgProps = canvas;
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pdfWidth, pdfHeight + 10] // Add some padding
+      });
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      window.open(blobUrl, '_blank');
+
+    } catch (error) {
+      console.error('Error generating PDF preview:', error);
+      alert('PDFプレビュー生成に失敗しました。');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
 
   const renderContent = () => {
     switch (appState) {
@@ -914,13 +959,22 @@ const App: React.FC = () => {
 
                   {/* iOS Specific Print Button */}
                   {/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream && (
-                      <button 
-                        onClick={handleiOSPrint}
-                        className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
-                      >
-                        <Printer size={20} />
-                        iOS用印刷
-                      </button>
+                      <>
+                        <button 
+                          onClick={handleiOSPreviewPDF}
+                          className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-500 text-white"
+                        >
+                          <FileText size={20} />
+                          PDF確認
+                        </button>
+                        <button 
+                          onClick={handleiOSPrint}
+                          className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
+                        >
+                          <Printer size={20} />
+                          iOS用印刷
+                        </button>
+                      </>
                   )}
 
                   {/* Standard Print Button (Hidden on iOS to avoid confusion, or kept if desired. User said "Add 3rd route", implying addition) */}
