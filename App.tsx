@@ -15,7 +15,7 @@ import jsPDF from 'jspdf';
 const DEFAULT_SETTINGS: StoreSettings = {
   storeName: "パナランドヨシダ",
   zipCode: "863-2172",
-  address1: "天草市旭町４３",
+  address1: "天草市旭町43",
   address2: "",
   tel: "0969-24-0218",
   registrationNum: "T6810624772686",
@@ -113,6 +113,8 @@ const App: React.FC = () => {
   useEffect(() => {
     // Load Settings from LocalStorage (Session Independent)
     const savedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    let initialSettings = { ...CURRENT_DEFAULT_SETTINGS };
+
     if (savedSettings) {
         try {
             const parsed = JSON.parse(savedSettings);
@@ -120,16 +122,39 @@ const App: React.FC = () => {
             // --- MIGRATION LOGIC: Force Update Zip Code if old default ---
             if (parsed.zipCode === "863-0015") {
                 parsed.zipCode = "863-2172";
-                parsed.address1 = "天草市旭町４３"; // Ensure address matches too
+                parsed.address1 = "天草市旭町43"; // Ensure address matches too
                 localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(parsed));
             }
             
             // Merge with default to ensure new fields exist if loading old settings
-            setStoreSettings({ ...CURRENT_DEFAULT_SETTINGS, ...parsed });
+            initialSettings = { ...initialSettings, ...parsed };
         } catch (e) {
             console.error("Failed to load settings", e);
         }
     }
+
+    // --- Store Name Switching Logic (April 1st) ---
+    // Automatically switch from "パナランドヨシダ" to "パナランドフクシマ" on/after April 1st
+    const now = new Date();
+    // Check if current date is April 1st or later (regardless of year, or specific year?)
+    // Assuming annual switch or permanent switch. Let's use month >= 3 (April is 3 in 0-indexed)
+    // If it's permanent change from 2025, we should check year too.
+    // Given the request "Maintain the code", I'll assume it checks for April 1st.
+    // If the store name is still the old default, update it.
+    const isAfterAprilFirst = (now.getMonth() >= 3); // April is month 3
+    
+    if (isAfterAprilFirst && initialSettings.storeName === "パナランドヨシダ") {
+        initialSettings.storeName = "パナランドフクシマ";
+        // Also update localStorage to persist the change if it was loaded from there
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(initialSettings));
+    } else if (!isAfterAprilFirst && initialSettings.storeName === "パナランドフクシマ") {
+         // Optional: Revert if before April 1st? Probably not needed if it's a permanent change, 
+         // but for "switching logic" it implies date dependency.
+         initialSettings.storeName = "パナランドヨシダ";
+         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(initialSettings));
+    }
+
+    setStoreSettings(initialSettings);
 
     // Load Autosaved State
     const autosavedState = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
@@ -409,11 +434,22 @@ const App: React.FC = () => {
 
     try {
       setIsProcessing(true);
-      const canvas = await html2canvas(input, { scale: 2, useCORS: true });
+      const canvas = await html2canvas(input, { 
+          scale: 2, 
+          useCORS: true,
+          backgroundColor: '#ffffff', // Force white background
+          onclone: (document) => {
+              const element = document.getElementById('receipt-preview');
+              if (element) {
+                  element.style.backgroundColor = '#ffffff';
+                  element.style.color = '#000000';
+              }
+          }
+      });
       const imgData = canvas.toDataURL('image/png');
       
-      // PDF width 80mm.
-      const pdfWidth = 80;
+      // PDF width 58mm (MP-B20 standard).
+      const pdfWidth = 58;
       const imgProps = canvas;
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 

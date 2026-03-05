@@ -55,7 +55,7 @@ const Receipt: React.FC<ReceiptProps> = ({
       
       {/* Header */}
       <div className="text-center mb-6">
-        {logo && !imgError && (
+        {logo && !imgError && !isCopy && (
            <img 
              src={logo} 
              alt="Store Logo" 
@@ -65,9 +65,9 @@ const Receipt: React.FC<ReceiptProps> = ({
            />
         )}
         
-        <h2 className="text-2xl font-bold mb-2 tracking-widest flex items-center justify-center gap-2">
+        <h2 className={`font-bold mb-2 tracking-widest flex items-center justify-center gap-2 ${isCopy ? 'text-3xl' : 'text-2xl'}`}>
           {getTitle()}
-          {isCopy && <span className="text-sm font-normal border border-black px-1 rounded">控え</span>}
+          {isCopy && <span className="text-lg font-bold border-2 border-black px-2 rounded">控え</span>}
         </h2>
         {mode === 'INVOICE' && <p className="text-sm font-bold mb-1 tracking-wide">(INVOICE)</p>}
         {mode === 'ESTIMATION' && <p className="text-sm font-bold mb-1 tracking-wide">(ESTIMATION)</p>}
@@ -80,7 +80,7 @@ const Receipt: React.FC<ReceiptProps> = ({
       </div>
 
       {/* Recipient & Invoice/Formal/Estimation Details */}
-      {(mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') && (
+      {(mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION' || isCopy) && (
         <div className="mb-6 border-b-2 border-black pb-4">
           <div className="flex justify-between items-end mb-4">
             <span className="text-lg border-b border-black flex-1 mr-2 px-1">
@@ -103,7 +103,9 @@ const Receipt: React.FC<ReceiptProps> = ({
             <span className="text-xs mr-2">
                 {mode === 'INVOICE' ? 'ご請求金額' : mode === 'ESTIMATION' ? '御見積金額' : '金額'}
             </span>
-            <span className="text-2xl font-bold tracking-wider">{total.toLocaleString()}円</span>
+            <span className={`${isCopy ? 'text-4xl' : 'text-2xl'} font-bold tracking-wider block mt-1`}>
+                ¥ {total.toLocaleString()} -
+            </span>
           </div>
           
           {mode === 'FORMAL' && (
@@ -197,8 +199,8 @@ const Receipt: React.FC<ReceiptProps> = ({
 
       {/* Footer: Store Info & Stamp */}
       <div className="mt-8 pt-4 border-t-2 border-gray-800 relative">
-        <div className="text-xs leading-5">
-            <p className="font-bold text-sm">{settings.storeName}</p>
+        <div className={`${isCopy ? 'text-sm leading-6' : 'text-xs leading-5'}`}>
+            <p className={`${isCopy ? 'text-lg' : 'text-sm'} font-bold`}>{settings.storeName}</p>
             <p>〒{settings.zipCode}</p>
             <p>{settings.address1}</p>
             {settings.address2 && <p>{settings.address2}</p>}
