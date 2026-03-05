@@ -205,22 +205,24 @@ export class PrinterService {
         cmds.push(...data);
     };
 
-    // Sunmi specific: Add UTF-8 BOM
-    if (settings.printerType === 'SUNMI') {
-        add([0xEF, 0xBB, 0xBF]);
-    }
-    
-    // Header & Initialization
-    add([ESC, AT]); // Initialize
-    
-    if (settings.printerType === 'SUNMI') {
-        // SUNMI: No special commands. RawBT Image Mode handles UTF-8 text.
-    } else {
-        // MP-B20: Standard Japanese Init
-        add(COUNTRY_JAPAN); // ESC R 8
-        add(KANJI_MODE_ON); // FS & (Enable Kanji)
-        add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
-    }
+    const addInit = () => {
+        // Sunmi specific: Add UTF-8 BOM
+        if (settings.printerType === 'SUNMI') {
+            add([0xEF, 0xBB, 0xBF]);
+        }
+        
+        // Header & Initialization
+        add([ESC, AT]); // Initialize
+        
+        if (settings.printerType === 'SUNMI') {
+            // SUNMI: No special commands. RawBT Image Mode handles UTF-8 text.
+        } else {
+            // MP-B20: Standard Japanese Init
+            add(COUNTRY_JAPAN); // ESC R 8
+            add(KANJI_MODE_ON); // FS & (Enable Kanji)
+            add(JIS_CODE_SYSTEM); // FS C 1 (Shift JIS)
+        }
+    };
     
     // --- Helper Function to Generate One Receipt ---
     const generateOneReceipt = (isCopy: boolean) => {
@@ -420,33 +422,23 @@ export class PrinterService {
     };
 
     // --- 1. Print Original ---
-    // Logo printing disabled for lightweight transmission
-    /*
-    if (logoUrl) {
-        try {
-            this.log("Processing logo image from: " + logoUrl);
-            const imageCmds = await this.convertImageToEscPos(logoUrl);
-            add(ALIGN_CENTER);
-            add(imageCmds);
-            add([LF]);
-        } catch (e) {
-            console.warn("Logo print failed:", e);
-        }
-    }
-    */
+    addInit();
     generateOneReceipt(false);
-
-    // Feed between receipts
     add([LF, LF, LF]);
+    add([0x1D, 0x56, 0x42, 0x00]); // Cut
+
+    await this.print(new Uint8Array(cmds), settings.printerType);
+
+    // Wait 5s
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     // --- 2. Print Copy ---
+    cmds.length = 0;
+    addInit();
     generateOneReceipt(true);
-
-    // Final Feed and Cut
     add([LF, LF, LF]);
-    add([0x1D, 0x56, 0x42, 0x00]); // GS V B 0 (Cut)
+    add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
-    // Send to Printer
     await this.print(new Uint8Array(cmds), settings.printerType);
   }
 }
