@@ -65,9 +65,8 @@ const Receipt: React.FC<ReceiptProps> = ({
            />
         )}
         
-        <h2 className={`font-bold mb-2 tracking-widest flex items-center justify-center gap-2 ${isCopy ? 'text-3xl' : 'text-2xl'}`}>
-          {getTitle()}
-          {isCopy && <span className="text-lg font-bold border-2 border-black px-2 rounded">控え</span>}
+        <h2 className={`font-bold mb-2 tracking-widest flex items-center justify-center gap-2 ${isCopy ? 'text-4xl' : 'text-2xl'}`}>
+          {getTitle()}{isCopy ? '（控え）' : ''}
         </h2>
         {mode === 'INVOICE' && <p className="text-sm font-bold mb-1 tracking-wide">(INVOICE)</p>}
         {mode === 'ESTIMATION' && <p className="text-sm font-bold mb-1 tracking-wide">(ESTIMATION)</p>}
@@ -103,7 +102,7 @@ const Receipt: React.FC<ReceiptProps> = ({
             <span className="text-xs mr-2">
                 {mode === 'INVOICE' ? 'ご請求金額' : mode === 'ESTIMATION' ? '御見積金額' : '金額'}
             </span>
-            <span className={`${isCopy ? 'text-4xl' : 'text-2xl'} font-bold tracking-wider block mt-1`}>
+            <span className={`${isCopy ? 'text-5xl' : 'text-2xl'} font-bold tracking-wider block mt-1`}>
                 ¥ {total.toLocaleString()} -
             </span>
           </div>
@@ -199,8 +198,8 @@ const Receipt: React.FC<ReceiptProps> = ({
 
       {/* Footer: Store Info & Stamp */}
       <div className="mt-8 pt-4 border-t-2 border-gray-800 relative">
-        <div className={`${isCopy ? 'text-sm leading-6' : 'text-xs leading-5'}`}>
-            <p className={`${isCopy ? 'text-lg' : 'text-sm'} font-bold`}>{settings.storeName}</p>
+        <div className={`${isCopy ? 'text-base leading-7' : 'text-xs leading-5'}`}>
+            <p className={`${isCopy ? 'text-xl' : 'text-sm'} font-bold`}>{settings.storeName}</p>
             <p>〒{settings.zipCode}</p>
             <p>{settings.address1}</p>
             {settings.address2 && <p>{settings.address2}</p>}

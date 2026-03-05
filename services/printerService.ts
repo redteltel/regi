@@ -437,10 +437,10 @@ export class PrinterService {
     generateOneReceipt(false);
 
     // Feed between receipts
-    // add([LF, LF, LF]);
+    add([LF, LF, LF]);
 
-    // --- 2. Print Copy (DISABLED) ---
-    // generateOneReceipt(true);
+    // --- 2. Print Copy ---
+    generateOneReceipt(true);
 
     // Final Feed and Cut
     add([LF, LF, LF]);
