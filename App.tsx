@@ -443,8 +443,19 @@ const App: React.FC = () => {
               if (element) {
                   element.style.backgroundColor = '#ffffff';
                   element.style.color = '#000000';
+                  
+                  // Enhance Contrast & Weight
+                  const all = element.getElementsByTagName('*');
+                  for (let i = 0; i < all.length; i++) {
+                      const el = all[i] as HTMLElement;
+                      el.style.fontWeight = 'bold'; // Force Bold
+                      el.style.color = '#000000';   // Force Black
+                      // @ts-ignore
+                      el.style.webkitFontSmoothing = 'none';
+                  }
+
                   // Reduce bottom padding
-                  const receipts = element.querySelectorAll('.bg-white.text-black.p-8');
+                  const receipts = element.querySelectorAll('.bg-white.text-black.p-2');
                   receipts.forEach((r: any) => {
                       r.style.paddingBottom = '4px';
                       r.style.marginBottom = '0';
@@ -505,8 +516,19 @@ const App: React.FC = () => {
                 if (element) {
                     element.style.backgroundColor = '#ffffff';
                     element.style.color = '#000000';
+                    
+                    // Enhance Contrast & Weight
+                    const all = element.getElementsByTagName('*');
+                    for (let i = 0; i < all.length; i++) {
+                        const el = all[i] as HTMLElement;
+                        el.style.fontWeight = 'bold'; // Force Bold
+                        el.style.color = '#000000';   // Force Black
+                        // @ts-ignore
+                        el.style.webkitFontSmoothing = 'none';
+                    }
+
                     // Reduce bottom padding
-                    const receipts = element.querySelectorAll('.bg-white.text-black.p-8');
+                    const receipts = element.querySelectorAll('.bg-white.text-black.p-2');
                     receipts.forEach((r: any) => {
                         r.style.paddingBottom = '4px';
                         r.style.marginBottom = '0';
@@ -591,12 +613,19 @@ const App: React.FC = () => {
             .bg-white { background-color: white !important; }
             .text-black { color: black !important; }
             
+            /* Force Bold and High Contrast */
+            * {
+                font-weight: bold !important;
+                color: black !important;
+                -webkit-font-smoothing: none !important;
+            }
+            
             /* Reset layout for print */
             .shadow-xl { box-shadow: none !important; }
             .max-w-sm { max-width: 100% !important; }
             .mx-auto { margin: 0 !important; }
             .mb-4 { margin-bottom: 20px !important; } /* Space between receipts */
-            .p-8 { padding: 5px !important; } /* Minimal padding for small paper */
+            .p-2 { padding: 5px !important; } /* Minimal padding for small paper */
             .border-t-8 { border-top-width: 4px !important; }
 
             /* Adjust font sizes for 58mm paper */
