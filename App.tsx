@@ -519,6 +519,7 @@ const App: React.FC = () => {
               margin: 0;
               padding: 0;
               width: 100%;
+              font-family: monospace;
             }
             #receipt-container {
                 width: 58mm; /* MP-B20 width */
@@ -547,9 +548,6 @@ const App: React.FC = () => {
             .text-4xl { font-size: 24px !important; }
             .text-5xl { font-size: 28px !important; }
             
-            /* Hide the dashed line separator container in preview if needed, 
-               but we want to print it. */
-            
             @media print {
               @page { margin: 0; }
               body { margin: 0; }
@@ -561,10 +559,11 @@ const App: React.FC = () => {
             ${input.innerHTML}
           </div>
           <script>
+            // Wait for styles to load
             window.onload = () => {
                 setTimeout(() => {
                     window.print();
-                }, 500);
+                }, 1000);
             };
           </script>
         </body>
