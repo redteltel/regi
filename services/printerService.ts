@@ -407,11 +407,11 @@ export class PrinterService {
         }
 
         if (mode === 'INVOICE') {
-            add(this.encode("ご請求書を送付いたします。\n"));
+            add(this.encode("ご請求書を送付いたします。"));
         } else if (mode === 'ESTIMATION') {
             // No specific footer
         } else {
-            add(this.encode("毎度ありがとうございます!\n"));
+            add(this.encode("毎度ありがとうございます!"));
         }
 
         // Memo for Copy
@@ -420,24 +420,20 @@ export class PrinterService {
             add(ALIGN_LEFT);
             add(this.encode("--------------------------------\n"));
             add(this.encode("【店舗メモ】\n"));
-            add(this.encode(`${storeMemo}\n`));
+            add(this.encode(`${storeMemo}`));
             add(this.encode("--------------------------------\n"));
             add(ALIGN_CENTER);
         }
-        
-        add([LF]);
     };
 
     // --- SII AGENT LOGIC (iPhone) ---
     if (settings.printerType === 'SII_AGENT') {
         addInit();
         generateOneReceipt(false);
-        add([LF]);
         add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
         addInit();
         generateOneReceipt(true);
-        add([LF]);
         add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
         await this.print(new Uint8Array(cmds), 'SII_AGENT');
@@ -447,7 +443,6 @@ export class PrinterService {
     // --- 1. Print Original ---
     addInit();
     generateOneReceipt(false);
-    add([LF]);
     add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
     await this.print(new Uint8Array(cmds), settings.printerType);
@@ -463,7 +458,6 @@ export class PrinterService {
     cmds.length = 0;
     addInit();
     generateOneReceipt(true);
-    add([LF]);
     add([0x1D, 0x56, 0x42, 0x00]); // Cut
 
     await this.print(new Uint8Array(cmds), settings.printerType);

@@ -443,6 +443,12 @@ const App: React.FC = () => {
               if (element) {
                   element.style.backgroundColor = '#ffffff';
                   element.style.color = '#000000';
+                  // Reduce bottom padding
+                  const receipts = element.querySelectorAll('.bg-white.text-black.p-8');
+                  receipts.forEach((r: any) => {
+                      r.style.paddingBottom = '4px';
+                      r.style.marginBottom = '0';
+                  });
               }
           }
       });
@@ -456,7 +462,7 @@ const App: React.FC = () => {
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [pdfWidth, pdfHeight + 10] // Add some padding
+        format: [pdfWidth, pdfHeight] // Exact height
       });
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
@@ -528,6 +534,12 @@ const App: React.FC = () => {
               if (element) {
                   element.style.backgroundColor = '#ffffff';
                   element.style.color = '#000000';
+                  // Reduce bottom padding
+                  const receipts = element.querySelectorAll('.bg-white.text-black.p-8');
+                  receipts.forEach((r: any) => {
+                      r.style.paddingBottom = '4px';
+                      r.style.marginBottom = '0';
+                  });
               }
           }
       });
@@ -541,7 +553,7 @@ const App: React.FC = () => {
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [pdfWidth, pdfHeight + 10] // Add some padding
+        format: [pdfWidth, pdfHeight] // Exact height
       });
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
