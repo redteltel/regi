@@ -385,7 +385,7 @@ export class PrinterService {
         add([LF]);
         
         // --- NEW BANK INFO LOGIC ---
-        if (settings.bankName) {
+        if (settings.bankName && mode === 'INVOICE') {
             add(ALIGN_LEFT);
             add(this.encode("--------------------------------\n"));
             add(this.encode("【お振込先】\n"));

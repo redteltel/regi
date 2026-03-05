@@ -219,7 +219,7 @@ const Receipt: React.FC<ReceiptProps> = ({
       </div>
 
       {/* Bank Information (Appears at bottom for all modes if present in settings) */}
-      {(settings.bankName) && (
+      {(settings.bankName && mode === 'INVOICE') && (
         <div className="mt-6 p-3 border-t border-dashed border-gray-300 text-xs">
             <p className="font-bold mb-1">【お振込先】</p>
             <div className="space-y-0.5 text-gray-800">
