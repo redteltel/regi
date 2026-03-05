@@ -43,7 +43,7 @@ export class PrinterService {
   // This is more stable on Android devices.
   
   async print(data: Uint8Array, type: PrinterType) {
-      if (type === 'BLUETOOTH' || type === 'SUNMI') {
+      if (type === 'BLUETOOTH' || type === 'SUNMI' || type === 'SII_AGENT') {
           // Convert data to Base64
           let binary = '';
           const len = data.byteLength;
@@ -51,6 +51,13 @@ export class PrinterService {
               binary += String.fromCharCode(data[i]);
           }
           const base64 = btoa(binary);
+
+          if (type === 'SII_AGENT') {
+              // SII URL Print Agent Scheme
+              // Sending base64 encoded ESC/POS commands
+              window.location.href = `sii-printer-agent://${base64}`;
+              return;
+          }
 
           // Construct RawBT Intent URL
           // scheme: rawbt:base64,
@@ -420,6 +427,22 @@ export class PrinterService {
         
         add([LF, LF, LF, LF]);
     };
+
+    // --- SII AGENT LOGIC (iPhone) ---
+    if (settings.printerType === 'SII_AGENT') {
+        addInit();
+        generateOneReceipt(false);
+        add([LF, LF, LF]);
+        add([0x1D, 0x56, 0x42, 0x00]); // Cut
+
+        addInit();
+        generateOneReceipt(true);
+        add([LF, LF, LF]);
+        add([0x1D, 0x56, 0x42, 0x00]); // Cut
+
+        await this.print(new Uint8Array(cmds), 'SII_AGENT');
+        return;
+    }
 
     // --- 1. Print Original ---
     addInit();

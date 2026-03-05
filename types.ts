@@ -29,7 +29,7 @@ export type ScannedResult = {
   confidence: number;
 };
 
-export type PrinterType = 'PDF' | 'BLUETOOTH' | 'SUNMI';
+export type PrinterType = 'PDF' | 'BLUETOOTH' | 'SUNMI' | 'SII_AGENT';
 
 export interface StoreSettings {
   storeName: string;

@@ -483,6 +483,36 @@ const App: React.FC = () => {
     }
   };
 
+  const handleiOSPrint = async () => {
+      // Use SII URL Print Agent
+      // Override printerType to SII_AGENT temporarily
+      const iosSettings = { ...storeSettings, printerType: 'SII_AGENT' as const };
+      
+      setIsProcessing(true);
+      try {
+        await printerService.printReceipt(
+          cart,
+          subTotal,
+          initialTax,
+          totalAmount,
+          receiptMode,
+          recipientName,
+          proviso,
+          paymentDeadline,
+          discountVal, 
+          LOGO_URL,
+          iosSettings, // Pass Modified Settings
+          finalTax, 
+          storeMemo
+        );
+      } catch (e: any) {
+        console.error(e);
+        alert(`印刷エラー:\n${e.message}`);
+      } finally {
+        setIsProcessing(false);
+      }
+  };
+
 
   const renderContent = () => {
     switch (appState) {
@@ -885,7 +915,7 @@ const App: React.FC = () => {
                   {/* iOS Specific Print Button */}
                   {/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream && (
                       <button 
-                        onClick={handleSharePDF}
+                        onClick={handleiOSPrint}
                         className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
                       >
                         <Printer size={20} />
