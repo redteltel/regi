@@ -391,8 +391,6 @@ export class PrinterService {
             add(ALIGN_CENTER);
         }
 
-        add([LF]);
-        
         // --- NEW BANK INFO LOGIC ---
         if (settings.bankName && mode === 'INVOICE') {
             add(ALIGN_LEFT);
@@ -403,7 +401,6 @@ export class PrinterService {
             add(this.encode(`${settings.accountHolder}\n`));
             add(this.encode("--------------------------------\n"));
             add(ALIGN_CENTER);
-            add([LF]);
         }
 
         if (mode === 'INVOICE') {
@@ -421,7 +418,7 @@ export class PrinterService {
             add(this.encode("--------------------------------\n"));
             add(this.encode("【店舗メモ】\n"));
             add(this.encode(`${storeMemo}`));
-            add(this.encode("--------------------------------\n"));
+            add(this.encode("--------------------------------"));
             add(ALIGN_CENTER);
         }
     };
@@ -430,11 +427,11 @@ export class PrinterService {
     if (settings.printerType === 'SII_AGENT') {
         addInit();
         generateOneReceipt(false);
-        add([0x1D, 0x56, 0x42, 0x00]); // Cut
+        // Removed Cut/Feed
 
         addInit();
         generateOneReceipt(true);
-        add([0x1D, 0x56, 0x42, 0x00]); // Cut
+        // Removed Cut/Feed
 
         await this.print(new Uint8Array(cmds), 'SII_AGENT');
         return;
@@ -443,7 +440,7 @@ export class PrinterService {
     // --- 1. Print Original ---
     addInit();
     generateOneReceipt(false);
-    add([0x1D, 0x56, 0x42, 0x00]); // Cut
+    // Removed Cut/Feed
 
     await this.print(new Uint8Array(cmds), settings.printerType);
 
@@ -458,7 +455,7 @@ export class PrinterService {
     cmds.length = 0;
     addInit();
     generateOneReceipt(true);
-    add([0x1D, 0x56, 0x42, 0x00]); // Cut
+    // Removed Cut/Feed
 
     await this.print(new Uint8Array(cmds), settings.printerType);
   }
