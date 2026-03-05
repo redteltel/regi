@@ -421,6 +421,9 @@ export class PrinterService {
             add(this.encode("--------------------------------"));
             add(ALIGN_CENTER);
         }
+
+        // Add 5mm margin (approx 2 lines)
+        add([LF, LF]);
     };
 
     // --- SII AGENT LOGIC (iPhone) ---
