@@ -882,6 +882,24 @@ const App: React.FC = () => {
                     PDF/共有
                   </button>
 
+                  {/* iOS Specific Print Button */}
+                  {/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream && (
+                      <button 
+                        onClick={handleSharePDF}
+                        className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
+                      >
+                        <Printer size={20} />
+                        iOS用印刷
+                      </button>
+                  )}
+
+                  {/* Standard Print Button (Hidden on iOS to avoid confusion, or kept if desired. User said "Add 3rd route", implying addition) */}
+                  {/* However, RawBT doesn't work on iOS, so hiding it might be better UX, but user said "Add", not "Replace". */}
+                  {/* Let's keep it but maybe the user wants it distinct. */}
+                  {/* Actually, the user request says "Add a 3rd route", so I will keep the original button too unless it's confusing. */}
+                  {/* But wait, "iOS 端末でアクセスした時のみ表示される" (Only displayed when accessed on iOS device). */}
+                  {/* So the new button is iOS only. */}
+                  
                   <button 
                     onClick={handlePrint}
                     className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
