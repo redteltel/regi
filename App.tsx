@@ -580,7 +580,7 @@ const App: React.FC = () => {
 
         const encodedData = encodeURIComponent(base64Data);
         const callbackUrl = encodeURIComponent('https://fukushima.10e.jp/regi/');
-        const scheme = `siiprintagent://1.0/print?Format=pdf&ErrorDialog=yes&PaperWidth=58&CutType=partial&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
+        const scheme = `siiprintagent://1.0/print?Format=pdf&ErrorDialog=yes&PaperWidth=58&CutType=partial&FitToWidth=yes&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
 
         window.location.href = scheme;
 
@@ -1075,48 +1075,43 @@ const App: React.FC = () => {
             {/* Footer */}
             <div className="w-full shrink-0 bg-white p-4 pb-10 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-30 sticky bottom-0">
               <div className="flex gap-3">
-                  <button 
-                    onClick={handleSharePDF}
-                    className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-700 text-white"
-                  >
-                    <Share size={20} />
-                    PDF/共有
-                  </button>
-
-                  {/* iOS Specific Print Button */}
-                  {/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream && (
+                  {/* iOS Buttons */}
+                  {/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream ? (
                       <>
                         <button 
                           onClick={handleSharePDF}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-500 text-white"
                         >
                           <Share size={20} />
-                          PDFを表示・共有
+                          PDFを共有
                         </button>
                         <button 
                           onClick={handleiOSPrint}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
                         >
                           <Printer size={20} />
-                          印刷（SIIアプリ）
+                          印刷
                         </button>
                       </>
+                  ) : (
+                      /* Android / PC Buttons */
+                      <>
+                          <button 
+                            onClick={handleSharePDF}
+                            className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-700 text-white"
+                          >
+                            <Share size={20} />
+                            PDF/共有
+                          </button>
+                          <button 
+                            onClick={handlePrint}
+                            className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
+                          >
+                            <Printer size={20} />
+                            印刷
+                          </button>
+                      </>
                   )}
-
-                  {/* Standard Print Button (Hidden on iOS to avoid confusion, or kept if desired. User said "Add 3rd route", implying addition) */}
-                  {/* However, RawBT doesn't work on iOS, so hiding it might be better UX, but user said "Add", not "Replace". */}
-                  {/* Let's keep it but maybe the user wants it distinct. */}
-                  {/* Actually, the user request says "Add a 3rd route", so I will keep the original button too unless it's confusing. */}
-                  {/* But wait, "iOS 端末でアクセスした時のみ表示される" (Only displayed when accessed on iOS device). */}
-                  {/* So the new button is iOS only. */}
-                  
-                  <button 
-                    onClick={handlePrint}
-                    className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
-                  >
-                    <Printer size={20} />
-                    印刷
-                  </button>
               </div>
             </div>
           </div>
