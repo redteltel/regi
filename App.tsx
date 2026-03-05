@@ -435,48 +435,62 @@ const App: React.FC = () => {
     try {
       setIsProcessing(true);
       const canvas = await html2canvas(input, { 
-          scale: 2, 
+          scale: 3, 
           useCORS: true,
-          backgroundColor: '#ffffff', // Force white background
+          backgroundColor: '#ffffff', 
           onclone: (document) => {
               const element = document.getElementById('receipt-preview');
               if (element) {
+                  // Force layout to match MP-B20 effective print width (384 dots)
+                  element.style.width = '384px';
+                  element.style.minWidth = '384px';
+                  element.style.maxWidth = '384px';
                   element.style.backgroundColor = '#ffffff';
                   element.style.color = '#000000';
+                  element.style.margin = '0';
+                  element.style.padding = '0';
                   
-                  // Enhance Contrast & Weight
+                  // Apply strict padding for safety margin (Right 2mm ~ 16px)
+                  const receipts = element.querySelectorAll('.bg-white.text-black');
+                  receipts.forEach((r: any) => {
+                      r.style.width = '100%';
+                      r.style.padding = '0';
+                      r.style.paddingLeft = '0';
+                      r.style.paddingRight = '16px'; // ~2mm safety margin
+                      r.style.paddingBottom = '10px';
+                      r.style.marginBottom = '0';
+                      r.style.boxSizing = 'border-box';
+                  });
+
+                  // Force Bold & Black & No Smoothing
                   const all = element.getElementsByTagName('*');
                   for (let i = 0; i < all.length; i++) {
                       const el = all[i] as HTMLElement;
-                      el.style.fontWeight = 'bold'; // Force Bold
-                      el.style.color = '#000000';   // Force Black
+                      el.style.fontWeight = 'bold';
+                      el.style.color = '#000000';
                       // @ts-ignore
                       el.style.webkitFontSmoothing = 'none';
+                      el.style.overflowWrap = 'break-word';
                   }
-
-                  // Reduce bottom padding
-                  const receipts = element.querySelectorAll('.bg-white.text-black.p-2');
-                  receipts.forEach((r: any) => {
-                      r.style.paddingBottom = '4px';
-                      r.style.marginBottom = '0';
-                  });
               }
           }
       });
       const imgData = canvas.toDataURL('image/png');
       
-      // PDF width 58mm (MP-B20 standard).
-      const pdfWidth = 58;
+      const paperWidth = 58;
+      const printWidth = 48;
+      const margin = (paperWidth - printWidth) / 2;
+
       const imgProps = canvas;
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const pdfHeight = (imgProps.height * printWidth) / imgProps.width;
 
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [pdfWidth, pdfHeight] // Exact height
+        format: [paperWidth, pdfHeight]
       });
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'PNG', margin, 0, printWidth, pdfHeight);
       
       const pdfBlob = pdf.output('blob');
       const fileName = `receipt_${new Date().getTime()}.pdf`;
@@ -506,70 +520,68 @@ const App: React.FC = () => {
 
       setIsProcessing(true);
       try {
-        // 1. Generate PDF from HTML (Same logic as handleSharePDF)
         const canvas = await html2canvas(input, { 
-            scale: 2, 
+            scale: 3, 
             useCORS: true,
-            backgroundColor: '#ffffff', // Force white background
+            backgroundColor: '#ffffff', 
             onclone: (document) => {
                 const element = document.getElementById('receipt-preview');
                 if (element) {
+                    element.style.width = '384px';
+                    element.style.minWidth = '384px';
+                    element.style.maxWidth = '384px';
                     element.style.backgroundColor = '#ffffff';
                     element.style.color = '#000000';
+                    element.style.margin = '0';
+                    element.style.padding = '0';
                     
-                    // Enhance Contrast & Weight
+                    const receipts = element.querySelectorAll('.bg-white.text-black');
+                    receipts.forEach((r: any) => {
+                        r.style.width = '100%';
+                        r.style.padding = '0';
+                        r.style.paddingLeft = '0';
+                        r.style.paddingRight = '16px'; // ~2mm safety margin
+                        r.style.paddingBottom = '10px';
+                        r.style.marginBottom = '0';
+                        r.style.boxSizing = 'border-box';
+                    });
+
                     const all = element.getElementsByTagName('*');
                     for (let i = 0; i < all.length; i++) {
                         const el = all[i] as HTMLElement;
-                        el.style.fontWeight = 'bold'; // Force Bold
-                        el.style.color = '#000000';   // Force Black
+                        el.style.fontWeight = 'bold';
+                        el.style.color = '#000000';
                         // @ts-ignore
                         el.style.webkitFontSmoothing = 'none';
+                        el.style.overflowWrap = 'break-word';
                     }
-
-                    // Reduce bottom padding
-                    const receipts = element.querySelectorAll('.bg-white.text-black.p-2');
-                    receipts.forEach((r: any) => {
-                        r.style.paddingBottom = '4px';
-                        r.style.marginBottom = '0';
-                    });
                 }
             }
         });
         const imgData = canvas.toDataURL('image/png');
         
-        // MP-B20 Specs:
-        // Paper Width: 58mm
-        // Effective Print Width: 48mm
         const paperWidth = 58;
         const printWidth = 48;
-        const margin = (paperWidth - printWidth) / 2; // 5mm margin on each side
+        const margin = (paperWidth - printWidth) / 2;
 
         const imgProps = canvas;
-        // Calculate height based on the print width (48mm) to maintain aspect ratio
         const pdfHeight = (imgProps.height * printWidth) / imgProps.width;
 
         const pdf = new jsPDF({
           orientation: 'portrait',
           unit: 'mm',
-          format: [paperWidth, pdfHeight] // Set PDF size to paper width (58mm)
+          format: [paperWidth, pdfHeight]
         });
 
-        // Add image constrained to 48mm width, centered with 5mm margin
         pdf.addImage(imgData, 'PNG', margin, 0, printWidth, pdfHeight);
 
-        // 2. Get Base64 Data
-        // output('datauristring') returns "data:application/pdf;base64,..."
         const dataUri = pdf.output('datauristring');
         const base64Data = dataUri.split(',')[1];
 
-        // 3. Construct URL Scheme
-        // siiprintagent://1.0/print?Format=pdf&Data=<encoded_base64>&ErrorDialog=yes&PaperWidth=58&CutType=partial&CallbackSuccess=<url>
         const encodedData = encodeURIComponent(base64Data);
         const callbackUrl = encodeURIComponent('https://fukushima.10e.jp/regi/');
         const scheme = `siiprintagent://1.0/print?Format=pdf&ErrorDialog=yes&PaperWidth=58&CutType=partial&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
 
-        // 4. Launch App
         window.location.href = scheme;
 
       } catch (e: any) {
@@ -1079,14 +1091,14 @@ const App: React.FC = () => {
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-500 text-white"
                         >
                           <Share size={20} />
-                          PDF/共有
+                          PDFを表示・共有
                         </button>
                         <button 
                           onClick={handleiOSPrint}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
                         >
                           <Printer size={20} />
-                          印刷
+                          印刷（SIIアプリ）
                         </button>
                       </>
                   )}
