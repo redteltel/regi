@@ -443,7 +443,10 @@ export class PrinterService {
     }
 
     // --- SUNMI LOGIC ---
-    if (settings.printerType === 'SUNMI' && (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin)) {
+    // @ts-ignore
+    const isSunmi = /(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin);
+    
+    if (isSunmi || settings.printerType === 'SUNMI') {
         await this.printSunmi(items, subTotal, tax, total, mode, recipientName, proviso, paymentDeadline, discount, logoUrl, settings, finalTax, storeMemo);
         return;
     }
@@ -709,7 +712,7 @@ export class PrinterService {
           }
           
           // Return Base64 (remove prefix)
-          return finalCanvas.toDataURL('image/png').split(',')[1];
+          return finalCanvas.toDataURL('image/png').replace(/^data:image\/\w+;base64,/, "");
       };
 
       try {
