@@ -450,7 +450,7 @@ const App: React.FC = () => {
     try {
       setIsProcessing(true);
       if (isSunmi) {
-          setProcessingMessage('PDFを生成中...\n(10秒〜30秒かかる場合があります)');
+          setProcessingMessage('PDF作成中...\n(30秒ほどかかる場合があります)');
       } else {
           setProcessingMessage('');
       }
@@ -463,7 +463,7 @@ const App: React.FC = () => {
           useCORS: true,
           backgroundColor: '#ffffff',
           // @ts-ignore
-          timeout: 60000, // Extend timeout to 60s
+          timeout: 90000, // Extend timeout to 90s for safety
           onclone: (document) => {
               const element = document.getElementById('receipt-preview');
               if (element) {
