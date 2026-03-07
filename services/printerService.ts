@@ -507,80 +507,81 @@ export class PrinterService {
 
                   // Title
                   printer.setFontSize(48); // Extra Large
-                  // Bold is default or we can't explicitly set weight in basic AIDL, but size helps.
-                  // Some versions support setFontWeight but standard interface might not.
-                  // We rely on size for visibility.
                   let title = "領収書";
                   if (mode === 'FORMAL') title = "領 収 証";
                   else if (mode === 'INVOICE') title = "請 求 書";
                   else if (mode === 'ESTIMATION') title = "御 見 積 書";
-                  printer.printString(title + (isCopy ? " (控え)\n" : "\n"));
+                  
+                  // Use printText for UTF-8 support
+                  printer.printText(title + (isCopy ? " (控え)\n" : "\n"));
                   printer.setFontSize(24); // Normal
-                  printer.printString("\n");
+                  printer.printText("\n");
 
                   // Date
                   printer.setAlignment(2); // Right
-                  printer.printString(`${new Date().toLocaleString()}\n`);
-                  printer.printString("\n");
+                  printer.printText(`${new Date().toLocaleString()}\n`);
+                  printer.printText("\n");
 
                   // Details
                   if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
                       printer.setAlignment(0); // Left
-                      printer.printString(`${recipientName || "          "} 様\n`);
-                      printer.printString("\n");
+                      printer.printText(`${recipientName || "          "} 様\n`);
+                      printer.printText("\n");
                       
                       if (mode === 'INVOICE') {
                           printer.setAlignment(2);
-                          printer.printString("下記の通りご請求申し上げます。\n");
+                          printer.printText("下記の通りご請求申し上げます。\n");
                       } else if (mode === 'ESTIMATION') {
                           printer.setAlignment(2);
-                          printer.printString("下記の通り御見積申し上げます。\n");
+                          printer.printText("下記の通り御見積申し上げます。\n");
                       }
 
                       printer.setAlignment(1); // Center
                       printer.setFontSize(48); // Large
-                      printer.printString(`${total.toLocaleString()}円\n`);
+                      printer.printText(`${total.toLocaleString()}円\n`);
                       printer.setFontSize(24); // Normal
-                      printer.printString("\n");
+                      printer.printText("\n");
                       
                       if (mode === 'FORMAL') {
                           printer.setAlignment(0);
-                          printer.printString(`但  ${proviso || "お品代"}として\n`);
-                          printer.printString("上記正に領収いたしました\n");
-                          printer.printString("\n");
+                          printer.printText(`但  ${proviso || "お品代"}として\n`);
+                          printer.printText("上記正に領収いたしました\n");
+                          printer.printText("\n");
                       }
                       
                       if (mode === 'INVOICE' && paymentDeadline) {
                           printer.setAlignment(2);
-                          printer.printString(`お支払期限: ${paymentDeadline}\n`);
-                          printer.printString("\n");
+                          printer.printText(`お支払期限: ${paymentDeadline}\n`);
+                          printer.printText("\n");
                       }
                       
                       if (mode === 'ESTIMATION') {
                           printer.setAlignment(2);
                           const d = new Date();
                           d.setMonth(d.getMonth() + 1);
-                          printer.printString(`有効期限: ${d.toLocaleDateString()}\n`);
-                          printer.printString("\n");
+                          printer.printText(`有効期限: ${d.toLocaleDateString()}\n`);
+                          printer.printText("\n");
                       }
                   }
 
                   printer.setAlignment(1);
-                  printer.printString("--------------------------------\n");
+                  printer.printText("--------------------------------\n");
                   
                   // Items
                   printer.setAlignment(0); // Left
                   for (const item of items) {
-                      printer.printString(`${item.name}\n`);
+                      printer.printText(`${item.name}\n`);
                       if (item.partNumber) {
-                          printer.printString(`  (品番: ${item.partNumber})\n`);
+                          printer.printText(`  (品番: ${item.partNumber})\n`);
                       }
 
                       const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
                       const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
                       
-                      // Simple spacing calculation for 32 chars (approx for 58mm normal font)
-                      // SUNMI font width might vary, but this is a safe approximation
+                      // Strict width calculation for 48mm (384px)
+                      // Assuming standard font width approx 12px per char -> 32 chars
+                      // But SUNMI standard font might be different. 
+                      // Let's use a safer 30-32 char limit.
                       let lineLen = 0;
                       for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
                       let totalLen = 0;
@@ -588,94 +589,94 @@ export class PrinterService {
 
                       const spaces = 32 - (lineLen + totalLen); 
                       const padding = spaces > 0 ? " ".repeat(spaces) : " ";
-                      printer.printString(`${line}${padding}${totalStr}\n`);
+                      printer.printText(`${line}${padding}${totalStr}\n`);
                   }
                   
                   printer.setAlignment(1);
-                  printer.printString("--------------------------------\n");
+                  printer.printText("--------------------------------\n");
                   
                   // Total Breakdown
                   printer.setAlignment(2); // Right
-                  printer.printString(`小計: ${subTotal.toLocaleString()}円\n`);
+                  printer.printText(`小計: ${subTotal.toLocaleString()}円\n`);
                   
                   const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
-                  printer.printString(`消費税(10%): ${taxToDisplay.toLocaleString()}円\n`);
+                  printer.printText(`消費税(10%): ${taxToDisplay.toLocaleString()}円\n`);
 
                   if (discount > 0) {
                       const initialTotal = subTotal + tax;
-                      printer.printString(`合計(値引前): ${initialTotal.toLocaleString()}円\n`);
-                      printer.printString(`値引(税込): - ${discount.toLocaleString()}円\n`);
+                      printer.printText(`合計(値引前): ${initialTotal.toLocaleString()}円\n`);
+                      printer.printText(`値引(税込): - ${discount.toLocaleString()}円\n`);
                   }
                   
                   if (mode === 'RECEIPT') {
-                      printer.printString("\n");
+                      printer.printText("\n");
                       printer.setFontSize(48);
-                      printer.printString(`合計: ${total.toLocaleString()}円\n`);
+                      printer.printText(`合計: ${total.toLocaleString()}円\n`);
                       printer.setFontSize(24);
                   }
 
                   if (discount > 0 && finalTax !== undefined) {
-                      printer.printString(`(内消費税等: ${finalTax.toLocaleString()}円)\n`);
+                      printer.printText(`(内消費税等: ${finalTax.toLocaleString()}円)\n`);
                   }
-                  printer.printString("\n");
+                  printer.printText("\n");
 
                   // Footer
                   printer.setAlignment(1); // Center
                   printer.setFontSize(30); // Slightly larger for store name
-                  printer.printString(`${settings.storeName}\n`);
+                  printer.printText(`${settings.storeName}\n`);
                   printer.setFontSize(24);
-                  printer.printString(`〒${settings.zipCode}\n${settings.address1}\n`);
+                  printer.printText(`〒${settings.zipCode}\n${settings.address1}\n`);
                   if (settings.address2) {
-                      printer.printString(`${settings.address2}\n`);
+                      printer.printText(`${settings.address2}\n`);
                   }
-                  printer.printString(`電話: ${settings.tel}\n`);
-                  printer.printString(`登録番号: ${settings.registrationNum}\n`);
+                  printer.printText(`電話: ${settings.tel}\n`);
+                  printer.printText(`登録番号: ${settings.registrationNum}\n`);
                   
                   if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
                       printer.setAlignment(2);
-                      printer.printString("(印)\n");
+                      printer.printText("(印)\n");
                       printer.setAlignment(1);
                   }
 
                   if (mode === 'FORMAL' && total >= 50000) {
-                      printer.printString("\n");
+                      printer.printText("\n");
                       printer.setAlignment(2);
-                      printer.printString("----------\n");
-                      printer.printString("| 収入印紙 |\n");
-                      printer.printString("----------\n");
+                      printer.printText("----------\n");
+                      printer.printText("| 収入印紙 |\n");
+                      printer.printText("----------\n");
                       printer.setAlignment(1);
                   }
 
                   if (settings.bankName && mode === 'INVOICE') {
                       printer.setAlignment(0);
-                      printer.printString("--------------------------------\n");
-                      printer.printString("【お振込先】\n");
-                      printer.printString(`${settings.bankName} ${settings.branchName}\n`);
-                      printer.printString(`${settings.accountType} ${settings.accountNumber}\n`);
-                      printer.printString(`${settings.accountHolder}\n`);
-                      printer.printString("--------------------------------\n");
+                      printer.printText("--------------------------------\n");
+                      printer.printText("【お振込先】\n");
+                      printer.printText(`${settings.bankName} ${settings.branchName}\n`);
+                      printer.printText(`${settings.accountType} ${settings.accountNumber}\n`);
+                      printer.printText(`${settings.accountHolder}\n`);
+                      printer.printText("--------------------------------\n");
                       printer.setAlignment(1);
                   }
 
                   if (mode === 'INVOICE') {
-                      printer.printString("ご請求書を送付いたします。");
+                      printer.printText("ご請求書を送付いたします。");
                   } else if (mode === 'ESTIMATION') {
                       // No specific footer
                   } else {
-                      printer.printString("毎度ありがとうございます!");
+                      printer.printText("毎度ありがとうございます!");
                   }
 
                   if (isCopy && storeMemo) {
-                      printer.printString("\n\n");
+                      printer.printText("\n\n");
                       printer.setAlignment(0);
-                      printer.printString("--------------------------------\n");
-                      printer.printString("【店舗メモ】\n");
-                      printer.printString(`${storeMemo}`);
-                      printer.printString("--------------------------------");
+                      printer.printText("--------------------------------\n");
+                      printer.printText("【店舗メモ】\n");
+                      printer.printText(`${storeMemo}`);
+                      printer.printText("--------------------------------");
                       printer.setAlignment(1);
                   }
 
-                  printer.printString("\n\n\n"); // Feed
+                  printer.printText("\n\n\n"); // Feed
                   printer.cutPaper();
                   resolve();
               } catch (e) {

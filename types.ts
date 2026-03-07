@@ -56,6 +56,7 @@ export interface StoreSettings {
 export interface SunmiInnerPrinter {
     printOriginalText(text: string, callback?: any): void;
     printString(text: string, callback?: any): void;
+    printText(text: string, callback?: any): void; // Added printText
     printerInit(callback?: any): void;
     lineWrap(n: number, callback?: any): void;
     cutPaper(callback?: any): void;
