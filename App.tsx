@@ -381,10 +381,44 @@ const App: React.FC = () => {
     // @ts-ignore
     const isSunmi = /(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin);
     
-    // SUNMI Logic: Redirect Print Button to PDF Share
+    // SUNMI Logic: Try AIDL Direct Print first, then Fallback to PDF Share
     if (isSunmi) {
-        await handleSharePDF();
-        return;
+        setIsProcessing(true);
+        setProcessingMessage('印刷データを送信中...');
+        
+        try {
+            // Force PrinterType to SUNMI
+            const effectiveSettings = { ...storeSettings, printerType: 'SUNMI' as PrinterType };
+            
+            // Attempt Direct Print (AIDL)
+            await printerService.printReceipt(
+                cart,
+                subTotal,
+                initialTax,
+                totalAmount,
+                receiptMode,
+                recipientName,
+                proviso,
+                paymentDeadline,
+                discountVal, 
+                LOGO_URL,
+                effectiveSettings,
+                finalTax,
+                storeMemo
+            );
+            
+            // Success
+            setIsProcessing(false);
+            setProcessingMessage('');
+            return;
+
+        } catch (e) {
+            console.warn("AIDL Print failed, falling back to PDF Share:", e);
+            // Fallback to PDF Share
+            setProcessingMessage('印刷データを準備中...\n(30秒ほどかかります)');
+            await handleSharePDF();
+            return;
+        }
     }
 
     // Create a temporary settings object if it's SUNMI to force the correct printer type

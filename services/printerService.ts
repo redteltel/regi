@@ -489,296 +489,123 @@ export class PrinterService {
       finalTax?: number,
       storeMemo?: string
   ) {
-      // User Request: Notify start of printing
-      alert("印刷を開始します...");
-
-      // Check for printer availability (Plugin or InnerPrinter)
-      const hasPlugin = !!(window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap);
-      const hasInner = !!(window.SunmiInnerPrinter || window.sunmiInnerPrinter);
-
-      // Fallback to RawBT Image Mode if no plugin found
-      const useRawBTFallback = !hasPlugin && !hasInner;
-
-      if (useRawBTFallback) {
-          console.warn("SUNMI Printer Plugin not found. Falling back to RawBT Image Mode.");
-          // alert("SUNMIプラグイン未検出: RawBT(画像モード)で印刷を試みます...");
+      const printer = window.SunmiPrinterPlugin || window.SunmiInnerPrinter || window.sunmiInnerPrinter;
+      
+      if (!printer) {
+          throw new Error("SUNMI Printer Not Found");
       }
 
-      // Generate Image from DOM
-      const generateImage = async (isCopy: boolean): Promise<string> => {
-          // Temporarily render the receipt content to a hidden div
-          const tempDiv = document.createElement('div');
-          tempDiv.style.position = 'absolute';
-          tempDiv.style.top = '-9999px';
-          tempDiv.style.left = '0';
-          tempDiv.style.width = '384px'; // 48mm width
-          tempDiv.style.backgroundColor = 'white';
-          tempDiv.style.color = 'black';
-          tempDiv.style.fontFamily = 'monospace'; // Match Receipt component
-          tempDiv.style.fontWeight = 'bold';
-          // Ensure high contrast
-          tempDiv.style.filter = 'contrast(150%)'; 
+      // Helper to convert URL to Base64 for Logo
+      const getBase64FromUrl = async (url: string): Promise<string> => {
+          try {
+              const data = await fetch(url);
+              const blob = await data.blob();
+              return new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.readAsDataURL(blob);
+                  reader.onloadend = () => {
+                      const base64data = reader.result as string;
+                      resolve(base64data.replace(/^data:image\/\w+;base64,/, ""));
+                  };
+              });
+          } catch (e) {
+              console.warn("Logo fetch failed", e);
+              return "";
+          }
+      };
 
+      try {
+          // Init
+          if (printer.printerInit) printer.printerInit();
+
+          // 1. Logo
+          if (logoUrl) {
+              const base64Logo = await getBase64FromUrl(logoUrl);
+              if (base64Logo) {
+                  if (printer.printBitmap) {
+                      printer.printBitmap(base64Logo, 384, 0); 
+                  } else if (printer.printBitmapWithBase64) {
+                      printer.printBitmapWithBase64(base64Logo, 384, 0);
+                  }
+                  if (printer.lineWrap) printer.lineWrap(1);
+              }
+          }
+
+          // 2. Title
+          if (printer.setAlignment) printer.setAlignment(1); // Center
+          if (printer.setFontSize) printer.setFontSize(32); // Large
+          if (printer.setBold) printer.setBold(true);
+          
           let title = "領収書";
           if (mode === 'FORMAL') title = "領 収 証";
           else if (mode === 'INVOICE') title = "請 求 書";
           else if (mode === 'ESTIMATION') title = "御 見 積 書";
           
-          let html = `
-            <div style="padding: 10px; font-size: 14px; line-height: 1.4;">
-              <div style="text-align: center; margin-bottom: 10px;">
-          `;
-
-          if (logoUrl && !isCopy) {
-              html += `<img src="${logoUrl}" style="max-width: 150px; max-height: 80px; margin-bottom: 5px;" />`;
-          }
-
-          html += `
-                <div style="font-size: 24px; font-weight: bold;">${title}${isCopy ? ' (控え)' : ''}</div>
-          `;
+          if (printer.printText) printer.printText(title + "\n");
           
-          if (mode === 'INVOICE') html += `<div style="font-size: 12px;">(INVOICE)</div>`;
-          if (mode === 'ESTIMATION') html += `<div style="font-size: 12px;">(ESTIMATION)</div>`;
+          if (printer.setFontSize) printer.setFontSize(24); // Normal
+          if (printer.setBold) printer.setBold(false);
+          if (printer.printText) printer.printText("\n");
 
-          html += `
-              </div>
-              <div style="text-align: right; font-size: 10px; color: #555;">
-                No. ${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${new Date().getHours()}${new Date().getMinutes()}
-              </div>
-              <div style="text-align: right; margin-bottom: 10px; font-size: 10px; color: #555;">${new Date().toLocaleString()}</div>
-          `;
+          // Date & No
+          if (printer.setAlignment) printer.setAlignment(2); // Right
+          if (printer.setFontSize) printer.setFontSize(18); // Small
+          const dateStr = new Date().toLocaleString();
+          if (printer.printText) printer.printText(dateStr + "\n");
+          if (printer.printText) printer.printText("--------------------------------\n");
 
-          if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-              html += `<div style="text-align: left; margin-bottom: 10px; font-size: 16px; border-bottom: 1px solid black;">${recipientName || "          "} <span style="font-size: 12px;">様</span></div>`;
-              
-              if (mode === 'INVOICE') html += `<div style="text-align: right; font-size: 12px;">下記の通りご請求申し上げます。</div>`;
-              else if (mode === 'ESTIMATION') html += `<div style="text-align: right; font-size: 12px;">下記の通り御見積申し上げます。</div>`;
-
-              html += `
-                <div style="background-color: #f3f4f6; padding: 5px; text-align: center; margin: 10px 0;">
-                    <div style="font-size: 12px;">${mode === 'INVOICE' ? 'ご請求金額' : mode === 'ESTIMATION' ? '御見積金額' : '金額'}</div>
-                    <div style="font-size: 28px; font-weight: bold; border-bottom: 2px solid black;">¥ ${total.toLocaleString()} -</div>
-                </div>
-              `;
-              
-              if (mode === 'FORMAL') {
-                  html += `
-                    <div style="margin-bottom: 5px;">但  ${proviso || "お品代"}として</div>
-                    <div style="margin-bottom: 10px; text-align: right; font-size: 12px;">上記正に領収いたしました</div>
-                  `;
-              }
-              
-              if (mode === 'INVOICE' && paymentDeadline) {
-                  html += `<div style="text-align: right; color: #b91c1c; font-weight: bold;">お支払期限: ${paymentDeadline}</div>`;
-              }
-              
-              if (mode === 'ESTIMATION') {
-                   const d = new Date();
-                   d.setMonth(d.getMonth() + 1);
-                   html += `<div style="text-align: right; color: #374151; font-weight: bold;">有効期限: ${d.toLocaleDateString()}</div>`;
-              }
-          }
-
-          html += `<hr style="border-top: 1px dashed black; margin: 10px 0;">`;
-          if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-              html += `<div style="font-size: 12px; color: #555; margin-bottom: 5px;">内訳</div>`;
-          }
+          // 3. Items
+          if (printer.setAlignment) printer.setAlignment(0); // Left
+          if (printer.setFontSize) printer.setFontSize(24); // Normal
           
           items.forEach(item => {
-              html += `<div style="font-weight: bold; font-size: 16px;">${item.name}</div>`;
-              if (item.partNumber) html += `<div style="font-size: 10px; color: #555; margin-left: 10px;">(品番: ${item.partNumber})</div>`;
-              html += `
-                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #374151;">
-                  <span>${item.quantity} x ${item.price.toLocaleString()}</span>
-                  <span>${(item.price * item.quantity).toLocaleString()}</span>
-                </div>
-                <div style="border-bottom: 1px dashed #e5e7eb; margin-bottom: 5px;"></div>
-              `;
+              if (printer.printText) printer.printText(item.name + "\n");
+              if (printer.setAlignment) printer.setAlignment(2); // Right
+              const line = `${item.quantity} x ${item.price.toLocaleString()}  ${(item.quantity * item.price).toLocaleString()}`;
+              if (printer.printText) printer.printText(line + "\n");
+              if (printer.setAlignment) printer.setAlignment(0); // Left
           });
 
-          html += `
-            <div style="display: flex; justify-content: space-between; margin-top: 10px;"><span>小計 (税抜)</span><span>${subTotal.toLocaleString()}</span></div>
-          `;
-          
-          const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
-          html += `
-            <div style="display: flex; justify-content: space-between;"><span>消費税(10%)</span><span>${taxToDisplay.toLocaleString()}</span></div>
-          `;
+          if (printer.printText) printer.printText("--------------------------------\n");
 
+          // 4. Totals
+          if (printer.setAlignment) printer.setAlignment(2); // Right
+          if (printer.setFontSize) printer.setFontSize(24);
+          if (printer.printText) printer.printText(`小計: ¥${subTotal.toLocaleString()}\n`);
+          if (printer.printText) printer.printText(`消費税: ¥${(finalTax || tax).toLocaleString()}\n`);
+          
           if (discount > 0) {
-              const initialTotal = subTotal + tax;
-              html += `
-                <div style="display: flex; justify-content: space-between; border-top: 1px dashed #ccc; margin-top: 5px;"><span>合計(値引前)</span><span>${initialTotal.toLocaleString()}</span></div>
-                <div style="display: flex; justify-content: space-between; color: #dc2626;"><span>値引(税込)</span><span>- ${discount.toLocaleString()}</span></div>
-              `;
+              if (printer.printText) printer.printText(`値引: -¥${discount.toLocaleString()}\n`);
           }
+
+          if (printer.setFontSize) printer.setFontSize(36); // Large Total
+          if (printer.setBold) printer.setBold(true);
+          if (printer.printText) printer.printText(`合計: ¥${total.toLocaleString()}\n`);
           
-          if (mode === 'RECEIPT') {
-              html += `
-                <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; margin-top: 5px; border-top: 1px solid #e5e7eb; padding-top: 5px;">
-                  <span>合計</span><span>${total.toLocaleString()}</span>
-                </div>
-              `;
-          }
-
-          if (discount > 0 && finalTax !== undefined) {
-              html += `<div style="text-align: right; font-size: 10px; color: #555;">(内消費税等: ${finalTax.toLocaleString()})</div>`;
-          }
+          if (printer.setFontSize) printer.setFontSize(20);
+          if (printer.setBold) printer.setBold(false);
+          if (printer.printText) printer.printText(`(内消費税等: ¥${(finalTax || tax).toLocaleString()})\n`);
           
-          html += `<div style="margin-top: 20px; border-top: 2px solid black; padding-top: 10px;">`;
-          html += `<div style="font-size: 20px; font-weight: bold; margin-bottom: 5px;">${settings.storeName}</div>`;
-          html += `<div style="font-size: 12px;">〒${settings.zipCode}</div>`;
-          html += `<div style="font-size: 12px;">${settings.address1}</div>`;
-          if (settings.address2) html += `<div style="font-size: 12px;">${settings.address2}</div>`;
-          html += `<div style="font-size: 12px;">電話: ${settings.tel}</div>`;
-          html += `<div style="font-size: 12px; font-family: monospace;">登録番号: ${settings.registrationNum}</div>`;
-          html += `</div>`;
+          if (printer.printText) printer.printText("\n");
 
-          if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-             // Stamp placeholder if needed, but usually physical stamp is used.
-             // Receipt component has a stamp box for revenue stamp.
-          }
+          // 5. Store Info
+          if (printer.setAlignment) printer.setAlignment(1); // Center
+          if (printer.setFontSize) printer.setFontSize(24);
+          if (printer.printText) printer.printText(settings.storeName + "\n");
+          if (printer.setFontSize) printer.setFontSize(18);
+          if (printer.printText) printer.printText(settings.tel + "\n");
+          if (printer.printText) printer.printText(settings.registrationNum + "\n");
 
-          if (mode === 'FORMAL' && total >= 50000) {
-              html += `
-                <div style="margin-top: 10px; text-align: right;">
-                  <div style="display: inline-block; border: 1px solid #9ca3af; padding: 10px; width: 60px; height: 60px; text-align: center; background-color: #f9fafb;">
-                    <div style="font-size: 8px; color: #d1d5db;">印</div>
-                    <div style="font-size: 8px; color: #d1d5db;">収入印紙</div>
-                  </div>
-                </div>
-              `;
-          }
-
-          if (settings.bankName && mode === 'INVOICE') {
-              html += `
-                <div style="margin-top: 15px; padding: 10px; border-top: 1px dashed black; font-size: 12px;">
-                    <div style="font-weight: bold; margin-bottom: 5px;">【お振込先】</div>
-                    <div>${settings.bankName} ${settings.branchName}</div>
-                    <div>${settings.accountType} ${settings.accountNumber}</div>
-                    <div>${settings.accountHolder}</div>
-                </div>
-              `;
-          }
+          // 6. Footer
+          if (printer.printText) printer.printText("\n毎度ありがとうございます\n\n");
           
-          html += `<div style="margin-top: 10px; text-align: center; font-size: 10px; color: #9ca3af;">`;
-          if (mode === 'INVOICE') html += `ご請求書を送付いたします。`;
-          else if (mode === 'ESTIMATION') html += `ご検討のほどお願い申し上げます。`;
-          else html += `毎度ありがとうございます!`;
-          html += `</div>`;
-
-          if (isCopy && storeMemo) {
-              html += `
-                <div style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed black;">
-                    <div style="font-size: 12px; font-weight: bold;">【店舗メモ】</div>
-                    <div style="white-space: pre-wrap; font-size: 12px; border: 1px solid #d1d5db; padding: 5px; border-radius: 4px;">${storeMemo}</div>
-                </div>
-              `;
-          }
-
-          html += `</div>`;
-          tempDiv.innerHTML = html;
-          document.body.appendChild(tempDiv);
-
-          // Use html2canvas to generate image
-          const canvas = await html2canvas(tempDiv, {
-              width: 384,
-              scale: 2, // Higher scale for better quality
-              logging: false,
-              useCORS: true,
-              backgroundColor: '#ffffff'
-          });
-          
-          document.body.removeChild(tempDiv);
-
-          // Resize to 384px width (SUNMI V2S Print Width) and add padding
-          const finalCanvas = document.createElement('canvas');
-          finalCanvas.width = 384;
-          // Calculate height based on aspect ratio
-          const scaledHeight = (canvas.height * 384) / canvas.width;
-          finalCanvas.height = scaledHeight;
-          
-          const ctx = finalCanvas.getContext('2d');
-          if (ctx) {
-              ctx.fillStyle = '#ffffff';
-              ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-              
-              // Draw image with 10px right padding (so max width effectively 374px)
-              // Actually, to prevent cutting on right, we should perhaps scale it slightly smaller or just ensure content is within bounds.
-              // User requested: "Force insert 10px padding on right side".
-              // So we draw the image slightly shifted left or scaled down?
-              // If we draw it at 0,0 with width 374, and canvas is 384, we have 10px space on right.
-              const contentWidth = 374;
-              const contentHeight = (canvas.height * contentWidth) / canvas.width;
-              
-              // Recalculate canvas height for the new content height
-              finalCanvas.height = contentHeight;
-              
-              // Fill white again for new height
-              ctx.fillStyle = '#ffffff';
-              ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-
-              ctx.drawImage(canvas, 0, 0, contentWidth, contentHeight);
-              // Right side (10px) remains white
-          }
-          
-          // Return Base64 (remove prefix)
-          return finalCanvas.toDataURL('image/png'); // Keep header for convertImageToEscPos if needed, or strip for plugin
-      };
-
-      try {
-          // 1. Print Original
-          const base64OriginalDataUri = await generateImage(false);
-          const base64Original = base64OriginalDataUri.replace(/^data:image\/\w+;base64,/, "");
-          
-          if (hasPlugin && window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap) {
-              window.SunmiPrinterPlugin.printBitmap(base64Original, 384, 0);
-          } else if (hasInner && window.SunmiInnerPrinter && window.SunmiInnerPrinter.printBitmapWithBase64) {
-               // Fallback to InnerPrinter if Plugin method missing
-               window.SunmiInnerPrinter.printBitmapWithBase64(base64Original, 384, 0);
-               window.SunmiInnerPrinter.lineWrap(3);
-               window.SunmiInnerPrinter.cutPaper();
-          } else {
-               // Fallback: RawBT Image Mode (Convert Image to ESC/POS Raster)
-               console.log("Using RawBT Image Fallback...");
-               const rasterCmds = await this.convertImageToEscPos(base64OriginalDataUri);
-               const cmds = [
-                   0x1B, 0x40, // Init
-                   ...rasterCmds,
-                   0x1D, 0x56, 0x42, 0x00 // Cut
-               ];
-               // Send via RawBT (using 'SUNMI' type triggers rawbt intent logic in print())
-               await this.print(new Uint8Array(cmds), 'SUNMI');
-          }
-
-          // 2. Print Copy (if confirmed)
-          setTimeout(async () => {
-              if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
-                  const base64CopyDataUri = await generateImage(true);
-                  const base64Copy = base64CopyDataUri.replace(/^data:image\/\w+;base64,/, "");
-
-                  if (hasPlugin && window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap) {
-                      window.SunmiPrinterPlugin.printBitmap(base64Copy, 384, 0);
-                  } else if (hasInner && window.SunmiInnerPrinter && window.SunmiInnerPrinter.printBitmapWithBase64) {
-                      window.SunmiInnerPrinter.printBitmapWithBase64(base64Copy, 384, 0);
-                      window.SunmiInnerPrinter.lineWrap(3);
-                      window.SunmiInnerPrinter.cutPaper();
-                  } else {
-                       // Fallback: RawBT Image Mode
-                       const rasterCmds = await this.convertImageToEscPos(base64CopyDataUri);
-                       const cmds = [
-                           0x1B, 0x40, // Init
-                           ...rasterCmds,
-                           0x1D, 0x56, 0x42, 0x00 // Cut
-                       ];
-                       await this.print(new Uint8Array(cmds), 'SUNMI');
-                  }
-              }
-          }, 500);
+          // Cut
+          if (printer.lineWrap) printer.lineWrap(4);
+          if (printer.cutPaper) printer.cutPaper();
 
       } catch (e) {
-          console.error("Sunmi Print Error:", e);
-          alert("印刷エラーが発生しました");
+          console.error("AIDL Print Error", e);
+          throw e;
       }
   }
 }
