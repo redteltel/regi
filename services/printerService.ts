@@ -515,93 +515,124 @@ export class PrinterService {
       };
 
       try {
+          console.log("Starting AIDL Print Sequence...");
+          
           // Init
-          if (printer.printerInit) printer.printerInit();
+          if (typeof printer.printerInit === 'function') {
+              printer.printerInit();
+          } else {
+              console.warn("printerInit not found");
+          }
 
           // 1. Logo
           if (logoUrl) {
               const base64Logo = await getBase64FromUrl(logoUrl);
               if (base64Logo) {
-                  if (printer.printBitmap) {
+                  if (typeof printer.printBitmap === 'function') {
                       printer.printBitmap(base64Logo, 384, 0); 
-                  } else if (printer.printBitmapWithBase64) {
+                  } else if (typeof printer.printBitmapWithBase64 === 'function') {
                       printer.printBitmapWithBase64(base64Logo, 384, 0);
+                  } else {
+                      console.warn("printBitmap method not found");
                   }
-                  if (printer.lineWrap) printer.lineWrap(1);
+                  if (typeof printer.lineWrap === 'function') printer.lineWrap(1);
               }
           }
 
+          // Helper for text printing
+          const printLine = (text: string) => {
+              if (typeof printer.printText === 'function') {
+                  printer.printText(text);
+              } else if (typeof printer.printString === 'function') {
+                  printer.printString(text); // Some versions use printString
+              }
+          };
+
+          const setAlign = (align: number) => {
+              if (typeof printer.setAlignment === 'function') printer.setAlignment(align);
+          };
+
+          const setSize = (size: number) => {
+              if (typeof printer.setFontSize === 'function') printer.setFontSize(size);
+          };
+
+          const setBold = (isBold: boolean) => {
+              if (typeof printer.setBold === 'function') printer.setBold(isBold);
+          };
+
           // 2. Title
-          if (printer.setAlignment) printer.setAlignment(1); // Center
-          if (printer.setFontSize) printer.setFontSize(32); // Large
-          if (printer.setBold) printer.setBold(true);
+          setAlign(1); // Center
+          setSize(32); // Large
+          setBold(true);
           
           let title = "領収書";
           if (mode === 'FORMAL') title = "領 収 証";
           else if (mode === 'INVOICE') title = "請 求 書";
           else if (mode === 'ESTIMATION') title = "御 見 積 書";
           
-          if (printer.printText) printer.printText(title + "\n");
+          printLine(title + "\n");
           
-          if (printer.setFontSize) printer.setFontSize(24); // Normal
-          if (printer.setBold) printer.setBold(false);
-          if (printer.printText) printer.printText("\n");
+          setSize(24); // Normal
+          setBold(false);
+          printLine("\n");
 
           // Date & No
-          if (printer.setAlignment) printer.setAlignment(2); // Right
-          if (printer.setFontSize) printer.setFontSize(18); // Small
+          setAlign(2); // Right
+          setSize(18); // Small
           const dateStr = new Date().toLocaleString();
-          if (printer.printText) printer.printText(dateStr + "\n");
-          if (printer.printText) printer.printText("--------------------------------\n");
+          printLine(dateStr + "\n");
+          printLine("--------------------------------\n");
 
           // 3. Items
-          if (printer.setAlignment) printer.setAlignment(0); // Left
-          if (printer.setFontSize) printer.setFontSize(24); // Normal
+          setAlign(0); // Left
+          setSize(24); // Normal
           
           items.forEach(item => {
-              if (printer.printText) printer.printText(item.name + "\n");
-              if (printer.setAlignment) printer.setAlignment(2); // Right
+              printLine(item.name + "\n");
+              setAlign(2); // Right
               const line = `${item.quantity} x ${item.price.toLocaleString()}  ${(item.quantity * item.price).toLocaleString()}`;
-              if (printer.printText) printer.printText(line + "\n");
-              if (printer.setAlignment) printer.setAlignment(0); // Left
+              printLine(line + "\n");
+              setAlign(0); // Left
           });
 
-          if (printer.printText) printer.printText("--------------------------------\n");
+          printLine("--------------------------------\n");
 
           // 4. Totals
-          if (printer.setAlignment) printer.setAlignment(2); // Right
-          if (printer.setFontSize) printer.setFontSize(24);
-          if (printer.printText) printer.printText(`小計: ¥${subTotal.toLocaleString()}\n`);
-          if (printer.printText) printer.printText(`消費税: ¥${(finalTax || tax).toLocaleString()}\n`);
+          setAlign(2); // Right
+          setSize(24);
+          printLine(`小計: ¥${subTotal.toLocaleString()}\n`);
+          printLine(`消費税: ¥${(finalTax || tax).toLocaleString()}\n`);
           
           if (discount > 0) {
-              if (printer.printText) printer.printText(`値引: -¥${discount.toLocaleString()}\n`);
+              printLine(`値引: -¥${discount.toLocaleString()}\n`);
           }
 
-          if (printer.setFontSize) printer.setFontSize(36); // Large Total
-          if (printer.setBold) printer.setBold(true);
-          if (printer.printText) printer.printText(`合計: ¥${total.toLocaleString()}\n`);
+          setSize(36); // Large Total
+          setBold(true);
+          printLine(`合計: ¥${total.toLocaleString()}\n`);
           
-          if (printer.setFontSize) printer.setFontSize(20);
-          if (printer.setBold) printer.setBold(false);
-          if (printer.printText) printer.printText(`(内消費税等: ¥${(finalTax || tax).toLocaleString()})\n`);
+          setSize(20);
+          setBold(false);
+          printLine(`(内消費税等: ¥${(finalTax || tax).toLocaleString()})\n`);
           
-          if (printer.printText) printer.printText("\n");
+          printLine("\n");
 
           // 5. Store Info
-          if (printer.setAlignment) printer.setAlignment(1); // Center
-          if (printer.setFontSize) printer.setFontSize(24);
-          if (printer.printText) printer.printText(settings.storeName + "\n");
-          if (printer.setFontSize) printer.setFontSize(18);
-          if (printer.printText) printer.printText(settings.tel + "\n");
-          if (printer.printText) printer.printText(settings.registrationNum + "\n");
+          setAlign(1); // Center
+          setSize(24);
+          printLine(settings.storeName + "\n");
+          setSize(18);
+          printLine(settings.tel + "\n");
+          printLine(settings.registrationNum + "\n");
 
           // 6. Footer
-          if (printer.printText) printer.printText("\n毎度ありがとうございます\n\n");
+          printLine("\n毎度ありがとうございます\n\n");
           
           // Cut
-          if (printer.lineWrap) printer.lineWrap(4);
-          if (printer.cutPaper) printer.cutPaper();
+          if (typeof printer.lineWrap === 'function') printer.lineWrap(4);
+          if (typeof printer.cutPaper === 'function') printer.cutPaper();
+
+          console.log("AIDL Print Sequence Completed");
 
       } catch (e) {
           console.error("AIDL Print Error", e);
