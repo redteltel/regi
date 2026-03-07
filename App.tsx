@@ -69,6 +69,7 @@ const App: React.FC = () => {
   }, []);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState<string>('');
   
   // Settings State
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(CURRENT_DEFAULT_SETTINGS);
@@ -442,12 +443,27 @@ const App: React.FC = () => {
     const input = document.getElementById('receipt-preview');
     if (!input) return;
 
+    // Detect SUNMI
+    // @ts-ignore
+    const isSunmi = /(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin);
+
     try {
       setIsProcessing(true);
+      if (isSunmi) {
+          setProcessingMessage('PDFを生成中...\n(10秒〜30秒かかる場合があります)');
+      } else {
+          setProcessingMessage('');
+      }
+
+      // Wait a bit for UI to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const canvas = await html2canvas(input, { 
-          scale: 3, 
+          scale: isSunmi ? 2 : 3, // Lower scale for SUNMI to prevent memory issues/timeout
           useCORS: true,
-          backgroundColor: '#ffffff', 
+          backgroundColor: '#ffffff',
+          // @ts-ignore
+          timeout: 60000, // Extend timeout to 60s
           onclone: (document) => {
               const element = document.getElementById('receipt-preview');
               if (element) {
@@ -521,6 +537,7 @@ const App: React.FC = () => {
       alert('PDF生成または共有に失敗しました。');
     } finally {
       setIsProcessing(false);
+      setProcessingMessage('');
     }
   };
 
@@ -1148,6 +1165,21 @@ const App: React.FC = () => {
       {isDemoMode && (
         <div className="fixed top-0 right-0 z-[100] bg-red-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-lg pointer-events-none">
           DEMO MODE
+        </div>
+      )}
+
+      {/* Processing Overlay */}
+      {isProcessing && (
+        <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-xl shadow-2xl mx-4">
+                <Loader2 className="animate-spin text-blue-600" size={48} />
+                <div className="text-center">
+                    <div className="font-bold text-lg text-gray-800">Processing...</div>
+                    {processingMessage && (
+                        <div className="text-sm text-gray-600 mt-2 whitespace-pre-wrap font-medium">{processingMessage}</div>
+                    )}
+                </div>
+            </div>
         </div>
       )}
 
