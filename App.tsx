@@ -381,44 +381,10 @@ const App: React.FC = () => {
     // @ts-ignore
     const isSunmi = /(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin);
     
-    // SUNMI Logic: Try AIDL Direct Print first, then Fallback to PDF Share
+    // SUNMI Logic: Redirect Print Button to PDF Share (Unified Route)
     if (isSunmi) {
-        setIsProcessing(true);
-        setProcessingMessage('印刷データを送信中...');
-        
-        try {
-            // Force PrinterType to SUNMI
-            const effectiveSettings = { ...storeSettings, printerType: 'SUNMI' as PrinterType };
-            
-            // Attempt Direct Print (AIDL)
-            await printerService.printReceipt(
-                cart,
-                subTotal,
-                initialTax,
-                totalAmount,
-                receiptMode,
-                recipientName,
-                proviso,
-                paymentDeadline,
-                discountVal, 
-                LOGO_URL,
-                effectiveSettings,
-                finalTax,
-                storeMemo
-            );
-            
-            // Success
-            setIsProcessing(false);
-            setProcessingMessage('');
-            return;
-
-        } catch (e) {
-            console.warn("AIDL Print failed, falling back to PDF Share:", e);
-            // Fallback to PDF Share
-            setProcessingMessage('印刷データを準備中...\n(30秒ほどかかります)');
-            await handleSharePDF();
-            return;
-        }
+        await handleSharePDF();
+        return;
     }
 
     // Create a temporary settings object if it's SUNMI to force the correct printer type
@@ -484,7 +450,7 @@ const App: React.FC = () => {
     try {
       setIsProcessing(true);
       if (isSunmi) {
-          setProcessingMessage('印刷データを準備中...\n(30秒ほどかかります)');
+          setProcessingMessage('印刷プレビューを準備中...\n(しばらくお待ちください)');
       } else {
           setProcessingMessage('');
       }
@@ -497,7 +463,7 @@ const App: React.FC = () => {
           useCORS: true,
           backgroundColor: '#ffffff',
           // @ts-ignore
-          timeout: 90000, // Extend timeout to 90s for safety
+          timeout: 60000, // Extend timeout to 60s for safety
           onclone: (document) => {
               const element = document.getElementById('receipt-preview');
               if (element) {
