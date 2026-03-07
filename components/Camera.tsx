@@ -30,18 +30,23 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   const [candidates, setCandidates] = useState<Product[]>([]);
   const [scannedCode, setScannedCode] = useState<string>("");
 
-  useEffect(() => {
-    let mounted = true;
+  const isMounted = useRef(true);
+  const streamRef = useRef<MediaStream | null>(null);
 
+  useEffect(() => {
+    isMounted.current = true;
+    
     const init = async () => {
-        // Preload database on mount to avoid network lag during scan
+        // Preload database on mount
         preloadDatabase().catch(e => console.warn("Background DB fetch failed:", e));
+        
+        // Attempt to start camera automatically
         await startCamera();
     };
     init();
 
     return () => {
-        mounted = false;
+        isMounted.current = false;
         stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,6 +66,8 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
   }, [cooldown]);
 
   const startCamera = async () => {
+    if (!isMounted.current) return;
+
     if (window.location.protocol !== 'https:' && 
         window.location.hostname !== 'localhost' && 
         window.location.hostname !== '127.0.0.1') {
@@ -74,18 +81,41 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
     }
 
     try {
+      // Stop any existing stream first
       stopCamera();
 
       // Request high resolution for better OCR
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      const constraints = {
         video: { 
           facingMode: 'environment',
           width: { ideal: 1920 }, 
           height: { ideal: 1080 } 
         },
         audio: false,
-      });
+      };
       
+      let mediaStream: MediaStream;
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err: any) {
+        console.warn("High-res constraints failed, retrying with defaults...", err);
+        // Fallback: Try basic constraints
+        if (err.name !== 'NotAllowedError' && err.name !== 'PermissionDeniedError') {
+             mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                 video: { facingMode: 'environment' }, 
+                 audio: false 
+             });
+        } else {
+            throw err;
+        }
+      }
+      
+      if (!isMounted.current) {
+          // If unmounted during promise, stop the stream immediately
+          mediaStream.getTracks().forEach(track => track.stop());
+          return;
+      }
+
       // Auto-Focus Constraint (if supported)
       const track = mediaStream.getVideoTracks()[0];
       const capabilities = track.getCapabilities() as any; 
@@ -99,7 +129,9 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
         }
       }
       
+      streamRef.current = mediaStream;
       setStream(mediaStream);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.play().catch(e => console.warn("Video play error:", e));
@@ -107,15 +139,27 @@ const Camera: React.FC<CameraProps> = ({ onProductFound, isProcessing, setIsProc
       setError(null);
     } catch (err: any) {
       console.error("Camera access error:", err);
-      setError("カメラを起動できませんでした。\n設定を確認してください。");
+      
+      if (!isMounted.current) return;
+
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          setError("カメラのアクセスが拒否されました。\nブラウザのアドレスバーから権限を許可してください。");
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          setError("カメラが見つかりません。\nデバイス接続を確認してください。");
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          setError("カメラにアクセスできません。\n他のアプリが使用中の可能性があります。");
+      } else {
+          setError(`カメラエラー: ${err.message || "不明なエラー"}`);
+      }
     }
   };
 
   const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    setStream(null);
   };
 
   const handleRetry = () => {
