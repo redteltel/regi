@@ -1,7 +1,6 @@
 import { CartItem, StoreSettings, PrinterType } from '../types';
 import Encoding from 'encoding-japanese';
 import html2canvas from 'html2canvas';
-import { jsPDF } from "jspdf";
 
 // ESC/POS Commands
 const ESC = 0x1B;
