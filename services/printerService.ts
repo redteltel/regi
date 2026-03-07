@@ -496,9 +496,12 @@ export class PrinterService {
       const hasPlugin = !!(window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap);
       const hasInner = !!(window.SunmiInnerPrinter || window.sunmiInnerPrinter);
 
-      if (!hasPlugin && !hasInner) {
-          alert("エラー: SUNMIプリンターが見つかりません。\n(SunmiPrinterPlugin または SunmiInnerPrinter が未検出)");
-          return;
+      // Fallback to RawBT Image Mode if no plugin found
+      const useRawBTFallback = !hasPlugin && !hasInner;
+
+      if (useRawBTFallback) {
+          console.warn("SUNMI Printer Plugin not found. Falling back to RawBT Image Mode.");
+          // alert("SUNMIプラグイン未検出: RawBT(画像モード)で印刷を試みます...");
       }
 
       // Generate Image from DOM
@@ -720,35 +723,55 @@ export class PrinterService {
           }
           
           // Return Base64 (remove prefix)
-          return finalCanvas.toDataURL('image/png').replace(/^data:image\/\w+;base64,/, "");
+          return finalCanvas.toDataURL('image/png'); // Keep header for convertImageToEscPos if needed, or strip for plugin
       };
 
       try {
           // 1. Print Original
-          const base64Original = await generateImage(false);
+          const base64OriginalDataUri = await generateImage(false);
+          const base64Original = base64OriginalDataUri.replace(/^data:image\/\w+;base64,/, "");
           
-          if (window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap) {
+          if (hasPlugin && window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap) {
               window.SunmiPrinterPlugin.printBitmap(base64Original, 384, 0);
-          } else if (window.SunmiInnerPrinter && window.SunmiInnerPrinter.printBitmapWithBase64) {
+          } else if (hasInner && window.SunmiInnerPrinter && window.SunmiInnerPrinter.printBitmapWithBase64) {
                // Fallback to InnerPrinter if Plugin method missing
                window.SunmiInnerPrinter.printBitmapWithBase64(base64Original, 384, 0);
                window.SunmiInnerPrinter.lineWrap(3);
                window.SunmiInnerPrinter.cutPaper();
           } else {
-               console.warn("Sunmi Printer not found.");
-               alert("プリンターが見つかりません");
+               // Fallback: RawBT Image Mode (Convert Image to ESC/POS Raster)
+               console.log("Using RawBT Image Fallback...");
+               const rasterCmds = await this.convertImageToEscPos(base64OriginalDataUri);
+               const cmds = [
+                   0x1B, 0x40, // Init
+                   ...rasterCmds,
+                   0x1D, 0x56, 0x42, 0x00 // Cut
+               ];
+               // Send via RawBT (using 'SUNMI' type triggers rawbt intent logic in print())
+               await this.print(new Uint8Array(cmds), 'SUNMI');
           }
 
           // 2. Print Copy (if confirmed)
           setTimeout(async () => {
               if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
-                  const base64Copy = await generateImage(true);
-                  if (window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap) {
+                  const base64CopyDataUri = await generateImage(true);
+                  const base64Copy = base64CopyDataUri.replace(/^data:image\/\w+;base64,/, "");
+
+                  if (hasPlugin && window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap) {
                       window.SunmiPrinterPlugin.printBitmap(base64Copy, 384, 0);
-                  } else if (window.SunmiInnerPrinter && window.SunmiInnerPrinter.printBitmapWithBase64) {
+                  } else if (hasInner && window.SunmiInnerPrinter && window.SunmiInnerPrinter.printBitmapWithBase64) {
                       window.SunmiInnerPrinter.printBitmapWithBase64(base64Copy, 384, 0);
                       window.SunmiInnerPrinter.lineWrap(3);
                       window.SunmiInnerPrinter.cutPaper();
+                  } else {
+                       // Fallback: RawBT Image Mode
+                       const rasterCmds = await this.convertImageToEscPos(base64CopyDataUri);
+                       const cmds = [
+                           0x1B, 0x40, // Init
+                           ...rasterCmds,
+                           0x1D, 0x56, 0x42, 0x00 // Cut
+                       ];
+                       await this.print(new Uint8Array(cmds), 'SUNMI');
                   }
               }
           }, 500);
