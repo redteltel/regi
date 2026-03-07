@@ -380,6 +380,12 @@ const App: React.FC = () => {
     // @ts-ignore
     const isSunmi = /(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin);
     
+    // SUNMI Logic: Redirect Print Button to PDF Share
+    if (isSunmi) {
+        await handleSharePDF();
+        return;
+    }
+
     // Create a temporary settings object if it's SUNMI to force the correct printer type
     const effectiveSettings = isSunmi ? { ...storeSettings, printerType: 'SUNMI' as PrinterType } : storeSettings;
     
