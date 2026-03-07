@@ -489,8 +489,17 @@ export class PrinterService {
       finalTax?: number,
       storeMemo?: string
   ) {
-      const printer = window.SunmiInnerPrinter || window.sunmiInnerPrinter;
-      if (!printer) return;
+      // User Request: Notify start of printing
+      alert("印刷を開始します...");
+
+      // Check for printer availability (Plugin or InnerPrinter)
+      const hasPlugin = !!(window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap);
+      const hasInner = !!(window.SunmiInnerPrinter || window.sunmiInnerPrinter);
+
+      if (!hasPlugin && !hasInner) {
+          alert("エラー: SUNMIプリンターが見つかりません。\n(SunmiPrinterPlugin または SunmiInnerPrinter が未検出)");
+          return;
+      }
 
       // Generate Image from DOM
       const generateImage = async (isCopy: boolean): Promise<string> => {
