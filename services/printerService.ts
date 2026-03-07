@@ -492,6 +492,17 @@ export class PrinterService {
           return new Promise<void>((resolve) => {
               try {
                   printer.printerInit();
+                  
+                  // Force Bold via ESC/POS if available (ESC E 1)
+                  if (printer.sendRAWData) {
+                      try {
+                          // 0x1B 0x45 0x01 -> Base64: GwEB
+                          printer.sendRAWData("GwEB");
+                      } catch (e) {
+                          console.warn("Failed to send bold command", e);
+                      }
+                  }
+
                   printer.setAlignment(1); // Center
 
                   // Title

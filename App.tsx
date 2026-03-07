@@ -376,8 +376,12 @@ const App: React.FC = () => {
 
     if (cart.length === 0) return;
     
-    // For RawBT, we don't need explicit connection checks as it uses Intents.
-    // For Sunmi, it checks internal interface.
+    // Detect SUNMI
+    // @ts-ignore
+    const isSunmi = /SUNMI/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter);
+    
+    // Create a temporary settings object if it's SUNMI to force the correct printer type
+    const effectiveSettings = isSunmi ? { ...storeSettings, printerType: 'SUNMI' as PrinterType } : storeSettings;
     
     setIsProcessing(true);
     if (navigator.vibrate) navigator.vibrate(50);
@@ -394,7 +398,7 @@ const App: React.FC = () => {
         paymentDeadline,
         discountVal, 
         LOGO_URL,
-        storeSettings, // Pass Settings
+        effectiveSettings, // Pass Effective Settings
         finalTax, // Pass Final Tax
         storeMemo // Pass Store Memo
       );
@@ -1095,14 +1099,9 @@ const App: React.FC = () => {
                       </>
                   ) : (
                       /* Android / PC Buttons */
-                      <>
-                          <button 
-                            onClick={handleSharePDF}
-                            className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-700 text-white"
-                          >
-                            <Share size={20} />
-                            PDF/共有
-                          </button>
+                      // @ts-ignore
+                      (/SUNMI/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter)) ? (
+                          /* SUNMI Device: Only Print Button */
                           <button 
                             onClick={handlePrint}
                             className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
@@ -1110,7 +1109,25 @@ const App: React.FC = () => {
                             <Printer size={20} />
                             印刷
                           </button>
-                      </>
+                      ) : (
+                          /* Standard Android / PC Buttons */
+                          <>
+                              <button 
+                                onClick={handleSharePDF}
+                                className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-700 text-white"
+                              >
+                                <Share size={20} />
+                                PDF/共有
+                              </button>
+                              <button 
+                                onClick={handlePrint}
+                                className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
+                              >
+                                <Printer size={20} />
+                                印刷
+                              </button>
+                          </>
+                      )
                   )}
               </div>
             </div>

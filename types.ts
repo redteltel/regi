@@ -67,6 +67,7 @@ export interface SunmiInnerPrinter {
     enterPrinterBuffer(clean: boolean): void;
     exitPrinterBuffer(commit: boolean): void;
     setAlignment(align: number, callback?: any): void; // 0:Left, 1:Center, 2:Right
+    sendRAWData(base64: string, callback?: any): void;
 }
 
 // Web Bluetooth & Serial API Type Declarations
