@@ -63,6 +63,7 @@ export interface SunmiInnerPrinter {
     setFontSize(size: number, callback?: any): void;
     printColumnsString(colsTextArr: string[], colsWidthArr: number[], colsAlign: number[], callback?: any): void;
     printBitmap(base64: string, width: number, height: number, callback?: any): void;
+    printBitmapWithBase64(base64: string, width: number, height: number, callback?: any): void; // Added printBitmapWithBase64
     getPrinterStatus(callback?: any): void;
     commitPrinterBuffer(): void;
     enterPrinterBuffer(clean: boolean): void;

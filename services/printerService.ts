@@ -1,5 +1,6 @@
 import { CartItem, StoreSettings, PrinterType } from '../types';
 import Encoding from 'encoding-japanese';
+import html2canvas from 'html2canvas';
 
 // ESC/POS Commands
 const ESC = 0x1B;
@@ -488,202 +489,234 @@ export class PrinterService {
       const printer = window.SunmiInnerPrinter || window.sunmiInnerPrinter;
       if (!printer) return;
 
-      const printOne = (isCopy: boolean) => {
-          return new Promise<void>((resolve) => {
-              try {
-                  printer.printerInit();
-                  
-                  // Force Bold via ESC/POS if available (ESC E 1)
-                  if (printer.sendRAWData) {
-                      try {
-                          // 0x1B 0x45 0x01 -> Base64: GwEB
-                          printer.sendRAWData("GwEB");
-                      } catch (e) {
-                          console.warn("Failed to send bold command", e);
-                      }
-                  }
+      // Generate Image from DOM
+      const generateImage = async (isCopy: boolean): Promise<string> => {
+          // Temporarily render the receipt content to a hidden div
+          const tempDiv = document.createElement('div');
+          tempDiv.style.position = 'absolute';
+          tempDiv.style.top = '-9999px';
+          tempDiv.style.left = '0';
+          tempDiv.style.width = '384px'; // 48mm width
+          tempDiv.style.backgroundColor = 'white';
+          tempDiv.style.color = 'black';
+          tempDiv.style.fontFamily = 'monospace'; // Match Receipt component
+          tempDiv.style.fontWeight = 'bold';
+          // Ensure high contrast
+          tempDiv.style.filter = 'contrast(150%)'; 
 
-                  printer.setAlignment(1); // Center
+          let title = "領収書";
+          if (mode === 'FORMAL') title = "領 収 証";
+          else if (mode === 'INVOICE') title = "請 求 書";
+          else if (mode === 'ESTIMATION') title = "御 見 積 書";
+          
+          let html = `
+            <div style="padding: 10px; font-size: 14px; line-height: 1.4;">
+              <div style="text-align: center; margin-bottom: 10px;">
+          `;
 
-                  // Title
-                  printer.setFontSize(48); // Extra Large
-                  let title = "領収書";
-                  if (mode === 'FORMAL') title = "領 収 証";
-                  else if (mode === 'INVOICE') title = "請 求 書";
-                  else if (mode === 'ESTIMATION') title = "御 見 積 書";
-                  
-                  // Use printText for UTF-8 support
-                  printer.printText(title + (isCopy ? " (控え)\n" : "\n"));
-                  printer.setFontSize(24); // Normal
-                  printer.printText("\n");
+          if (logoUrl && !isCopy) {
+              html += `<img src="${logoUrl}" style="max-width: 150px; max-height: 80px; margin-bottom: 5px;" />`;
+          }
 
-                  // Date
-                  printer.setAlignment(2); // Right
-                  printer.printText(`${new Date().toLocaleString()}\n`);
-                  printer.printText("\n");
+          html += `
+                <div style="font-size: 24px; font-weight: bold;">${title}${isCopy ? ' (控え)' : ''}</div>
+          `;
+          
+          if (mode === 'INVOICE') html += `<div style="font-size: 12px;">(INVOICE)</div>`;
+          if (mode === 'ESTIMATION') html += `<div style="font-size: 12px;">(ESTIMATION)</div>`;
 
-                  // Details
-                  if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-                      printer.setAlignment(0); // Left
-                      printer.printText(`${recipientName || "          "} 様\n`);
-                      printer.printText("\n");
-                      
-                      if (mode === 'INVOICE') {
-                          printer.setAlignment(2);
-                          printer.printText("下記の通りご請求申し上げます。\n");
-                      } else if (mode === 'ESTIMATION') {
-                          printer.setAlignment(2);
-                          printer.printText("下記の通り御見積申し上げます。\n");
-                      }
+          html += `
+              </div>
+              <div style="text-align: right; font-size: 10px; color: #555;">
+                No. ${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${new Date().getHours()}${new Date().getMinutes()}
+              </div>
+              <div style="text-align: right; margin-bottom: 10px; font-size: 10px; color: #555;">${new Date().toLocaleString()}</div>
+          `;
 
-                      printer.setAlignment(1); // Center
-                      printer.setFontSize(48); // Large
-                      printer.printText(`${total.toLocaleString()}円\n`);
-                      printer.setFontSize(24); // Normal
-                      printer.printText("\n");
-                      
-                      if (mode === 'FORMAL') {
-                          printer.setAlignment(0);
-                          printer.printText(`但  ${proviso || "お品代"}として\n`);
-                          printer.printText("上記正に領収いたしました\n");
-                          printer.printText("\n");
-                      }
-                      
-                      if (mode === 'INVOICE' && paymentDeadline) {
-                          printer.setAlignment(2);
-                          printer.printText(`お支払期限: ${paymentDeadline}\n`);
-                          printer.printText("\n");
-                      }
-                      
-                      if (mode === 'ESTIMATION') {
-                          printer.setAlignment(2);
-                          const d = new Date();
-                          d.setMonth(d.getMonth() + 1);
-                          printer.printText(`有効期限: ${d.toLocaleDateString()}\n`);
-                          printer.printText("\n");
-                      }
-                  }
+          if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+              html += `<div style="text-align: left; margin-bottom: 10px; font-size: 16px; border-bottom: 1px solid black;">${recipientName || "          "} <span style="font-size: 12px;">様</span></div>`;
+              
+              if (mode === 'INVOICE') html += `<div style="text-align: right; font-size: 12px;">下記の通りご請求申し上げます。</div>`;
+              else if (mode === 'ESTIMATION') html += `<div style="text-align: right; font-size: 12px;">下記の通り御見積申し上げます。</div>`;
 
-                  printer.setAlignment(1);
-                  printer.printText("--------------------------------\n");
-                  
-                  // Items
-                  printer.setAlignment(0); // Left
-                  for (const item of items) {
-                      printer.printText(`${item.name}\n`);
-                      if (item.partNumber) {
-                          printer.printText(`  (品番: ${item.partNumber})\n`);
-                      }
-
-                      const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
-                      const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
-                      
-                      // Strict width calculation for 48mm (384px)
-                      // Assuming standard font width approx 12px per char -> 32 chars
-                      // But SUNMI standard font might be different. 
-                      // Let's use a safer 30-32 char limit.
-                      let lineLen = 0;
-                      for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
-                      let totalLen = 0;
-                      for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
-
-                      const spaces = 32 - (lineLen + totalLen); 
-                      const padding = spaces > 0 ? " ".repeat(spaces) : " ";
-                      printer.printText(`${line}${padding}${totalStr}\n`);
-                  }
-                  
-                  printer.setAlignment(1);
-                  printer.printText("--------------------------------\n");
-                  
-                  // Total Breakdown
-                  printer.setAlignment(2); // Right
-                  printer.printText(`小計: ${subTotal.toLocaleString()}円\n`);
-                  
-                  const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
-                  printer.printText(`消費税(10%): ${taxToDisplay.toLocaleString()}円\n`);
-
-                  if (discount > 0) {
-                      const initialTotal = subTotal + tax;
-                      printer.printText(`合計(値引前): ${initialTotal.toLocaleString()}円\n`);
-                      printer.printText(`値引(税込): - ${discount.toLocaleString()}円\n`);
-                  }
-                  
-                  if (mode === 'RECEIPT') {
-                      printer.printText("\n");
-                      printer.setFontSize(48);
-                      printer.printText(`合計: ${total.toLocaleString()}円\n`);
-                      printer.setFontSize(24);
-                  }
-
-                  if (discount > 0 && finalTax !== undefined) {
-                      printer.printText(`(内消費税等: ${finalTax.toLocaleString()}円)\n`);
-                  }
-                  printer.printText("\n");
-
-                  // Footer
-                  printer.setAlignment(1); // Center
-                  printer.setFontSize(30); // Slightly larger for store name
-                  printer.printText(`${settings.storeName}\n`);
-                  printer.setFontSize(24);
-                  printer.printText(`〒${settings.zipCode}\n${settings.address1}\n`);
-                  if (settings.address2) {
-                      printer.printText(`${settings.address2}\n`);
-                  }
-                  printer.printText(`電話: ${settings.tel}\n`);
-                  printer.printText(`登録番号: ${settings.registrationNum}\n`);
-                  
-                  if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
-                      printer.setAlignment(2);
-                      printer.printText("(印)\n");
-                      printer.setAlignment(1);
-                  }
-
-                  if (mode === 'FORMAL' && total >= 50000) {
-                      printer.printText("\n");
-                      printer.setAlignment(2);
-                      printer.printText("----------\n");
-                      printer.printText("| 収入印紙 |\n");
-                      printer.printText("----------\n");
-                      printer.setAlignment(1);
-                  }
-
-                  if (settings.bankName && mode === 'INVOICE') {
-                      printer.setAlignment(0);
-                      printer.printText("--------------------------------\n");
-                      printer.printText("【お振込先】\n");
-                      printer.printText(`${settings.bankName} ${settings.branchName}\n`);
-                      printer.printText(`${settings.accountType} ${settings.accountNumber}\n`);
-                      printer.printText(`${settings.accountHolder}\n`);
-                      printer.printText("--------------------------------\n");
-                      printer.setAlignment(1);
-                  }
-
-                  if (mode === 'INVOICE') {
-                      printer.printText("ご請求書を送付いたします。");
-                  } else if (mode === 'ESTIMATION') {
-                      // No specific footer
-                  } else {
-                      printer.printText("毎度ありがとうございます!");
-                  }
-
-                  if (isCopy && storeMemo) {
-                      printer.printText("\n\n");
-                      printer.setAlignment(0);
-                      printer.printText("--------------------------------\n");
-                      printer.printText("【店舗メモ】\n");
-                      printer.printText(`${storeMemo}`);
-                      printer.printText("--------------------------------");
-                      printer.setAlignment(1);
-                  }
-
-                  printer.printText("\n\n\n"); // Feed
-                  printer.cutPaper();
-                  resolve();
-              } catch (e) {
-                  console.error("SUNMI Print Error:", e);
-                  resolve(); // Resolve anyway to continue flow
+              html += `
+                <div style="background-color: #f3f4f6; padding: 5px; text-align: center; margin: 10px 0;">
+                    <div style="font-size: 12px;">${mode === 'INVOICE' ? 'ご請求金額' : mode === 'ESTIMATION' ? '御見積金額' : '金額'}</div>
+                    <div style="font-size: 28px; font-weight: bold; border-bottom: 2px solid black;">¥ ${total.toLocaleString()} -</div>
+                </div>
+              `;
+              
+              if (mode === 'FORMAL') {
+                  html += `
+                    <div style="margin-bottom: 5px;">但  ${proviso || "お品代"}として</div>
+                    <div style="margin-bottom: 10px; text-align: right; font-size: 12px;">上記正に領収いたしました</div>
+                  `;
               }
+              
+              if (mode === 'INVOICE' && paymentDeadline) {
+                  html += `<div style="text-align: right; color: #b91c1c; font-weight: bold;">お支払期限: ${paymentDeadline}</div>`;
+              }
+              
+              if (mode === 'ESTIMATION') {
+                   const d = new Date();
+                   d.setMonth(d.getMonth() + 1);
+                   html += `<div style="text-align: right; color: #374151; font-weight: bold;">有効期限: ${d.toLocaleDateString()}</div>`;
+              }
+          }
+
+          html += `<hr style="border-top: 1px dashed black; margin: 10px 0;">`;
+          if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+              html += `<div style="font-size: 12px; color: #555; margin-bottom: 5px;">内訳</div>`;
+          }
+          
+          items.forEach(item => {
+              html += `<div style="font-weight: bold; font-size: 16px;">${item.name}</div>`;
+              if (item.partNumber) html += `<div style="font-size: 10px; color: #555; margin-left: 10px;">(品番: ${item.partNumber})</div>`;
+              html += `
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #374151;">
+                  <span>${item.quantity} x ${item.price.toLocaleString()}</span>
+                  <span>${(item.price * item.quantity).toLocaleString()}</span>
+                </div>
+                <div style="border-bottom: 1px dashed #e5e7eb; margin-bottom: 5px;"></div>
+              `;
           });
+
+          html += `
+            <div style="display: flex; justify-content: space-between; margin-top: 10px;"><span>小計 (税抜)</span><span>${subTotal.toLocaleString()}</span></div>
+          `;
+          
+          const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
+          html += `
+            <div style="display: flex; justify-content: space-between;"><span>消費税(10%)</span><span>${taxToDisplay.toLocaleString()}</span></div>
+          `;
+
+          if (discount > 0) {
+              const initialTotal = subTotal + tax;
+              html += `
+                <div style="display: flex; justify-content: space-between; border-top: 1px dashed #ccc; margin-top: 5px;"><span>合計(値引前)</span><span>${initialTotal.toLocaleString()}</span></div>
+                <div style="display: flex; justify-content: space-between; color: #dc2626;"><span>値引(税込)</span><span>- ${discount.toLocaleString()}</span></div>
+              `;
+          }
+          
+          if (mode === 'RECEIPT') {
+              html += `
+                <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; margin-top: 5px; border-top: 1px solid #e5e7eb; padding-top: 5px;">
+                  <span>合計</span><span>${total.toLocaleString()}</span>
+                </div>
+              `;
+          }
+
+          if (discount > 0 && finalTax !== undefined) {
+              html += `<div style="text-align: right; font-size: 10px; color: #555;">(内消費税等: ${finalTax.toLocaleString()})</div>`;
+          }
+          
+          html += `<div style="margin-top: 20px; border-top: 2px solid black; padding-top: 10px;">`;
+          html += `<div style="font-size: 20px; font-weight: bold; margin-bottom: 5px;">${settings.storeName}</div>`;
+          html += `<div style="font-size: 12px;">〒${settings.zipCode}</div>`;
+          html += `<div style="font-size: 12px;">${settings.address1}</div>`;
+          if (settings.address2) html += `<div style="font-size: 12px;">${settings.address2}</div>`;
+          html += `<div style="font-size: 12px;">電話: ${settings.tel}</div>`;
+          html += `<div style="font-size: 12px; font-family: monospace;">登録番号: ${settings.registrationNum}</div>`;
+          html += `</div>`;
+
+          if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+             // Stamp placeholder if needed, but usually physical stamp is used.
+             // Receipt component has a stamp box for revenue stamp.
+          }
+
+          if (mode === 'FORMAL' && total >= 50000) {
+              html += `
+                <div style="margin-top: 10px; text-align: right;">
+                  <div style="display: inline-block; border: 1px solid #9ca3af; padding: 10px; width: 60px; height: 60px; text-align: center; background-color: #f9fafb;">
+                    <div style="font-size: 8px; color: #d1d5db;">印</div>
+                    <div style="font-size: 8px; color: #d1d5db;">収入印紙</div>
+                  </div>
+                </div>
+              `;
+          }
+
+          if (settings.bankName && mode === 'INVOICE') {
+              html += `
+                <div style="margin-top: 15px; padding: 10px; border-top: 1px dashed black; font-size: 12px;">
+                    <div style="font-weight: bold; margin-bottom: 5px;">【お振込先】</div>
+                    <div>${settings.bankName} ${settings.branchName}</div>
+                    <div>${settings.accountType} ${settings.accountNumber}</div>
+                    <div>${settings.accountHolder}</div>
+                </div>
+              `;
+          }
+          
+          html += `<div style="margin-top: 10px; text-align: center; font-size: 10px; color: #9ca3af;">`;
+          if (mode === 'INVOICE') html += `ご請求書を送付いたします。`;
+          else if (mode === 'ESTIMATION') html += `ご検討のほどお願い申し上げます。`;
+          else html += `毎度ありがとうございます!`;
+          html += `</div>`;
+
+          if (isCopy && storeMemo) {
+              html += `
+                <div style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed black;">
+                    <div style="font-size: 12px; font-weight: bold;">【店舗メモ】</div>
+                    <div style="white-space: pre-wrap; font-size: 12px; border: 1px solid #d1d5db; padding: 5px; border-radius: 4px;">${storeMemo}</div>
+                </div>
+              `;
+          }
+
+          html += `</div>`;
+          tempDiv.innerHTML = html;
+          document.body.appendChild(tempDiv);
+
+          // Use html2canvas to generate image
+          const canvas = await html2canvas(tempDiv, {
+              width: 384,
+              scale: 2, // Higher scale for better quality, then resize if needed
+              logging: false,
+              useCORS: true,
+              backgroundColor: '#ffffff'
+          });
+          
+          // Resize to 384px width (SUNMI V2S Print Width)
+          const finalCanvas = document.createElement('canvas');
+          finalCanvas.width = 384;
+          finalCanvas.height = canvas.height / 2;
+          const ctx = finalCanvas.getContext('2d');
+          if (ctx) {
+              ctx.drawImage(canvas, 0, 0, 384, finalCanvas.height);
+          }
+          
+          document.body.removeChild(tempDiv);
+          
+          // Convert to base64 (remove data:image/png;base64, prefix)
+          return finalCanvas.toDataURL('image/png').split(',')[1];
+      };
+
+      const printOne = async (isCopy: boolean) => {
+          try {
+              const base64Image = await generateImage(isCopy);
+              
+              return new Promise<void>((resolve) => {
+                  try {
+                      printer.printerInit();
+                      printer.setAlignment(1); // Center
+                      
+                      // Use printBitmapWithBase64 (or printBitmap depending on plugin version)
+                      // Width 384, Height 0 (auto)
+                      if (printer.printBitmapWithBase64) {
+                          printer.printBitmapWithBase64(base64Image, 384, 0);
+                      } else if (printer.printBitmap) {
+                          printer.printBitmap(base64Image, 384, 0);
+                      }
+                      
+                      printer.printString("\n\n\n"); // Feed
+                      printer.cutPaper();
+                      resolve();
+                  } catch (e) {
+                      console.error("SUNMI Print Error:", e);
+                      resolve();
+                  }
+              });
+          } catch (e) {
+              console.error("Image Generation Error:", e);
+          }
       };
 
       // 1. Print Original
