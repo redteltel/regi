@@ -450,7 +450,7 @@ const App: React.FC = () => {
     try {
       setIsProcessing(true);
       if (isSunmi) {
-          setProcessingMessage('PDF作成中...\n(30秒ほどかかる場合があります)');
+          setProcessingMessage('印刷データを準備中...\n(30秒ほどかかります)');
       } else {
           setProcessingMessage('');
       }
