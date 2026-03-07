@@ -440,6 +440,12 @@ export class PrinterService {
         return;
     }
 
+    // --- SUNMI AIDL LOGIC ---
+    if (settings.printerType === 'SUNMI' && (window.SunmiInnerPrinter || window.sunmiInnerPrinter)) {
+        await this.printSunmi(items, subTotal, tax, total, mode, recipientName, proviso, paymentDeadline, discount, logoUrl, settings, finalTax, storeMemo);
+        return;
+    }
+
     // --- 1. Print Original ---
     addInit();
     generateOneReceipt(false);
@@ -461,6 +467,223 @@ export class PrinterService {
     // Removed Cut/Feed
 
     await this.print(new Uint8Array(cmds), settings.printerType);
+  }
+
+  // --- SUNMI AIDL Implementation ---
+  async printSunmi(
+      items: CartItem[], 
+      subTotal: number, 
+      tax: number, 
+      total: number,
+      mode: 'RECEIPT' | 'FORMAL' | 'INVOICE' | 'ESTIMATION',
+      recipientName: string,
+      proviso: string,
+      paymentDeadline: string,
+      discount: number,
+      logoUrl: string | null,
+      settings: StoreSettings,
+      finalTax?: number,
+      storeMemo?: string
+  ) {
+      const printer = window.SunmiInnerPrinter || window.sunmiInnerPrinter;
+      if (!printer) return;
+
+      const printOne = (isCopy: boolean) => {
+          return new Promise<void>((resolve) => {
+              try {
+                  printer.printerInit();
+                  printer.setAlignment(1); // Center
+
+                  // Title
+                  printer.setFontSize(48); // Extra Large
+                  // Bold is default or we can't explicitly set weight in basic AIDL, but size helps.
+                  // Some versions support setFontWeight but standard interface might not.
+                  // We rely on size for visibility.
+                  let title = "領収書";
+                  if (mode === 'FORMAL') title = "領 収 証";
+                  else if (mode === 'INVOICE') title = "請 求 書";
+                  else if (mode === 'ESTIMATION') title = "御 見 積 書";
+                  printer.printString(title + (isCopy ? " (控え)\n" : "\n"));
+                  printer.setFontSize(24); // Normal
+                  printer.printString("\n");
+
+                  // Date
+                  printer.setAlignment(2); // Right
+                  printer.printString(`${new Date().toLocaleString()}\n`);
+                  printer.printString("\n");
+
+                  // Details
+                  if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+                      printer.setAlignment(0); // Left
+                      printer.printString(`${recipientName || "          "} 様\n`);
+                      printer.printString("\n");
+                      
+                      if (mode === 'INVOICE') {
+                          printer.setAlignment(2);
+                          printer.printString("下記の通りご請求申し上げます。\n");
+                      } else if (mode === 'ESTIMATION') {
+                          printer.setAlignment(2);
+                          printer.printString("下記の通り御見積申し上げます。\n");
+                      }
+
+                      printer.setAlignment(1); // Center
+                      printer.setFontSize(48); // Large
+                      printer.printString(`${total.toLocaleString()}円\n`);
+                      printer.setFontSize(24); // Normal
+                      printer.printString("\n");
+                      
+                      if (mode === 'FORMAL') {
+                          printer.setAlignment(0);
+                          printer.printString(`但  ${proviso || "お品代"}として\n`);
+                          printer.printString("上記正に領収いたしました\n");
+                          printer.printString("\n");
+                      }
+                      
+                      if (mode === 'INVOICE' && paymentDeadline) {
+                          printer.setAlignment(2);
+                          printer.printString(`お支払期限: ${paymentDeadline}\n`);
+                          printer.printString("\n");
+                      }
+                      
+                      if (mode === 'ESTIMATION') {
+                          printer.setAlignment(2);
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + 1);
+                          printer.printString(`有効期限: ${d.toLocaleDateString()}\n`);
+                          printer.printString("\n");
+                      }
+                  }
+
+                  printer.setAlignment(1);
+                  printer.printString("--------------------------------\n");
+                  
+                  // Items
+                  printer.setAlignment(0); // Left
+                  for (const item of items) {
+                      printer.printString(`${item.name}\n`);
+                      if (item.partNumber) {
+                          printer.printString(`  (品番: ${item.partNumber})\n`);
+                      }
+
+                      const line = `${item.quantity} x ${item.price.toLocaleString()}円`;
+                      const totalStr = `${(item.price * item.quantity).toLocaleString()}円`;
+                      
+                      // Simple spacing calculation for 32 chars (approx for 58mm normal font)
+                      // SUNMI font width might vary, but this is a safe approximation
+                      let lineLen = 0;
+                      for(let i=0; i<line.length; i++) lineLen += (line.charCodeAt(i) > 255 ? 2 : 1);
+                      let totalLen = 0;
+                      for(let i=0; i<totalStr.length; i++) totalLen += (totalStr.charCodeAt(i) > 255 ? 2 : 1);
+
+                      const spaces = 32 - (lineLen + totalLen); 
+                      const padding = spaces > 0 ? " ".repeat(spaces) : " ";
+                      printer.printString(`${line}${padding}${totalStr}\n`);
+                  }
+                  
+                  printer.setAlignment(1);
+                  printer.printString("--------------------------------\n");
+                  
+                  // Total Breakdown
+                  printer.setAlignment(2); // Right
+                  printer.printString(`小計: ${subTotal.toLocaleString()}円\n`);
+                  
+                  const taxToDisplay = (discount > 0 && finalTax !== undefined) ? finalTax : tax;
+                  printer.printString(`消費税(10%): ${taxToDisplay.toLocaleString()}円\n`);
+
+                  if (discount > 0) {
+                      const initialTotal = subTotal + tax;
+                      printer.printString(`合計(値引前): ${initialTotal.toLocaleString()}円\n`);
+                      printer.printString(`値引(税込): - ${discount.toLocaleString()}円\n`);
+                  }
+                  
+                  if (mode === 'RECEIPT') {
+                      printer.printString("\n");
+                      printer.setFontSize(48);
+                      printer.printString(`合計: ${total.toLocaleString()}円\n`);
+                      printer.setFontSize(24);
+                  }
+
+                  if (discount > 0 && finalTax !== undefined) {
+                      printer.printString(`(内消費税等: ${finalTax.toLocaleString()}円)\n`);
+                  }
+                  printer.printString("\n");
+
+                  // Footer
+                  printer.setAlignment(1); // Center
+                  printer.setFontSize(30); // Slightly larger for store name
+                  printer.printString(`${settings.storeName}\n`);
+                  printer.setFontSize(24);
+                  printer.printString(`〒${settings.zipCode}\n${settings.address1}\n`);
+                  if (settings.address2) {
+                      printer.printString(`${settings.address2}\n`);
+                  }
+                  printer.printString(`電話: ${settings.tel}\n`);
+                  printer.printString(`登録番号: ${settings.registrationNum}\n`);
+                  
+                  if (mode === 'FORMAL' || mode === 'INVOICE' || mode === 'ESTIMATION') {
+                      printer.setAlignment(2);
+                      printer.printString("(印)\n");
+                      printer.setAlignment(1);
+                  }
+
+                  if (mode === 'FORMAL' && total >= 50000) {
+                      printer.printString("\n");
+                      printer.setAlignment(2);
+                      printer.printString("----------\n");
+                      printer.printString("| 収入印紙 |\n");
+                      printer.printString("----------\n");
+                      printer.setAlignment(1);
+                  }
+
+                  if (settings.bankName && mode === 'INVOICE') {
+                      printer.setAlignment(0);
+                      printer.printString("--------------------------------\n");
+                      printer.printString("【お振込先】\n");
+                      printer.printString(`${settings.bankName} ${settings.branchName}\n`);
+                      printer.printString(`${settings.accountType} ${settings.accountNumber}\n`);
+                      printer.printString(`${settings.accountHolder}\n`);
+                      printer.printString("--------------------------------\n");
+                      printer.setAlignment(1);
+                  }
+
+                  if (mode === 'INVOICE') {
+                      printer.printString("ご請求書を送付いたします。");
+                  } else if (mode === 'ESTIMATION') {
+                      // No specific footer
+                  } else {
+                      printer.printString("毎度ありがとうございます!");
+                  }
+
+                  if (isCopy && storeMemo) {
+                      printer.printString("\n\n");
+                      printer.setAlignment(0);
+                      printer.printString("--------------------------------\n");
+                      printer.printString("【店舗メモ】\n");
+                      printer.printString(`${storeMemo}`);
+                      printer.printString("--------------------------------");
+                      printer.setAlignment(1);
+                  }
+
+                  printer.printString("\n\n\n"); // Feed
+                  printer.cutPaper();
+                  resolve();
+              } catch (e) {
+                  console.error("SUNMI Print Error:", e);
+                  resolve(); // Resolve anyway to continue flow
+              }
+          });
+      };
+
+      // 1. Print Original
+      await printOne(false);
+
+      // Dialog for 2nd receipt
+      if (!window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
+          return;
+      }
+
+      // 2. Print Copy
+      await printOne(true);
   }
 }
 

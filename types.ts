@@ -52,23 +52,28 @@ export interface StoreSettings {
   printerType: PrinterType;
 }
 
+// SUNMI AIDL Interface
+export interface SunmiInnerPrinter {
+    printOriginalText(text: string, callback?: any): void;
+    printString(text: string, callback?: any): void;
+    printerInit(callback?: any): void;
+    lineWrap(n: number, callback?: any): void;
+    cutPaper(callback?: any): void;
+    setFontSize(size: number, callback?: any): void;
+    printColumnsString(colsTextArr: string[], colsWidthArr: number[], colsAlign: number[], callback?: any): void;
+    printBitmap(base64: string, width: number, height: number, callback?: any): void;
+    getPrinterStatus(callback?: any): void;
+    commitPrinterBuffer(): void;
+    enterPrinterBuffer(clean: boolean): void;
+    exitPrinterBuffer(commit: boolean): void;
+    setAlignment(align: number, callback?: any): void; // 0:Left, 1:Center, 2:Right
+}
+
 // Web Bluetooth & Serial API Type Declarations
 declare global {
   interface Window {
-    SunmiInnerPrinter?: {
-      printString: (text: string) => void;
-      printBitmap: (base64: string, width: number, height: number) => void;
-      lineWrap: (n: number) => void;
-      sendRAWData: (base64: string) => void;
-      cutPaper: () => void;
-    };
-    sunmiInnerPrinter?: {
-      printString: (text: string) => void;
-      printBitmap: (base64: string, width: number, height: number) => void;
-      lineWrap: (n: number) => void;
-      sendRAWData: (base64: string) => void;
-      cutPaper: () => void;
-    };
+    SunmiInnerPrinter?: SunmiInnerPrinter;
+    sunmiInnerPrinter?: SunmiInnerPrinter;
   }
 
   interface Navigator {
