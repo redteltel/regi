@@ -1,6 +1,7 @@
 import { CartItem, StoreSettings, PrinterType } from '../types';
 import Encoding from 'encoding-japanese';
 import html2canvas from 'html2canvas';
+import { jsPDF } from "jspdf";
 
 // ESC/POS Commands
 const ESC = 0x1B;
@@ -441,8 +442,8 @@ export class PrinterService {
         return;
     }
 
-    // --- SUNMI AIDL LOGIC ---
-    if (settings.printerType === 'SUNMI' && (window.SunmiInnerPrinter || window.sunmiInnerPrinter)) {
+    // --- SUNMI LOGIC ---
+    if (settings.printerType === 'SUNMI' && (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin)) {
         await this.printSunmi(items, subTotal, tax, total, mode, recipientName, proviso, paymentDeadline, discount, logoUrl, settings, finalTax, storeMemo);
         return;
     }
@@ -677,58 +678,56 @@ export class PrinterService {
           // Resize to 384px width (SUNMI V2S Print Width)
           const finalCanvas = document.createElement('canvas');
           finalCanvas.width = 384;
-          finalCanvas.height = canvas.height / 2;
+          finalCanvas.height = (canvas.height * 384) / canvas.width;
           const ctx = finalCanvas.getContext('2d');
           if (ctx) {
-              ctx.drawImage(canvas, 0, 0, 384, finalCanvas.height);
+              ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
           }
           
           document.body.removeChild(tempDiv);
           
-          // Convert to base64 (remove data:image/png;base64, prefix)
-          return finalCanvas.toDataURL('image/png').split(',')[1];
+          // Generate PDF
+          const imgData = finalCanvas.toDataURL('image/png');
+          const pdfWidth = 48; // mm (Printable width for Sunmi V2)
+          const pdfHeight = (finalCanvas.height * pdfWidth) / finalCanvas.width;
+          
+          const doc = new jsPDF({
+              orientation: 'p',
+              unit: 'mm',
+              format: [pdfWidth, pdfHeight + 10] // Add some bottom margin
+          });
+          
+          doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          const base64Pdf = doc.output('datauristring').split(',')[1];
+          
+          return base64Pdf;
       };
 
-      const printOne = async (isCopy: boolean) => {
-          try {
-              const base64Image = await generateImage(isCopy);
-              
-              return new Promise<void>((resolve) => {
-                  try {
-                      printer.printerInit();
-                      printer.setAlignment(1); // Center
-                      
-                      // Use printBitmapWithBase64 (or printBitmap depending on plugin version)
-                      // Width 384, Height 0 (auto)
-                      if (printer.printBitmapWithBase64) {
-                          printer.printBitmapWithBase64(base64Image, 384, 0);
-                      } else if (printer.printBitmap) {
-                          printer.printBitmap(base64Image, 384, 0);
-                      }
-                      
-                      printer.printString("\n\n\n"); // Feed
-                      printer.cutPaper();
-                      resolve();
-                  } catch (e) {
-                      console.error("SUNMI Print Error:", e);
-                      resolve();
-                  }
-              });
-          } catch (e) {
-              console.error("Image Generation Error:", e);
+      try {
+          // 1. Print Original
+          const base64Original = await generateImage(false);
+          
+          if (window.SunmiPrinterPlugin) {
+              window.SunmiPrinterPlugin.printPDF(base64Original);
+          } else {
+               console.warn("SunmiPrinterPlugin not found.");
+               alert("SunmiPrinterPluginが見つかりません");
           }
-      };
 
-      // 1. Print Original
-      await printOne(false);
+          // 2. Print Copy (if confirmed)
+          setTimeout(async () => {
+              if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
+                  const base64Copy = await generateImage(true);
+                  if (window.SunmiPrinterPlugin) {
+                      window.SunmiPrinterPlugin.printPDF(base64Copy);
+                  }
+              }
+          }, 500);
 
-      // Dialog for 2nd receipt
-      if (!window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
-          return;
+      } catch (e) {
+          console.error("Sunmi Print Error:", e);
+          alert("印刷エラーが発生しました");
       }
-
-      // 2. Print Copy
-      await printOne(true);
   }
 }
 

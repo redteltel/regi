@@ -378,7 +378,7 @@ const App: React.FC = () => {
     
     // Detect SUNMI
     // @ts-ignore
-    const isSunmi = /SUNMI/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter);
+    const isSunmi = /SUNMI/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin);
     
     // Create a temporary settings object if it's SUNMI to force the correct printer type
     const effectiveSettings = isSunmi ? { ...storeSettings, printerType: 'SUNMI' as PrinterType } : storeSettings;

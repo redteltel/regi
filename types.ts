@@ -72,11 +72,17 @@ export interface SunmiInnerPrinter {
     sendRAWData(base64: string, callback?: any): void;
 }
 
+// SUNMI Printer Plugin Interface
+export interface SunmiPrinterPlugin {
+    printPDF(base64: string): void;
+}
+
 // Web Bluetooth & Serial API Type Declarations
 declare global {
   interface Window {
     SunmiInnerPrinter?: SunmiInnerPrinter;
     sunmiInnerPrinter?: SunmiInnerPrinter;
+    SunmiPrinterPlugin?: SunmiPrinterPlugin;
   }
 
   interface Navigator {
