@@ -75,6 +75,7 @@ export interface SunmiInnerPrinter {
 // SUNMI Printer Plugin Interface
 export interface SunmiPrinterPlugin {
     printPDF(base64: string): void;
+    printBitmap(base64: string, width: number, height: number): void;
 }
 
 // Web Bluetooth & Serial API Type Declarations

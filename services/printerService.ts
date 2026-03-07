@@ -669,57 +669,75 @@ export class PrinterService {
           // Use html2canvas to generate image
           const canvas = await html2canvas(tempDiv, {
               width: 384,
-              scale: 2, // Higher scale for better quality, then resize if needed
+              scale: 2, // Higher scale for better quality
               logging: false,
               useCORS: true,
               backgroundColor: '#ffffff'
           });
           
-          // Resize to 384px width (SUNMI V2S Print Width)
+          document.body.removeChild(tempDiv);
+
+          // Resize to 384px width (SUNMI V2S Print Width) and add padding
           const finalCanvas = document.createElement('canvas');
           finalCanvas.width = 384;
-          finalCanvas.height = (canvas.height * 384) / canvas.width;
+          // Calculate height based on aspect ratio
+          const scaledHeight = (canvas.height * 384) / canvas.width;
+          finalCanvas.height = scaledHeight;
+          
           const ctx = finalCanvas.getContext('2d');
           if (ctx) {
-              ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+              
+              // Draw image with 10px right padding (so max width effectively 374px)
+              // Actually, to prevent cutting on right, we should perhaps scale it slightly smaller or just ensure content is within bounds.
+              // User requested: "Force insert 10px padding on right side".
+              // So we draw the image slightly shifted left or scaled down?
+              // If we draw it at 0,0 with width 374, and canvas is 384, we have 10px space on right.
+              const contentWidth = 374;
+              const contentHeight = (canvas.height * contentWidth) / canvas.width;
+              
+              // Recalculate canvas height for the new content height
+              finalCanvas.height = contentHeight;
+              
+              // Fill white again for new height
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+
+              ctx.drawImage(canvas, 0, 0, contentWidth, contentHeight);
+              // Right side (10px) remains white
           }
           
-          document.body.removeChild(tempDiv);
-          
-          // Generate PDF
-          const imgData = finalCanvas.toDataURL('image/png');
-          const pdfWidth = 48; // mm (Printable width for Sunmi V2)
-          const pdfHeight = (finalCanvas.height * pdfWidth) / finalCanvas.width;
-          
-          const doc = new jsPDF({
-              orientation: 'p',
-              unit: 'mm',
-              format: [pdfWidth, pdfHeight + 10] // Add some bottom margin
-          });
-          
-          doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-          const base64Pdf = doc.output('datauristring').split(',')[1];
-          
-          return base64Pdf;
+          // Return Base64 (remove prefix)
+          return finalCanvas.toDataURL('image/png').split(',')[1];
       };
 
       try {
           // 1. Print Original
           const base64Original = await generateImage(false);
           
-          if (window.SunmiPrinterPlugin) {
-              window.SunmiPrinterPlugin.printPDF(base64Original);
+          if (window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap) {
+              window.SunmiPrinterPlugin.printBitmap(base64Original, 384, 0);
+          } else if (window.SunmiInnerPrinter && window.SunmiInnerPrinter.printBitmapWithBase64) {
+               // Fallback to InnerPrinter if Plugin method missing
+               window.SunmiInnerPrinter.printBitmapWithBase64(base64Original, 384, 0);
+               window.SunmiInnerPrinter.lineWrap(3);
+               window.SunmiInnerPrinter.cutPaper();
           } else {
-               console.warn("SunmiPrinterPlugin not found.");
-               alert("SunmiPrinterPluginが見つかりません");
+               console.warn("Sunmi Printer not found.");
+               alert("プリンターが見つかりません");
           }
 
           // 2. Print Copy (if confirmed)
           setTimeout(async () => {
               if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
                   const base64Copy = await generateImage(true);
-                  if (window.SunmiPrinterPlugin) {
-                      window.SunmiPrinterPlugin.printPDF(base64Copy);
+                  if (window.SunmiPrinterPlugin && window.SunmiPrinterPlugin.printBitmap) {
+                      window.SunmiPrinterPlugin.printBitmap(base64Copy, 384, 0);
+                  } else if (window.SunmiInnerPrinter && window.SunmiInnerPrinter.printBitmapWithBase64) {
+                      window.SunmiInnerPrinter.printBitmapWithBase64(base64Copy, 384, 0);
+                      window.SunmiInnerPrinter.lineWrap(3);
+                      window.SunmiInnerPrinter.cutPaper();
                   }
               }
           }, 500);
