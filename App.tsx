@@ -563,16 +563,16 @@ const App: React.FC = () => {
                     element.style.margin = '0';
                     element.style.padding = '0';
                     
-                    // Base font size increase (1.5x)
-                    element.style.fontSize = '150%';
+                    // Base font size increase (1.6x)
+                    element.style.fontSize = '160%';
                     element.style.lineHeight = '1.2';
                     
                     const receipts = element.querySelectorAll('.bg-white.text-black');
                     receipts.forEach((r: any) => {
-                        r.style.width = '100%';
+                        r.style.width = '384px'; // Strictly 384px
                         r.style.padding = '0';
-                        r.style.paddingLeft = '0px'; // Minimal margin (0mm)
-                        r.style.paddingRight = '0px'; // Minimal margin (0mm)
+                        r.style.paddingLeft = '2px'; // Minimal margin (approx 0.25mm)
+                        r.style.paddingRight = '2px'; // Minimal margin (approx 0.25mm)
                         r.style.paddingBottom = '10px';
                         r.style.marginBottom = '0';
                         r.style.boxSizing = 'border-box';
@@ -607,10 +607,11 @@ const App: React.FC = () => {
                     // Emphasize Store Name
                     const storeNames = element.querySelectorAll('.text-3xl');
                     storeNames.forEach((el: any) => {
-                        el.style.fontSize = '200%';
+                        el.style.fontSize = '220%';
                         el.style.width = '100%';
                         el.style.textAlign = 'center';
                         el.style.display = 'block';
+                        el.style.letterSpacing = '-1px';
                     });
 
                     // Emphasize Total Amount
@@ -624,20 +625,20 @@ const App: React.FC = () => {
         });
         const imgData = canvas.toDataURL('image/png');
         
-        const paperWidth = 58;
-        const printWidth = 48;
-        const margin = (paperWidth - printWidth) / 2;
-
-        const imgProps = canvas;
-        const pdfHeight = (imgProps.height * printWidth) / imgProps.width;
+        // MP-B20 effective print width is 48mm.
+        // By setting the PDF width exactly to 48mm and drawing at x=0,
+        // FitToWidth=yes in SII Agent will map this 1:1 to the paper's printable area,
+        // eliminating the double-margin issue that caused 40mm shrinkage.
+        const printWidth = 48; 
+        const pdfHeight = (canvas.height * printWidth) / canvas.width;
 
         const pdf = new jsPDF({
           orientation: 'portrait',
           unit: 'mm',
-          format: [paperWidth, pdfHeight]
+          format: [printWidth, pdfHeight]
         });
 
-        pdf.addImage(imgData, 'PNG', margin, 0, printWidth, pdfHeight);
+        pdf.addImage(imgData, 'PNG', 0, 0, printWidth, pdfHeight);
 
         const dataUri = pdf.output('datauristring');
         const base64Data = dataUri.split(',')[1];
