@@ -541,8 +541,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleiOSPrint = async () => {
-      const input = document.getElementById('receipt-preview');
+  const handleiOSPrint = async (isCopy = false) => {
+      const targetId = isCopy ? 'receipt-copy' : 'receipt-original';
+      const input = document.getElementById(targetId);
       if (!input) return;
 
       setIsProcessing(true);
@@ -552,7 +553,7 @@ const App: React.FC = () => {
             useCORS: true,
             backgroundColor: '#ffffff', 
             onclone: (document) => {
-                const element = document.getElementById('receipt-preview');
+                const element = document.getElementById(targetId);
                 if (element) {
                     element.style.width = '384px';
                     element.style.minWidth = '384px';
@@ -562,12 +563,15 @@ const App: React.FC = () => {
                     element.style.margin = '0';
                     element.style.padding = '0';
                     
+                    // Base font size increase
+                    element.style.fontSize = '125%';
+                    
                     const receipts = element.querySelectorAll('.bg-white.text-black');
                     receipts.forEach((r: any) => {
                         r.style.width = '100%';
                         r.style.padding = '0';
-                        r.style.paddingLeft = '0';
-                        r.style.paddingRight = '16px'; // ~2mm safety margin
+                        r.style.paddingLeft = '4px'; // Minimal margin
+                        r.style.paddingRight = '4px'; // Minimal margin
                         r.style.paddingBottom = '10px';
                         r.style.marginBottom = '0';
                         r.style.boxSizing = 'border-box';
@@ -582,6 +586,20 @@ const App: React.FC = () => {
                         el.style.webkitFontSmoothing = 'none';
                         el.style.overflowWrap = 'break-word';
                     }
+
+                    // Emphasize item names
+                    const itemNames = element.querySelectorAll('.break-words');
+                    itemNames.forEach((el: any) => {
+                        el.style.fontSize = '130%';
+                        el.style.fontWeight = '900';
+                    });
+
+                    // Emphasize prices
+                    const priceRows = element.querySelectorAll('.justify-between.text-gray-600.text-sm');
+                    priceRows.forEach((row: any) => {
+                        row.style.fontSize = '120%';
+                        row.style.fontWeight = '900';
+                    });
                 }
             }
         });
@@ -610,6 +628,14 @@ const App: React.FC = () => {
         const scheme = `siiprintagent://1.0/print?Format=pdf&ErrorDialog=yes&PaperWidth=58&CutType=partial&FitToWidth=yes&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
 
         window.location.href = scheme;
+
+        if (!isCopy) {
+            setTimeout(() => {
+                if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
+                    handleiOSPrint(true);
+                }
+            }, 1500);
+        }
 
       } catch (e: any) {
         console.error(e);
@@ -1052,23 +1078,25 @@ const App: React.FC = () => {
                {/* Receipt Preview Container (Includes Original and Copy) */}
                <div id="receipt-preview" className="space-y-8">
                    {/* Original */}
-                   <Receipt 
-                     items={cart} 
-                     subTotal={subTotal} 
-                     tax={initialTax} 
-                     finalTax={finalTax}
-                     total={totalAmount}
-                     mode={receiptMode}
-                     recipientName={recipientName}
-                     proviso={proviso}
-                     paymentDeadline={paymentDeadline}
-                     discount={discountVal}
-                     logo={LOGO_URL} 
-                     settings={storeSettings} 
-                   />
+                   <div id="receipt-original">
+                       <Receipt 
+                         items={cart} 
+                         subTotal={subTotal} 
+                         tax={initialTax} 
+                         finalTax={finalTax}
+                         total={totalAmount}
+                         mode={receiptMode}
+                         recipientName={recipientName}
+                         proviso={proviso}
+                         paymentDeadline={paymentDeadline}
+                         discount={discountVal}
+                         logo={LOGO_URL} 
+                         settings={storeSettings} 
+                       />
+                   </div>
 
                    {/* Copy */}
-                   <div className="relative">
+                   <div id="receipt-copy" className="relative">
                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gray-200 text-gray-500 text-[10px] px-2 py-0.5 rounded-full z-10">
                            以下、店舗控え
                        </div>
