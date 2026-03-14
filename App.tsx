@@ -549,7 +549,7 @@ const App: React.FC = () => {
       setIsProcessing(true);
       try {
         const canvas = await html2canvas(input, { 
-            scale: 3, 
+            scale: 4, // Higher scale for better resolution when zoomed
             useCORS: true,
             backgroundColor: '#ffffff', 
             onclone: (document) => {
@@ -563,15 +563,16 @@ const App: React.FC = () => {
                     element.style.margin = '0';
                     element.style.padding = '0';
                     
-                    // Base font size increase
-                    element.style.fontSize = '125%';
+                    // Base font size increase (1.5x)
+                    element.style.fontSize = '150%';
+                    element.style.lineHeight = '1.2';
                     
                     const receipts = element.querySelectorAll('.bg-white.text-black');
                     receipts.forEach((r: any) => {
                         r.style.width = '100%';
                         r.style.padding = '0';
-                        r.style.paddingLeft = '4px'; // Minimal margin
-                        r.style.paddingRight = '4px'; // Minimal margin
+                        r.style.paddingLeft = '0px'; // Minimal margin (0mm)
+                        r.style.paddingRight = '0px'; // Minimal margin (0mm)
                         r.style.paddingBottom = '10px';
                         r.style.marginBottom = '0';
                         r.style.boxSizing = 'border-box';
@@ -580,7 +581,7 @@ const App: React.FC = () => {
                     const all = element.getElementsByTagName('*');
                     for (let i = 0; i < all.length; i++) {
                         const el = all[i] as HTMLElement;
-                        el.style.fontWeight = 'bold';
+                        el.style.fontWeight = '900'; // Maximum bold for visibility
                         el.style.color = '#000000';
                         // @ts-ignore
                         el.style.webkitFontSmoothing = 'none';
@@ -590,15 +591,33 @@ const App: React.FC = () => {
                     // Emphasize item names
                     const itemNames = element.querySelectorAll('.break-words');
                     itemNames.forEach((el: any) => {
-                        el.style.fontSize = '130%';
+                        el.style.fontSize = '150%';
                         el.style.fontWeight = '900';
+                        el.style.width = '100%';
+                        el.style.display = 'block';
                     });
 
                     // Emphasize prices
                     const priceRows = element.querySelectorAll('.justify-between.text-gray-600.text-sm');
                     priceRows.forEach((row: any) => {
-                        row.style.fontSize = '120%';
+                        row.style.fontSize = '140%';
                         row.style.fontWeight = '900';
+                    });
+
+                    // Emphasize Store Name
+                    const storeNames = element.querySelectorAll('.text-3xl');
+                    storeNames.forEach((el: any) => {
+                        el.style.fontSize = '200%';
+                        el.style.width = '100%';
+                        el.style.textAlign = 'center';
+                        el.style.display = 'block';
+                    });
+
+                    // Emphasize Total Amount
+                    const totals = element.querySelectorAll('.text-5xl, .text-2xl');
+                    totals.forEach((el: any) => {
+                        el.style.fontSize = '180%';
+                        el.style.width = '100%';
                     });
                 }
             }
