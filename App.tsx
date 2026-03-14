@@ -581,7 +581,7 @@ const App: React.FC = () => {
                     const all = element.getElementsByTagName('*');
                     for (let i = 0; i < all.length; i++) {
                         const el = all[i] as HTMLElement;
-                        el.style.fontWeight = '900'; // Maximum bold for visibility
+                        // Removed forced 900 weight to prevent thermal printer smudging
                         el.style.color = '#000000';
                         // @ts-ignore
                         el.style.webkitFontSmoothing = 'none';
@@ -592,16 +592,16 @@ const App: React.FC = () => {
                     const itemNames = element.querySelectorAll('.break-words');
                     itemNames.forEach((el: any) => {
                         el.style.fontSize = '150%';
-                        el.style.fontWeight = '900';
+                        el.style.fontWeight = 'bold'; // Standard bold
                         el.style.width = '100%';
                         el.style.display = 'block';
                     });
 
-                    // Emphasize prices
-                    const priceRows = element.querySelectorAll('.justify-between.text-gray-600.text-sm');
+                    // Emphasize prices (remove bold, increase size)
+                    const priceRows = element.querySelectorAll('.justify-between.text-gray-600, .justify-between.text-red-600, .justify-between.text-2xl');
                     priceRows.forEach((row: any) => {
-                        row.style.fontSize = '140%';
-                        row.style.fontWeight = '900';
+                        row.style.fontSize = '150%'; // Increased from 140%
+                        row.style.fontWeight = 'normal'; // Remove bold to prevent smudging
                     });
 
                     // Emphasize Store Name
@@ -612,13 +612,15 @@ const App: React.FC = () => {
                         el.style.textAlign = 'center';
                         el.style.display = 'block';
                         el.style.letterSpacing = '-1px';
+                        el.style.fontWeight = 'bold'; // Standard bold
                     });
 
-                    // Emphasize Total Amount
-                    const totals = element.querySelectorAll('.text-5xl, .text-2xl');
+                    // Emphasize Total Amount (remove bold, increase size)
+                    const totals = element.querySelectorAll('.text-5xl');
                     totals.forEach((el: any) => {
-                        el.style.fontSize = '180%';
+                        el.style.fontSize = '190%'; // Increased from 180%
                         el.style.width = '100%';
+                        el.style.fontWeight = 'normal'; // Remove bold to prevent smudging
                     });
                 }
             }
@@ -650,11 +652,13 @@ const App: React.FC = () => {
         window.location.href = scheme;
 
         if (!isCopy) {
+            // Wait 4 seconds to ensure the OS has time to process the URL scheme and launch the print app
+            // before the JS thread is blocked by the confirm dialog.
             setTimeout(() => {
                 if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
                     handleiOSPrint(true);
                 }
-            }, 1500);
+            }, 4000);
         }
 
       } catch (e: any) {
