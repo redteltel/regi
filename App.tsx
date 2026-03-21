@@ -5,7 +5,7 @@ import Settings from './components/Settings'; // New Import
 import MasterEditor from './components/MasterEditor';
 import { AppState, CartItem, Product, PrinterStatus, StoreSettings, PrinterType } from './types';
 import { printerService } from './services/printerService';
-import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache } from './services/sheetService';
+import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache, preloadDatabase } from './services/sheetService';
 import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { LOGO_URL } from './logoData';
 import html2canvas from 'html2canvas';
@@ -93,6 +93,7 @@ const App: React.FC = () => {
   const [proviso, setProviso] = useState('');
   const [paymentDeadline, setPaymentDeadline] = useState('');
   const [storeMemo, setStoreMemo] = useState('');
+  const [dbError, setDbError] = useState<string | null>(null);
 
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>({
     isConnected: false,
@@ -192,6 +193,12 @@ const App: React.FC = () => {
     
     // Fetch Service Items on mount
     loadServiceItems();
+
+    // Preload database and catch errors
+    preloadDatabase().catch(e => {
+        console.error("Failed to preload database:", e);
+        setDbError("DATA.csvが見つかりません。設定を確認してください。");
+    });
   }, []);
 
   // Autosave Effect
@@ -1218,6 +1225,13 @@ const App: React.FC = () => {
       {isDemoMode && (
         <div className="fixed top-0 right-0 z-[100] bg-red-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-lg pointer-events-none">
           DEMO MODE
+        </div>
+      )}
+
+      {/* DB Error Banner */}
+      {dbError && (
+        <div className="bg-red-600 text-white text-sm font-bold p-3 text-center z-50 relative shadow-md">
+          {dbError}
         </div>
       )}
 

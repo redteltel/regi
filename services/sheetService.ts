@@ -1,4 +1,5 @@
 import { Product, CartItem, StoreSettings } from '../types';
+import Papa from 'papaparse';
 
 // Default constants (Fallback)
 const DEFAULT_SPREADSHEET_ID = '1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k';
@@ -80,40 +81,10 @@ const levenshtein = (s: string, t: string): number => {
 };
 
 const parseCSV = (text: string): string[][] => {
-  const rows: string[][] = [];
-  let currentRow: string[] = [];
-  let currentVal = '';
-  let insideQuote = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
-
-    if (char === '"') {
-      if (insideQuote && nextChar === '"') {
-        currentVal += '"';
-        i++;
-      } else {
-        insideQuote = !insideQuote;
-      }
-    } else if (char === ',' && !insideQuote) {
-      currentRow.push(currentVal.trim());
-      currentVal = '';
-    } else if ((char === '\r' || char === '\n') && !insideQuote) {
-      if (char === '\r' && nextChar === '\n') i++;
-      currentRow.push(currentVal.trim());
-      if (currentRow.length > 0 && (currentRow.length > 1 || currentRow[0] !== '')) {
-        rows.push(currentRow);
-      }
-      currentRow = [];
-      currentVal = '';
-    } else {
-      currentVal += char;
-    }
-  }
-  if (currentVal) currentRow.push(currentVal.trim());
-  if (currentRow.length > 0) rows.push(currentRow);
-  return rows;
+  const result = Papa.parse<string[]>(text, {
+    skipEmptyLines: true,
+  });
+  return result.data;
 };
 
 const toHalfWidth = (str: string) => {
@@ -179,7 +150,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
   try {
     const baseUrl = import.meta.env.BASE_URL || '/';
-    const url = `${baseUrl}DATA.csv?t=${now}`;
+    const url = `${window.location.origin}${baseUrl}DATA.csv?t=${now}`;
     const res = await fetchWithRetry(url, {}, 1, 15000); // 15s timeout for DB fetch
     const text = await res.text();
 
@@ -214,8 +185,8 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
         const partNumber = row[idxPartNum]?.trim();
         const name = row[idxName]?.trim();
-        const priceClean = toHalfWidth(row[idxPrice] || "0").replace(/[^0-9-]/g, '');
-        const price = parseInt(priceClean, 10);
+        const priceClean = toHalfWidth(row[idxPrice] || "0").replace(/[^0-9.-]/g, '');
+        const price = parseFloat(priceClean);
 
         if (partNumber && !isNaN(price)) {
             products.push({ id: partNumber, partNumber, name, price });
@@ -244,7 +215,7 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
       const baseUrl = import.meta.env.BASE_URL || '/';
-      const url = `${baseUrl}ServiceItems.csv?t=${now}`;
+      const url = `${window.location.origin}${baseUrl}ServiceItems.csv?t=${now}`;
       
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
@@ -266,8 +237,8 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
           
           const name = row[idxName]?.trim();
           let rawPrice = row[idxPrice] || "0";
-          rawPrice = toHalfWidth(rawPrice).replace(/[¥,円\s]/g, '');
-          const price = parseInt(rawPrice, 10);
+          rawPrice = toHalfWidth(rawPrice).replace(/[^0-9.-]/g, '');
+          const price = parseFloat(rawPrice);
 
           if (name && !isNaN(price)) {
               items.push({ id: `SVC-${i}-${now}`, partNumber: 'Service', name, price });
