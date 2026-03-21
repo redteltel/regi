@@ -134,7 +134,7 @@ const fetchWithRetry = async (url: string, options: RequestInit = {}, retries = 
   const id = setTimeout(() => controller.abort(), timeout);
   
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
+    const res = await fetch(url, { ...options, cache: 'no-store', signal: controller.signal });
     clearTimeout(id);
     
     if (!res.ok) {
@@ -167,58 +167,54 @@ const hydrateCache = (products: Product[]) => {
   console.log(`Hydrated memory cache with ${memoryCache.length} items.`);
 };
 
-const loadFromLocal = () => {
-  try {
-    const json = localStorage.getItem(CACHE_KEY);
-    if (json) {
-      const data = JSON.parse(json);
-      hydrateCache(data);
-    }
-  } catch (e) {
-    console.error("Failed to load local cache", e);
-  }
-};
-
-// Initialize
-loadFromLocal();
-
 export const clearCache = () => {
     console.log("Clearing product database cache...");
     memoryCache = [];
-    localStorage.removeItem(CACHE_KEY);
-    localStorage.removeItem(TIMESTAMP_KEY);
 };
 
 const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
   const now = Date.now();
-  const lastFetch = parseInt(localStorage.getItem(TIMESTAMP_KEY) || '0', 10);
 
-  if (!forceUpdate && memoryCache.length > 0 && (now - lastFetch < CACHE_TTL)) {
-    return memoryCache;
-  }
-
-  const { spreadsheetId, sheetName } = getSettings();
-  console.log(`Fetching DB from Sheet: ${sheetName} (ID: ${spreadsheetId.slice(0,5)}...)`);
+  console.log(`Fetching DB from DATA.csv`);
 
   try {
-    const url = getGvizUrl(spreadsheetId, sheetName) + `&t=${now}`;
+    const baseUrl = import.meta.env.BASE_URL || '/';
+    const url = `${baseUrl}DATA.csv?t=${now}`;
     const res = await fetchWithRetry(url, {}, 1, 15000); // 15s timeout for DB fetch
     const text = await res.text();
 
     if (text.trim().startsWith('<!DOCTYPE html>') || text.includes('<html')) {
-        throw new SheetError('403_HTML', 'Permission Denied');
+        throw new SheetError('403_HTML', 'Permission Denied or File Not Found');
     }
 
     const rows = parseCSV(text);
     const products: Product[] = [];
     
+    // Header: 品番, 商品名, 金額, 更新日時
+    // We assume index 0: 品番, 1: 商品名, 2: 金額, 3: 更新日時
+    // Find the header indices just in case, or fallback to fixed indices
+    let idxPartNum = 0;
+    let idxName = 1;
+    let idxPrice = 2;
+
+    if (rows.length > 0) {
+        const header = rows[0].map(c => c.trim());
+        const foundPartNum = header.findIndex(h => h === '品番');
+        const foundName = header.findIndex(h => h === '商品名');
+        const foundPrice = header.findIndex(h => h === '金額');
+        
+        if (foundPartNum !== -1) idxPartNum = foundPartNum;
+        if (foundName !== -1) idxName = foundName;
+        if (foundPrice !== -1) idxPrice = foundPrice;
+    }
+
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
-        if (row.length < 3) continue;
+        if (row.length <= Math.max(idxPartNum, idxName, idxPrice)) continue;
 
-        const partNumber = row[0];
-        const name = row[1];
-        const priceClean = toHalfWidth(row[2]).replace(/[^0-9]/g, '');
+        const partNumber = row[idxPartNum]?.trim();
+        const name = row[idxName]?.trim();
+        const priceClean = toHalfWidth(row[idxPrice] || "0").replace(/[^0-9-]/g, '');
         const price = parseInt(priceClean, 10);
 
         if (partNumber && !isNaN(price)) {
@@ -227,12 +223,10 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
     }
     
     hydrateCache(products);
-    localStorage.setItem(CACHE_KEY, JSON.stringify(products));
-    localStorage.setItem(TIMESTAMP_KEY, now.toString());
     
     return products;
   } catch (e: any) {
-    console.error("Sheet Service Error:", e);
+    console.error("CSV Fetch Error:", e);
     if (memoryCache.length > 0) {
         console.warn("Using stale cache due to fetch error.");
         return memoryCache;
@@ -249,19 +243,19 @@ export const preloadDatabase = async () => {
 export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
-      const { spreadsheetId, serviceSheetName } = getSettings();
-      // Service Items always come from 'ServiceItems' sheet in the same spreadsheet
-      const url = getGvizUrl(spreadsheetId, serviceSheetName) + `&t=${now}`;
+      const baseUrl = import.meta.env.BASE_URL || '/';
+      const url = `${baseUrl}ServiceItems.csv?t=${now}`;
       
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
       const rows = parseCSV(text);
       if (rows.length < 2) return [];
       
-      // ... simplistic parsing for service items ...
-      const header = rows[0].map(c => c.toLowerCase());
-      let idxName = header.findIndex(h => h.includes('name') || h.includes('品名') || h.includes('項目'));
-      let idxPrice = header.findIndex(h => h.includes('price') || h.includes('cost') || h.includes('単価'));
+      // Header: name, price, category
+      const header = rows[0].map(c => c.trim().toLowerCase());
+      let idxName = header.findIndex(h => h === 'name');
+      let idxPrice = header.findIndex(h => h === 'price');
+      
       if (idxName === -1) idxName = 0;
       if (idxPrice === -1) idxPrice = 1;
 
@@ -269,6 +263,7 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
           if (row.length <= Math.max(idxName, idxPrice)) continue;
+          
           const name = row[idxName]?.trim();
           let rawPrice = row[idxPrice] || "0";
           rawPrice = toHalfWidth(rawPrice).replace(/[¥,円\s]/g, '');

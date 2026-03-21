@@ -3,7 +3,7 @@ import Camera from './components/Camera';
 import Receipt from './components/Receipt';
 import Settings from './components/Settings'; // New Import
 import MasterEditor from './components/MasterEditor';
-import { AppState, CartItem, Product, PrinterStatus, StoreSettings } from './types';
+import { AppState, CartItem, Product, PrinterStatus, StoreSettings, PrinterType } from './types';
 import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache } from './services/sheetService';
 import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
@@ -28,7 +28,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
   spreadsheetId: "1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k",
   spreadsheetName: "DATA",
   sheetName: "品番参照",
-  serviceSheetName: "ServiceItems"
+  serviceSheetName: "ServiceItems",
+  printerType: "PDF"
 };
 
 // Unique key for this specific app deployment to ensure isolation from other apps on same domain
@@ -1155,7 +1156,7 @@ const App: React.FC = () => {
             <div className="w-full shrink-0 bg-white p-4 pb-10 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-30 sticky bottom-0">
               <div className="flex gap-3">
                   {/* iOS Buttons */}
-                  {/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream ? (
+                  {/iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream ? (
                       <>
                         <button 
                           onClick={handleSharePDF}
@@ -1165,7 +1166,7 @@ const App: React.FC = () => {
                           PDFを共有
                         </button>
                         <button 
-                          onClick={handleiOSPrint}
+                          onClick={() => handleiOSPrint(false)}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
                         >
                           <Printer size={20} />

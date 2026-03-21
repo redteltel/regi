@@ -516,10 +516,11 @@ export class PrinterService {
 
       try {
           console.log("Starting AIDL Print Sequence...");
+          const p = printer as any;
           
           // Init
-          if (typeof printer.printerInit === 'function') {
-              printer.printerInit();
+          if (typeof p.printerInit === 'function') {
+              p.printerInit();
           } else {
               console.warn("printerInit not found");
           }
@@ -528,36 +529,36 @@ export class PrinterService {
           if (logoUrl) {
               const base64Logo = await getBase64FromUrl(logoUrl);
               if (base64Logo) {
-                  if (typeof printer.printBitmap === 'function') {
-                      printer.printBitmap(base64Logo, 384, 0); 
-                  } else if (typeof printer.printBitmapWithBase64 === 'function') {
-                      printer.printBitmapWithBase64(base64Logo, 384, 0);
+                  if (typeof p.printBitmap === 'function') {
+                      p.printBitmap(base64Logo, 384, 0); 
+                  } else if (typeof p.printBitmapWithBase64 === 'function') {
+                      p.printBitmapWithBase64(base64Logo, 384, 0);
                   } else {
                       console.warn("printBitmap method not found");
                   }
-                  if (typeof printer.lineWrap === 'function') printer.lineWrap(1);
+                  if (typeof p.lineWrap === 'function') p.lineWrap(1);
               }
           }
 
           // Helper for text printing
           const printLine = (text: string) => {
-              if (typeof printer.printText === 'function') {
-                  printer.printText(text);
-              } else if (typeof printer.printString === 'function') {
-                  printer.printString(text); // Some versions use printString
+              if (typeof p.printText === 'function') {
+                  p.printText(text);
+              } else if (typeof p.printString === 'function') {
+                  p.printString(text); // Some versions use printString
               }
           };
 
           const setAlign = (align: number) => {
-              if (typeof printer.setAlignment === 'function') printer.setAlignment(align);
+              if (typeof p.setAlignment === 'function') p.setAlignment(align);
           };
 
           const setSize = (size: number) => {
-              if (typeof printer.setFontSize === 'function') printer.setFontSize(size);
+              if (typeof p.setFontSize === 'function') p.setFontSize(size);
           };
 
           const setBold = (isBold: boolean) => {
-              if (typeof printer.setBold === 'function') printer.setBold(isBold);
+              if (typeof p.setBold === 'function') p.setBold(isBold);
           };
 
           // 2. Title
@@ -629,8 +630,8 @@ export class PrinterService {
           printLine("\n毎度ありがとうございます\n\n");
           
           // Cut
-          if (typeof printer.lineWrap === 'function') printer.lineWrap(4);
-          if (typeof printer.cutPaper === 'function') printer.cutPaper();
+          if (typeof p.lineWrap === 'function') p.lineWrap(4);
+          if (typeof p.cutPaper === 'function') p.cutPaper();
 
           console.log("AIDL Print Sequence Completed");
 
