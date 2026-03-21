@@ -150,7 +150,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
   try {
     const baseUrl = import.meta.env.BASE_URL || '/';
-    const url = `${window.location.origin}${baseUrl}DATA.csv?t=${now}`;
+    const url = baseUrl + 'DATA.csv?t=' + now;
     const res = await fetchWithRetry(url, {}, 1, 15000); // 15s timeout for DB fetch
     const text = await res.text();
 
@@ -185,7 +185,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
         const partNumber = row[idxPartNum]?.trim();
         const name = row[idxName]?.trim();
-        const priceClean = toHalfWidth(row[idxPrice] || "0").replace(/[^0-9.-]/g, '');
+        const priceClean = toHalfWidth(row[idxPrice] || "0").replace(/[",]/g, '');
         const price = parseFloat(priceClean);
 
         if (partNumber && !isNaN(price)) {
@@ -215,7 +215,7 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
       const baseUrl = import.meta.env.BASE_URL || '/';
-      const url = `${window.location.origin}${baseUrl}ServiceItems.csv?t=${now}`;
+      const url = baseUrl + 'ServiceItems.csv?t=' + now;
       
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
@@ -237,7 +237,7 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
           
           const name = row[idxName]?.trim();
           let rawPrice = row[idxPrice] || "0";
-          rawPrice = toHalfWidth(rawPrice).replace(/[^0-9.-]/g, '');
+          rawPrice = toHalfWidth(rawPrice).replace(/[",]/g, '');
           const price = parseFloat(rawPrice);
 
           if (name && !isNaN(price)) {
