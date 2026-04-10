@@ -223,24 +223,31 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
-      const rows = parseCSV(text);
-      if (rows.length < 2) return [];
       
-      // Header: name, price, category
-      const header = rows[0].map(c => c.replace(/[\uFEFF\u200B-\u200D]/g, '').trim().toLowerCase());
-      let idxName = header.findIndex(h => h === 'name' || h === 'サービス名' || h === '商品名' || h === '品名');
-      let idxPrice = header.findIndex(h => h === 'price' || h === '金額' || h === '価格' || h === '単価');
+      // Use split(/\r?\n/) as requested
+      const lines = text.split(/\r?\n/);
+      if (lines.length < 2) return [];
+      
+      // Clean header
+      const headerLine = lines[0].replace(/[\uFEFF\u200B-\u200D]/g, '').trim().toLowerCase();
+      const headers = headerLine.split(',').map(h => h.trim());
+      
+      let idxName = headers.findIndex(h => h === 'name' || h === 'サービス名' || h === '商品名' || h === '品名');
+      let idxPrice = headers.findIndex(h => h === 'price' || h === '金額' || h === '価格' || h === '単価');
       
       if (idxName === -1) idxName = 0;
       if (idxPrice === -1) idxPrice = 1;
 
       const items: Product[] = [];
-      for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          if (row.length <= Math.max(idxName, idxPrice)) continue;
+      for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
           
-          const name = row[idxName]?.trim();
-          let rawPrice = row[idxPrice]?.trim() || "0";
+          const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+          if (cols.length <= Math.max(idxName, idxPrice)) continue;
+          
+          const name = cols[idxName];
+          let rawPrice = cols[idxPrice] || "0";
           rawPrice = toHalfWidth(rawPrice).replace(/[",]/g, '');
           const price = parseFloat(rawPrice);
 
@@ -251,7 +258,7 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       return items;
   } catch (e) {
       console.error("Failed to fetch service items", e);
-      return [];
+      throw e; // Throw so the caller can catch and show the error
   }
 }
 

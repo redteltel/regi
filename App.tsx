@@ -94,6 +94,7 @@ const App: React.FC = () => {
   const [paymentDeadline, setPaymentDeadline] = useState('');
   const [storeMemo, setStoreMemo] = useState('');
   const [dbError, setDbError] = useState<string | null>(null);
+  const [serviceError, setServiceError] = useState<string | null>(null);
 
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>({
     isConnected: false,
@@ -106,15 +107,23 @@ const App: React.FC = () => {
   const loadAllData = async () => {
       setIsServiceLoading(true);
       setDbError(null);
+      setServiceError(null);
       try {
-          const [items] = await Promise.all([
-              fetchServiceItems(),
-              preloadDatabase()
-          ]);
+          const itemsPromise = fetchServiceItems().catch(e => {
+              console.error("ServiceItems fetch error:", e);
+              setServiceError("CSV読み込みエラー");
+              return [];
+          });
+
+          const dbPromise = preloadDatabase().catch(e => {
+              console.error("DATA.csv fetch error:", e);
+              setDbError("DATA.csvが見つかりません。設定を確認してください。");
+          });
+
+          const items = await itemsPromise;
+          await dbPromise;
+
           setServiceItems(items);
-      } catch (e) {
-          console.error("Failed to load data:", e);
-          setDbError("DATA.csvまたはServiceItems.csvが見つかりません。設定を確認してください。");
       } finally {
           setIsServiceLoading(false);
       }
@@ -810,6 +819,11 @@ const App: React.FC = () => {
                               <div className="flex justify-center items-center py-8">
                                 <Loader2 className="animate-spin text-blue-500" size={24} />
                                 <span className="ml-2 text-sm text-gray-500">データを読み込み中...</span>
+                              </div>
+                          ) : serviceError ? (
+                              <div className="text-center py-8 text-red-600 font-bold">
+                                  {serviceError}<br/>
+                                  <span className="text-xs font-normal text-gray-500">ServiceItems.csv のフォーマットや配置を確認してください</span>
                               </div>
                           ) : serviceItems.length === 0 ? (
                               <div className="text-center py-8 text-gray-500 text-sm">
