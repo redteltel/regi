@@ -154,7 +154,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
   try {
     const baseUrl = import.meta.env.BASE_URL || '/';
-    const url = baseUrl + 'DATA.csv?t=' + now;
+    const url = baseUrl + 'DATA.csv?v=' + now;
     const res = await fetchWithRetry(url, {}, 1, 15000); // 15s timeout for DB fetch
     const text = await res.text();
 
@@ -189,7 +189,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
 
         const partNumber = row[idxPartNum]?.trim();
         const name = row[idxName]?.trim();
-        const priceClean = toHalfWidth(row[idxPrice] || "0").replace(/[",]/g, '');
+        const priceClean = toHalfWidth(row[idxPrice]?.trim() || "0").replace(/[",]/g, '');
         const price = parseFloat(priceClean);
 
         if (partNumber && !isNaN(price)) {
@@ -219,7 +219,7 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
   try {
       const now = Date.now();
       const baseUrl = import.meta.env.BASE_URL || '/';
-      const url = baseUrl + 'ServiceItems.csv?t=' + now;
+      const url = baseUrl + 'ServiceItems.csv?v=' + now;
       
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
@@ -228,8 +228,8 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       
       // Header: name, price, category
       const header = rows[0].map(c => c.replace(/[\uFEFF\u200B-\u200D]/g, '').trim().toLowerCase());
-      let idxName = header.findIndex(h => h === 'name');
-      let idxPrice = header.findIndex(h => h === 'price');
+      let idxName = header.findIndex(h => h === 'name' || h === 'サービス名' || h === '商品名' || h === '品名');
+      let idxPrice = header.findIndex(h => h === 'price' || h === '金額' || h === '価格' || h === '単価');
       
       if (idxName === -1) idxName = 0;
       if (idxPrice === -1) idxPrice = 1;
@@ -240,7 +240,7 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
           if (row.length <= Math.max(idxName, idxPrice)) continue;
           
           const name = row[idxName]?.trim();
-          let rawPrice = row[idxPrice] || "0";
+          let rawPrice = row[idxPrice]?.trim() || "0";
           rawPrice = toHalfWidth(rawPrice).replace(/[",]/g, '');
           const price = parseFloat(rawPrice);
 
