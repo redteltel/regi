@@ -81,7 +81,11 @@ const levenshtein = (s: string, t: string): number => {
 };
 
 const parseCSV = (text: string): string[][] => {
-  const result = Papa.parse<string[]>(text, {
+  // Strip BOM and invisible characters from the beginning of the file
+  let cleanText = text.replace(/^\uFEFF/, '');
+  // Normalize newlines to \n
+  cleanText = cleanText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const result = Papa.parse<string[]>(cleanText, {
     skipEmptyLines: true,
   });
   return result.data;
@@ -169,7 +173,7 @@ const fetchDatabase = async (forceUpdate = false): Promise<Product[]> => {
     let idxPrice = 2;
 
     if (rows.length > 0) {
-        const header = rows[0].map(c => c.trim());
+        const header = rows[0].map(c => c.replace(/[\uFEFF\u200B-\u200D]/g, '').trim());
         const foundPartNum = header.findIndex(h => h === '品番');
         const foundName = header.findIndex(h => h === '商品名');
         const foundPrice = header.findIndex(h => h === '金額');
@@ -223,7 +227,7 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       if (rows.length < 2) return [];
       
       // Header: name, price, category
-      const header = rows[0].map(c => c.trim().toLowerCase());
+      const header = rows[0].map(c => c.replace(/[\uFEFF\u200B-\u200D]/g, '').trim().toLowerCase());
       let idxName = header.findIndex(h => h === 'name');
       let idxPrice = header.findIndex(h => h === 'price');
       

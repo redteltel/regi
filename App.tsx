@@ -103,11 +103,18 @@ const App: React.FC = () => {
     characteristic: null,
   });
   
-  const loadServiceItems = async () => {
+  const loadAllData = async () => {
       setIsServiceLoading(true);
+      setDbError(null);
       try {
-          const items = await fetchServiceItems();
+          const [items] = await Promise.all([
+              fetchServiceItems(),
+              preloadDatabase()
+          ]);
           setServiceItems(items);
+      } catch (e) {
+          console.error("Failed to load data:", e);
+          setDbError("DATA.csvまたはServiceItems.csvが見つかりません。設定を確認してください。");
       } finally {
           setIsServiceLoading(false);
       }
@@ -191,14 +198,8 @@ const App: React.FC = () => {
       }));
     });
     
-    // Fetch Service Items on mount
-    loadServiceItems();
-
-    // Preload database and catch errors
-    preloadDatabase().catch(e => {
-        console.error("Failed to preload database:", e);
-        setDbError("DATA.csvが見つかりません。設定を確認してください。");
-    });
+    // Fetch Service Items and Preload DB on mount
+    loadAllData();
   }, []);
 
   // Autosave Effect
@@ -237,7 +238,7 @@ const App: React.FC = () => {
 
       if (prevId !== newSettings.spreadsheetId || prevSheet !== newSettings.sheetName || prevServiceSheet !== newSettings.serviceSheetName) {
           clearCache();
-          loadServiceItems(); // Reload service items from new sheet
+          loadAllData(); // Reload all data from new sheet
       }
   };
 
@@ -794,7 +795,7 @@ const App: React.FC = () => {
                           </h3>
                           <div className="flex items-center gap-2">
                             <button 
-                                onClick={loadServiceItems} 
+                                onClick={loadAllData} 
                                 className={`p-2 hover:bg-gray-200 rounded-full ${isServiceLoading ? 'animate-spin' : ''}`}
                             >
                                 <RefreshCw size={18} className="text-gray-500" />
