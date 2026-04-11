@@ -232,14 +232,20 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       const headerLine = lines[0].replace(/[\uFEFF\u200B-\u200D]/g, '').trim().toLowerCase();
       const headers = headerLine.split(',').map(h => h.trim());
       
+      let hasHeader = false;
       let idxName = headers.findIndex(h => h === 'name' || h === 'サービス名' || h === '商品名' || h === '品名');
       let idxPrice = headers.findIndex(h => h === 'price' || h === '金額' || h === '価格' || h === '単価');
       
+      if (idxName !== -1 || idxPrice !== -1) {
+          hasHeader = true;
+      }
+
       if (idxName === -1) idxName = 0;
       if (idxPrice === -1) idxPrice = 1;
 
       const items: Product[] = [];
-      for (let i = 1; i < lines.length; i++) {
+      const startIndex = hasHeader ? 1 : 0;
+      for (let i = startIndex; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
           

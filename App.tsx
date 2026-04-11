@@ -111,7 +111,7 @@ const App: React.FC = () => {
       try {
           const itemsPromise = fetchServiceItems().catch(e => {
               console.error("ServiceItems fetch error:", e);
-              setServiceError("サービスデータ(CSV)の取得に失敗しました");
+              setServiceError("エラー：ServiceItems.csvが読み込めません");
               return [];
           });
 
