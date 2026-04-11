@@ -111,7 +111,7 @@ const App: React.FC = () => {
       try {
           const itemsPromise = fetchServiceItems().catch(e => {
               console.error("ServiceItems fetch error:", e);
-              setServiceError("CSV読み込みエラー");
+              setServiceError("サービスデータ(CSV)の取得に失敗しました");
               return [];
           });
 
@@ -821,7 +821,7 @@ const App: React.FC = () => {
                                 <span className="ml-2 text-sm text-gray-500">データを読み込み中...</span>
                               </div>
                           ) : serviceError ? (
-                              <div className="text-center py-8 text-red-600 font-bold">
+                              <div className="text-center py-8 text-red-600 font-bold text-lg">
                                   {serviceError}<br/>
                                   <span className="text-xs font-normal text-gray-500">ServiceItems.csv のフォーマットや配置を確認してください</span>
                               </div>
