@@ -731,9 +731,14 @@ const App: React.FC = () => {
           // Line feeds and partial cut
           text += '\n\n\n\n\n\n';
 
-          const encodedData = encodeURIComponent(text);
+          // Base64 encode the string as requested by the user
+          // utf8 to base64
+          const utf8Text = unescape(encodeURIComponent(text));
+          const base64Data = btoa(utf8Text);
+          const encodedData = encodeURIComponent(base64Data);
+
           const callbackUrl = encodeURIComponent('https://fukushima.10e.jp/regi/');
-          const scheme = `siiprintagent://1.0/print?Format=text&ErrorDialog=yes&PaperWidth=58&CutType=partial&FitToWidth=yes&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
+          const scheme = `siiprintagent://1.0/print?Format=text&ErrorDialog=yes&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
 
           window.location.href = scheme;
 
