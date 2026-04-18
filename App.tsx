@@ -560,130 +560,196 @@ const App: React.FC = () => {
   };
 
   const handleiOSPrint = async (isCopy = false) => {
-      const targetId = isCopy ? 'receipt-copy' : 'receipt-original';
-      const input = document.getElementById(targetId);
-      if (!input) return;
-
       setIsProcessing(true);
       try {
-        const canvas = await html2canvas(input, { 
-            scale: 4, // Higher scale for better resolution when zoomed
-            useCORS: true,
-            backgroundColor: '#ffffff', 
-            onclone: (document) => {
-                const element = document.getElementById(targetId);
-                if (element) {
-                    element.style.width = '384px';
-                    element.style.minWidth = '384px';
-                    element.style.maxWidth = '384px';
-                    element.style.backgroundColor = '#ffffff';
-                    element.style.color = '#000000';
-                    element.style.margin = '0';
-                    element.style.padding = '0';
-                    
-                    // Base font size increase (1.6x)
-                    element.style.fontSize = '160%';
-                    element.style.lineHeight = '1.2';
-                    
-                    const receipts = element.querySelectorAll('.bg-white.text-black');
-                    receipts.forEach((r: any) => {
-                        r.style.width = '384px'; // Strictly 384px
-                        r.style.padding = '0';
-                        r.style.paddingLeft = '2px'; // Minimal margin (approx 0.25mm)
-                        r.style.paddingRight = '2px'; // Minimal margin (approx 0.25mm)
-                        r.style.paddingBottom = '10px';
-                        r.style.marginBottom = '0';
-                        r.style.boxSizing = 'border-box';
-                    });
+          // ESC/POS Commands
+          const ESC = '\x1b';
+          const GS = '\x1d';
+          const ALIGN_LEFT = ESC + 'a0';
+          const ALIGN_CENTER = ESC + 'a1';
+          const ALIGN_RIGHT = ESC + 'a2';
+          const SIZE_NORMAL = GS + '!\x00';
+          const SIZE_LARGE = GS + '!\x11'; // Double width & height
 
-                    const all = element.getElementsByTagName('*');
-                    for (let i = 0; i < all.length; i++) {
-                        const el = all[i] as HTMLElement;
-                        // Removed forced 900 weight to prevent thermal printer smudging
-                        el.style.color = '#000000';
-                        // @ts-ignore
-                        el.style.webkitFontSmoothing = 'none';
-                        el.style.overflowWrap = 'break-word';
-                    }
+          let text = "";
+          const tl = (str: string) => { text += str + '\n'; };
 
-                    // Emphasize item names
-                    const itemNames = element.querySelectorAll('.break-words');
-                    itemNames.forEach((el: any) => {
-                        el.style.fontSize = '150%';
-                        el.style.fontWeight = 'bold'; // Standard bold
-                        el.style.width = '100%';
-                        el.style.display = 'block';
-                    });
+          text += ESC + '@'; // Init printer
+          text += ALIGN_CENTER;
 
-                    // Emphasize prices (remove bold, increase size)
-                    const priceRows = element.querySelectorAll('.justify-between.text-gray-600, .justify-between.text-red-600, .justify-between.text-2xl');
-                    priceRows.forEach((row: any) => {
-                        row.style.fontSize = '150%'; // Increased from 140%
-                        row.style.fontWeight = 'normal'; // Remove bold to prevent smudging
-                    });
+          if (isCopy) {
+              tl("« 店 舗 控 »");
+              tl("--------------------------------");
+          }
 
-                    // Emphasize Store Name
-                    const storeNames = element.querySelectorAll('.text-3xl');
-                    storeNames.forEach((el: any) => {
-                        el.style.fontSize = '220%';
-                        el.style.width = '100%';
-                        el.style.textAlign = 'center';
-                        el.style.display = 'block';
-                        el.style.letterSpacing = '-1px';
-                        el.style.fontWeight = 'bold'; // Standard bold
-                    });
+          let title = "領　収　証";
+          if (receiptMode === 'INVOICE') title = "請　求　書";
+          if (receiptMode === 'ESTIMATION') title = "御 見 積 書";
 
-                    // Emphasize Total Amount (remove bold, increase size)
-                    const totals = element.querySelectorAll('.text-5xl');
-                    totals.forEach((el: any) => {
-                        el.style.fontSize = '190%'; // Increased from 180%
-                        el.style.width = '100%';
-                        el.style.fontWeight = 'normal'; // Remove bold to prevent smudging
-                    });
-                }
-            }
-        });
-        const imgData = canvas.toDataURL('image/png');
-        
-        // MP-B20 effective print width is 48mm.
-        // By setting the PDF width exactly to 48mm and drawing at x=0,
-        // FitToWidth=yes in SII Agent will map this 1:1 to the paper's printable area,
-        // eliminating the double-margin issue that caused 40mm shrinkage.
-        const printWidth = 48; 
-        const pdfHeight = (canvas.height * printWidth) / canvas.width;
+          text += SIZE_LARGE;
+          tl(title);
+          text += SIZE_NORMAL;
+          tl("");
 
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: [printWidth, pdfHeight]
-        });
+          text += ALIGN_LEFT;
+          const now = new Date();
+          tl(`${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`);
+          tl("");
 
-        pdf.addImage(imgData, 'PNG', 0, 0, printWidth, pdfHeight);
+          const rName = recipientName || '　　　　　　　　　　';
+          text += SIZE_LARGE;
+          tl(`${rName} 様`);
+          text += SIZE_NORMAL;
+          tl("");
 
-        const dataUri = pdf.output('datauristring');
-        const base64Data = dataUri.split(',')[1];
+          text += ALIGN_CENTER;
+          tl("下 記 の 通 り");
+          if (receiptMode === 'RECEIPT' || receiptMode === 'FORMAL') {
+              tl("領 収 い た し ま し た");
+          } else if (receiptMode === 'INVOICE') {
+              tl("ご 請 求 申 し 上 げ ま す");
+          } else {
+              tl("御 見 積 申 し 上 げ ま す");
+          }
+          tl("");
 
-        const encodedData = encodeURIComponent(base64Data);
-        const callbackUrl = encodeURIComponent('https://fukushima.10e.jp/regi/');
-        const scheme = `siiprintagent://1.0/print?Format=pdf&ErrorDialog=yes&PaperWidth=58&CutType=partial&FitToWidth=yes&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
+          text += SIZE_LARGE;
+          tl(`¥ ${totalAmount.toLocaleString()}-`);
+          text += SIZE_NORMAL;
 
-        window.location.href = scheme;
+          if (receiptMode === 'RECEIPT' || receiptMode === 'FORMAL') {
+              tl(`(内消費税等 ¥ ${finalTax.toLocaleString()})`);
+          } else if (receiptMode === 'INVOICE') {
+              tl(`(内消費税等 ¥ ${initialTax.toLocaleString()})`);
+          }
 
-        if (!isCopy) {
-            // Wait 4 seconds to ensure the OS has time to process the URL scheme and launch the print app
-            // before the JS thread is blocked by the confirm dialog.
-            setTimeout(() => {
-                if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
-                    handleiOSPrint(true);
-                }
-            }, 4000);
-        }
+          if (proviso) {
+              tl(`但書: ${proviso}`);
+          }
+          tl("");
+          tl("--------------------------------");
+
+          text += ALIGN_LEFT;
+
+          const getDispLen = (str: string) => {
+              let len = 0;
+              for (let i = 0; i < str.length; i++) {
+                  const code = str.charCodeAt(i);
+                  if ((code >= 0x00 && code <= 0x7F) || (code >= 0xFF61 && code <= 0xFF9F)) {
+                      len += 1;
+                  } else {
+                      len += 2;
+                  }
+              }
+              return len;
+          };
+
+          const LINE_LEN = 32;
+          const rightAlignLine = (left: string, right: string) => {
+              const padCount = LINE_LEN - getDispLen(left) - getDispLen(right);
+              if (padCount > 0) {
+                  tl(left + ' '.repeat(padCount) + right);
+              } else {
+                  tl(left + ' ' + right);
+              }
+          };
+
+          cart.forEach(item => {
+              tl(item.name);
+              const leftPart = `  ${item.quantity} x ${item.price.toLocaleString()}`;
+              const rightPart = `${(item.price * item.quantity).toLocaleString()}`;
+              rightAlignLine(leftPart, rightPart);
+          });
+
+          tl("--------------------------------");
+
+          rightAlignLine("小計", `${subTotal.toLocaleString()}`);
+          if (discountVal > 0) {
+              rightAlignLine("値引", `-${discountVal.toLocaleString()}`);
+          }
+          
+          tl("--------------------------------");
+          text += SIZE_LARGE;
+          const largeTotalStr = `¥${totalAmount.toLocaleString()}`;
+          const padCountL = 16 - getDispLen("合計") - getDispLen(largeTotalStr);
+          if (padCountL > 0) {
+              tl("合計" + ' '.repeat(padCountL) + largeTotalStr);
+          } else {
+              tl("合計 " + largeTotalStr);
+          }
+          text += SIZE_NORMAL;
+          tl("--------------------------------");
+
+          if (receiptMode === 'RECEIPT' || receiptMode === 'FORMAL') {
+              const received = parseInt(cashReceived || '0', 10);
+              if (received > 0) {
+                  rightAlignLine("お預かり", `${received.toLocaleString()}`);
+                  const change = received - totalAmount;
+                  rightAlignLine("お釣り", `${change.toLocaleString()}`);
+                  tl("--------------------------------");
+              }
+          }
+
+          tl("");
+          text += ALIGN_CENTER;
+          text += SIZE_LARGE;
+          tl(storeSettings.storeName);
+          text += SIZE_NORMAL;
+          tl(`〒${storeSettings.zipCode}`);
+          tl(storeSettings.address1);
+          if (storeSettings.address2) tl(storeSettings.address2);
+          tl(`電話: ${storeSettings.tel}`);
+          tl(`登録番号: ${storeSettings.registrationNum}`);
+          tl("");
+
+          if (storeSettings.bankName && receiptMode === 'INVOICE') {
+              text += ALIGN_LEFT;
+              tl("【お振込先】");
+              tl(`${storeSettings.bankName} ${storeSettings.branchName}`);
+              tl(`${storeSettings.accountType} ${storeSettings.accountNumber}`);
+              tl(`${storeSettings.accountHolder}`);
+              tl("");
+              text += ALIGN_CENTER;
+          }
+
+          if (receiptMode === 'INVOICE') {
+              tl("ご請求書を送付いたします。");
+          } else if (receiptMode === 'ESTIMATION') {
+              tl("ご検討のほどお願い申し上げます。");
+          } else {
+              tl("毎度ありがとうございます！");
+          }
+          tl("");
+          
+          if (isCopy && storeMemo) {
+              text += ALIGN_LEFT;
+              tl("【店舗メモ】");
+              tl(storeMemo);
+              tl("");
+          }
+
+          // Line feeds and partial cut
+          text += '\n\n\n\n\n\n';
+
+          const encodedData = encodeURIComponent(text);
+          const callbackUrl = encodeURIComponent('https://fukushima.10e.jp/regi/');
+          const scheme = `siiprintagent://1.0/print?Format=text&ErrorDialog=yes&PaperWidth=58&CutType=partial&FitToWidth=yes&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
+
+          window.location.href = scheme;
+
+          if (!isCopy) {
+              setTimeout(() => {
+                  if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
+                      handleiOSPrint(true);
+                  }
+              }, 4000);
+          }
 
       } catch (e: any) {
-        console.error(e);
-        alert(`印刷エラー:\n${e.message}`);
+          console.error(e);
+          alert(`印刷エラー:\n${e.message}`);
       } finally {
-        setIsProcessing(false);
+          setIsProcessing(false);
       }
   };
 
