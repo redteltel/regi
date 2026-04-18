@@ -669,14 +669,16 @@ const App: React.FC = () => {
           }
           
           tl("--------------------------------");
-          text += SIZE_LARGE;
+          // 合計金額: 倍高コマンドで目立たせる (\x1b!\x10)
+          text += '\x1b!\x10';
           const largeTotalStr = `¥${totalAmount.toLocaleString()}`;
-          const padCountL = 16 - getDispLen("合計") - getDispLen(largeTotalStr);
+          const padCountL = 32 - getDispLen("合計") - getDispLen(largeTotalStr); // 32 cols for bold total is not perfectly same, assuming standard font width but double height keeps same width
           if (padCountL > 0) {
               tl("合計" + ' '.repeat(padCountL) + largeTotalStr);
           } else {
               tl("合計 " + largeTotalStr);
           }
+          text += '\x1b!\x00'; // リセット
           text += SIZE_NORMAL;
           tl("--------------------------------");
 
@@ -692,8 +694,10 @@ const App: React.FC = () => {
 
           tl("");
           text += ALIGN_CENTER;
-          text += SIZE_LARGE;
+          // 店名: 倍角・太字コマンド (\x1b!\x30)
+          text += '\x1b!\x30';
           tl(storeSettings.storeName);
+          text += '\x1b!\x00'; // リセット
           text += SIZE_NORMAL;
           tl(`〒${storeSettings.zipCode}`);
           tl(storeSettings.address1);
