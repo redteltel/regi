@@ -224,13 +224,11 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
       const res = await fetchWithRetry(url, {}, 1, 10000);
       const text = await res.text();
       
-      // Use split(/\r?\n/) as requested
-      const lines = text.split(/\r?\n/);
-      if (lines.length < 2) return [];
+      const rows = parseCSV(text);
+      if (rows.length < 2) return [];
       
       // Clean header
-      const headerLine = lines[0].replace(/[\uFEFF\u200B-\u200D]/g, '').trim().toLowerCase();
-      const headers = headerLine.split(',').map(h => h.trim());
+      const headers = rows[0].map(h => h.toLowerCase());
       
       let hasHeader = false;
       let idxName = headers.findIndex(h => h === 'name' || h === 'サービス名' || h === '商品名' || h === '品名');
@@ -245,15 +243,13 @@ export const fetchServiceItems = async (): Promise<Product[]> => {
 
       const items: Product[] = [];
       const startIndex = hasHeader ? 1 : 0;
-      for (let i = startIndex; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          
-          const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      
+      for (let i = startIndex; i < rows.length; i++) {
+          const cols = rows[i];
           if (cols.length <= Math.max(idxName, idxPrice)) continue;
           
-          const name = cols[idxName];
-          let rawPrice = cols[idxPrice] || "0";
+          const name = cols[idxName]?.trim();
+          let rawPrice = cols[idxPrice]?.trim() || "0";
           rawPrice = toHalfWidth(rawPrice).replace(/[",]/g, '');
           const price = parseFloat(rawPrice);
 
