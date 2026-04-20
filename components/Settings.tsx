@@ -67,8 +67,24 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                   <option value="SUNMI">Sunmi (RawBT経由)</option>
               </select>
               <p className="text-[10px] text-gray-500 mt-1">
-                ※ MP-B20: RawBTアプリ経由で印刷します<br/>
-                ※ Sunmi: RawBTアプリ経由で印刷します
+                ※ MP-B20: Android RawBTアプリ経由で印刷します<br/>
+                ※ iOS: 「PDFを共有」ボタンがSII Print Agent経由で印刷します
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 mb-1">
+                Bluetooth アドレス / プリンター名
+                <span className="text-[10px] font-normal text-gray-500 ml-1">(iOS SII Print Agent用・省略可)</span>
+              </label>
+              <input
+                name="bluetoothAddress"
+                value={settings.bluetoothAddress || ''}
+                onChange={handleChange}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white font-mono text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+                placeholder="例: 00:11:22:33:44:55 または Star Micronics"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">
+                ※ iOSの「PDFを共有」→SII Print Agentに渡すBTアドレスまたはプリンター名
               </p>
             </div>
           </div>

@@ -40,12 +40,12 @@ export class PrinterService {
   log(msg: string) { if (this.onLog) this.onLog(msg); console.log(msg); }
 
   // --- RawBT (MP-B20 via Android Intent) ---
-  // Instead of Web Bluetooth, we construct a rawbt: intent URL with base64 data.
-  // This is more stable on Android devices.
-  
+  // Sends ESC/POS data to the RAWBT app via Android URI intent.
+  // Supports multiple URL scheme formats for compatibility across Android versions and PWA modes.
+
   async print(data: Uint8Array, type: PrinterType) {
       if (type === 'BLUETOOTH' || type === 'SUNMI' || type === 'SII_AGENT') {
-          // Convert data to Base64
+          // Convert Uint8Array → binary string → Base64
           let binary = '';
           const len = data.byteLength;
           for (let i = 0; i < len; i++) {
@@ -54,24 +54,66 @@ export class PrinterService {
           const base64 = btoa(binary);
 
           if (type === 'SII_AGENT') {
-              // SII URL Print Agent Scheme
-              // Sending base64 encoded ESC/POS commands
-              window.location.href = `sii-printer-agent://${base64}`;
+              // SII URL Print Agent Scheme (iOS)
+              this.launchRawbt(`sii-printer-agent://${base64}`);
               return;
           }
 
-          // Construct RawBT Intent URL
-          // scheme: rawbt:base64,
-          let intentUrl = `rawbt:base64,${base64}`;
-          
-          // Sunmi specific: Add charset=UTF-8
+          // Sunmi uses rawbt: scheme with UTF-8 charset hint
           if (type === 'SUNMI') {
-              intentUrl += '?charset=UTF-8';
+              console.log('[RAWBT] Launching SUNMI via rawbt: scheme');
+              this.launchRawbt(`rawbt:base64,${base64}?charset=UTF-8`);
+              return;
           }
-          
-          // Open Intent
-          window.location.href = intentUrl;
-          
+
+          // === RAWBT URL Scheme — MP-B20 (BLUETOOTH) ===
+          //
+          // RAWBT (ru.a402d.rawbtprinter) supports the following URI formats:
+          //   Format A: rawbt:base64,<data>
+          //     — Classic format. Most widely supported.
+          //     — Anchor click fires Android intent without navigating PWA.
+          //   Format B: intent://<host>#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end
+          //     — Android explicit intent URL. Useful when Format A is blocked by PWA scope.
+          //     — Does NOT carry base64 payload (RAWBT cannot receive it via this path).
+          //
+          // Strategy:
+          //   1. Try Format A via anchor click (avoids PWA scope navigation issue).
+          //   2. Fall back to Format A via window.location.href (legacy path, may navigate away).
+          //
+          // The intent:// format is intentionally NOT used here because RAWBT reads the ESC/POS
+          // data from the URI's data portion, not from an Intent extra. The rawbt: URI itself
+          // IS the intent data, so anchor click on rawbt:base64,<data> is the correct approach.
+
+          const rawbtUrl = `rawbt:base64,${base64}`;
+          console.log('[RAWBT] rawbtUrl length:', rawbtUrl.length, '| first 80 chars:', rawbtUrl.slice(0, 80));
+
+          // Primary: anchor click (preferred in Android PWA standalone mode)
+          const launched = this.launchRawbt(rawbtUrl);
+          if (!launched) {
+              // Fallback: direct navigation (may work in browser mode, may navigate PWA away)
+              console.log('[RAWBT] anchor click failed, falling back to window.location.href');
+              window.location.href = rawbtUrl;
+          }
+      }
+  }
+
+  // Launch an intent URL via anchor click.
+  // Returns true if the anchor click was dispatched (doesn't guarantee the app opened).
+  // Anchor click is preferred over window.location.href in PWA standalone mode because
+  // it triggers Android's intent resolution without navigating the PWA page itself.
+  private launchRawbt(url: string): boolean {
+      try {
+          console.log('[RAWBT] launchRawbt:', url.slice(0, 120));
+          const a = document.createElement('a');
+          a.href = url;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          return true;
+      } catch (e) {
+          console.error('[RAWBT] launchRawbt error:', e);
+          return false;
       }
   }
 

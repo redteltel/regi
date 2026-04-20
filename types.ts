@@ -50,6 +50,7 @@ export interface StoreSettings {
   serviceSheetName: string; // For Service Items
   // Printer Settings
   printerType: PrinterType;
+  bluetoothAddress?: string; // Optional: BT address for SII Print Agent (iOS)
 }
 
 // SUNMI AIDL Interface

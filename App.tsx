@@ -29,7 +29,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
   spreadsheetName: "DATA",
   sheetName: "品番参照",
   serviceSheetName: "ServiceItems",
-  printerType: "PDF"
+  printerType: "PDF",
+  bluetoothAddress: "BC:31:98:A1:17:12"
 };
 
 // Unique key for this specific app deployment to ensure isolation from other apps on same domain
@@ -394,20 +395,23 @@ const App: React.FC = () => {
     }
 
     if (cart.length === 0) return;
-    
+
     // Detect SUNMI
     // @ts-ignore
     const isSunmi = /(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin);
-    
+
     // SUNMI Logic: Redirect Print Button to PDF Share (Unified Route)
     if (isSunmi) {
         await handleSharePDF();
         return;
     }
 
-    // Create a temporary settings object if it's SUNMI to force the correct printer type
-    const effectiveSettings = isSunmi ? { ...storeSettings, printerType: 'SUNMI' as PrinterType } : storeSettings;
-    
+    // effectiveSettings = storeSettings (isSunmi is always false here)
+    const effectiveSettings = storeSettings;
+
+    console.log('[handlePrint] printerType:', effectiveSettings.printerType);
+    console.log('[handlePrint] userAgent:', navigator.userAgent);
+
     setIsProcessing(true);
     if (navigator.vibrate) navigator.vibrate(50);
 
@@ -461,31 +465,27 @@ const App: React.FC = () => {
     const input = document.getElementById('receipt-preview');
     if (!input) return;
 
-    // Detect SUNMI
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     // @ts-ignore
     const isSunmi = /(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin);
 
     try {
       setIsProcessing(true);
-      if (isSunmi) {
-          setProcessingMessage('印刷プレビューを準備中...\n(しばらくお待ちください)');
-      } else {
-          setProcessingMessage('');
-      }
+      setProcessingMessage(isSunmi ? '印刷プレビューを準備中...\n(しばらくお待ちください)' : '');
 
-      // Wait a bit for UI to update
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      const canvas = await html2canvas(input, { 
-          scale: isSunmi ? 2 : 3, // Lower scale for SUNMI to prevent memory issues/timeout
+      const scale = isSunmi ? 2 : 2;
+
+      const canvas = await html2canvas(input, {
+          scale,
           useCORS: true,
           backgroundColor: '#ffffff',
           // @ts-ignore
-          timeout: 60000, // Extend timeout to 60s for safety
+          timeout: 60000,
           onclone: (document) => {
               const element = document.getElementById('receipt-preview');
               if (element) {
-                  // Force layout to match MP-B20 effective print width (384 dots)
                   element.style.width = '384px';
                   element.style.minWidth = '384px';
                   element.style.maxWidth = '384px';
@@ -493,20 +493,18 @@ const App: React.FC = () => {
                   element.style.color = '#000000';
                   element.style.margin = '0';
                   element.style.padding = '0';
-                  
-                  // Apply strict padding for safety margin (Right 2mm ~ 16px)
+
                   const receipts = element.querySelectorAll('.bg-white.text-black');
                   receipts.forEach((r: any) => {
                       r.style.width = '100%';
                       r.style.padding = '0';
                       r.style.paddingLeft = '0';
-                      r.style.paddingRight = '16px'; // ~2mm safety margin
+                      r.style.paddingRight = '16px';
                       r.style.paddingBottom = '10px';
                       r.style.marginBottom = '0';
                       r.style.boxSizing = 'border-box';
                   });
 
-                  // Force Bold & Black & No Smoothing
                   const all = element.getElementsByTagName('*');
                   for (let i = 0; i < all.length; i++) {
                       const el = all[i] as HTMLElement;
@@ -519,237 +517,131 @@ const App: React.FC = () => {
               }
           }
       });
-      const imgData = canvas.toDataURL('image/png');
-      
-      const paperWidth = 58;
-      const printWidth = 48;
-      const margin = (paperWidth - printWidth) / 2;
 
-      const imgProps = canvas;
-      const pdfHeight = (imgProps.height * printWidth) / imgProps.width;
+      // JPEG 品質 0.8 で PNG より大幅にサイズ削減
+      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const paperWidth = 58;
+      const pdfHeight = (canvas.height * paperWidth) / canvas.width;
 
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [paperWidth, pdfHeight]
+        format: [paperWidth, pdfHeight],
+        compress: true,
       });
+      pdf.addImage(imgData, 'JPEG', 0, 0, paperWidth, pdfHeight, '', 'FAST');
 
-      pdf.addImage(imgData, 'PNG', margin, 0, printWidth, pdfHeight);
-      
       const pdfBlob = pdf.output('blob');
       const fileName = `receipt_${new Date().getTime()}.pdf`;
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Receipt',
-          text: 'Here is your receipt.',
-        });
+      console.log('[PDF] blob size:', pdfBlob.size, 'bytes, isIOS:', isIOS);
+
+      if (isIOS) {
+        // Blob URL を直接新規タブで開く → ブラウザのネイティブ PDF ビューアが表示され
+        // ツールバーの共有ボタンから SII Print Agent を選択できる
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        const newTab = window.open(blobUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        if (!newTab) {
+          // ポップアップブロック時フォールバック
+          window.location.href = blobUrl;
+        }
+      } else if (navigator.canShare?.({ files: [file] })) {
+        // Android / Mac Safari など Web Share API (files) 対応ブラウザ
+        await navigator.share({ files: [file], title: 'レシート' });
       } else {
-        // Fallback to download
+        // デスクトップ Chrome / Firefox など
         pdf.save(fileName);
       }
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('PDF生成または共有に失敗しました。');
+    } catch (error: any) {
+      console.error('PDF error:', error);
+      alert(`エラー詳細:\n${error?.message || String(error)}\n${error?.stack?.slice(0, 200) || ''}`);
     } finally {
       setIsProcessing(false);
       setProcessingMessage('');
     }
   };
 
-  const handleiOSPrint = async (isCopy = false) => {
+  const handleSIIPrint = async (isCopy = false) => {
+      const input = document.getElementById('receipt-preview');
+      if (!input) return;
       setIsProcessing(true);
       try {
-          // ESC/POS Commands
-          const ESC = '\x1b';
-          const GS = '\x1d';
-          const ALIGN_LEFT = ESC + 'a0';
-          const ALIGN_CENTER = ESC + 'a1';
-          const ALIGN_RIGHT = ESC + 'a2';
-          const SIZE_NORMAL = GS + '!\x00';
-          const SIZE_LARGE = GS + '!\x11'; // Double width & height
+          await new Promise(resolve => setTimeout(resolve, 100));
 
-          let text = "";
-          const tl = (str: string) => { text += str + '\n'; };
-
-          text += ESC + '@'; // Init printer
-          text += ALIGN_CENTER;
-
-          if (isCopy) {
-              tl("« 店 舗 控 »");
-              tl("--------------------------------");
-          }
-
-          let title = "領　収　証";
-          if (receiptMode === 'INVOICE') title = "請　求　書";
-          if (receiptMode === 'ESTIMATION') title = "御 見 積 書";
-
-          text += SIZE_LARGE;
-          tl(title);
-          text += SIZE_NORMAL;
-          tl("");
-
-          text += ALIGN_LEFT;
-          const now = new Date();
-          tl(`${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`);
-          tl("");
-
-          const rName = recipientName || '　　　　　　　　　　';
-          text += SIZE_LARGE;
-          tl(`${rName} 様`);
-          text += SIZE_NORMAL;
-          tl("");
-
-          text += ALIGN_CENTER;
-          tl("下 記 の 通 り");
-          if (receiptMode === 'RECEIPT' || receiptMode === 'FORMAL') {
-              tl("領 収 い た し ま し た");
-          } else if (receiptMode === 'INVOICE') {
-              tl("ご 請 求 申 し 上 げ ま す");
-          } else {
-              tl("御 見 積 申 し 上 げ ま す");
-          }
-          tl("");
-
-          text += SIZE_LARGE;
-          tl(`¥ ${totalAmount.toLocaleString()}-`);
-          text += SIZE_NORMAL;
-
-          if (receiptMode === 'RECEIPT' || receiptMode === 'FORMAL') {
-              tl(`(内消費税等 ¥ ${finalTax.toLocaleString()})`);
-          } else if (receiptMode === 'INVOICE') {
-              tl(`(内消費税等 ¥ ${initialTax.toLocaleString()})`);
-          }
-
-          if (proviso) {
-              tl(`但書: ${proviso}`);
-          }
-          tl("");
-          tl("--------------------------------");
-
-          text += ALIGN_LEFT;
-
-          const getDispLen = (str: string) => {
-              let len = 0;
-              for (let i = 0; i < str.length; i++) {
-                  const code = str.charCodeAt(i);
-                  if ((code >= 0x00 && code <= 0x7F) || (code >= 0xFF61 && code <= 0xFF9F)) {
-                      len += 1;
-                  } else {
-                      len += 2;
+          const canvas = await html2canvas(input, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: '#ffffff',
+              // @ts-ignore
+              timeout: 60000,
+              onclone: (document) => {
+                  const element = document.getElementById('receipt-preview');
+                  if (element) {
+                      element.style.width = '384px';
+                      element.style.minWidth = '384px';
+                      element.style.maxWidth = '384px';
+                      element.style.backgroundColor = '#ffffff';
+                      element.style.color = '#000000';
+                      element.style.margin = '0';
+                      element.style.padding = '0';
+                      const receipts = element.querySelectorAll('.bg-white.text-black');
+                      receipts.forEach((r: any) => {
+                          r.style.width = '100%';
+                          r.style.padding = '0';
+                          r.style.paddingRight = '16px';
+                          r.style.paddingBottom = '10px';
+                          r.style.boxSizing = 'border-box';
+                      });
+                      const all = element.getElementsByTagName('*');
+                      for (let i = 0; i < all.length; i++) {
+                          const el = all[i] as HTMLElement;
+                          el.style.fontWeight = 'bold';
+                          el.style.color = '#000000';
+                          // @ts-ignore
+                          el.style.webkitFontSmoothing = 'none';
+                          el.style.overflowWrap = 'break-word';
+                      }
                   }
               }
-              return len;
-          };
-
-          const LINE_LEN = 32;
-          const rightAlignLine = (left: string, right: string) => {
-              const padCount = LINE_LEN - getDispLen(left) - getDispLen(right);
-              if (padCount > 0) {
-                  tl(left + ' '.repeat(padCount) + right);
-              } else {
-                  tl(left + ' ' + right);
-              }
-          };
-
-          cart.forEach(item => {
-              tl(item.name);
-              const leftPart = `  ${item.quantity} x ${item.price.toLocaleString()}`;
-              const rightPart = `${(item.price * item.quantity).toLocaleString()}`;
-              rightAlignLine(leftPart, rightPart);
           });
 
-          tl("--------------------------------");
+          const imgData = canvas.toDataURL('image/jpeg', 0.8);
+          const paperWidth = 58;
+          const pdfHeight = (canvas.height * paperWidth) / canvas.width;
 
-          rightAlignLine("小計", `${subTotal.toLocaleString()}`);
-          if (discountVal > 0) {
-              rightAlignLine("値引", `-${discountVal.toLocaleString()}`);
-          }
-          
-          tl("--------------------------------");
-          // 合計金額: 倍高コマンドで目立たせる (\x1b!\x10)
-          text += '\x1b!\x10';
-          const largeTotalStr = `¥${totalAmount.toLocaleString()}`;
-          const padCountL = 32 - getDispLen("合計") - getDispLen(largeTotalStr); // 32 cols for bold total is not perfectly same, assuming standard font width but double height keeps same width
-          if (padCountL > 0) {
-              tl("合計" + ' '.repeat(padCountL) + largeTotalStr);
-          } else {
-              tl("合計 " + largeTotalStr);
-          }
-          text += '\x1b!\x00'; // リセット
-          text += SIZE_NORMAL;
-          tl("--------------------------------");
+          const pdf = new jsPDF({
+              orientation: 'portrait',
+              unit: 'mm',
+              format: [paperWidth, pdfHeight],
+              compress: true,
+          });
+          pdf.addImage(imgData, 'JPEG', 0, 0, paperWidth, pdfHeight, '', 'FAST');
 
-          if (receiptMode === 'RECEIPT' || receiptMode === 'FORMAL') {
-              const received = parseInt(cashReceived || '0', 10);
-              if (received > 0) {
-                  rightAlignLine("お預かり", `${received.toLocaleString()}`);
-                  const change = received - totalAmount;
-                  rightAlignLine("お釣り", `${change.toLocaleString()}`);
-                  tl("--------------------------------");
-              }
-          }
-
-          tl("");
-          text += ALIGN_CENTER;
-          // 店名: 倍角・太字コマンド (\x1b!\x30)
-          text += '\x1b!\x30';
-          tl(storeSettings.storeName);
-          text += '\x1b!\x00'; // リセット
-          text += SIZE_NORMAL;
-          tl(`〒${storeSettings.zipCode}`);
-          tl(storeSettings.address1);
-          if (storeSettings.address2) tl(storeSettings.address2);
-          tl(`電話: ${storeSettings.tel}`);
-          tl(`登録番号: ${storeSettings.registrationNum}`);
-          tl("");
-
-          if (storeSettings.bankName && receiptMode === 'INVOICE') {
-              text += ALIGN_LEFT;
-              tl("【お振込先】");
-              tl(`${storeSettings.bankName} ${storeSettings.branchName}`);
-              tl(`${storeSettings.accountType} ${storeSettings.accountNumber}`);
-              tl(`${storeSettings.accountHolder}`);
-              tl("");
-              text += ALIGN_CENTER;
-          }
-
-          if (receiptMode === 'INVOICE') {
-              tl("ご請求書を送付いたします。");
-          } else if (receiptMode === 'ESTIMATION') {
-              tl("ご検討のほどお願い申し上げます。");
-          } else {
-              tl("毎度ありがとうございます！");
-          }
-          tl("");
-          
-          if (isCopy && storeMemo) {
-              text += ALIGN_LEFT;
-              tl("【店舗メモ】");
-              tl(storeMemo);
-              tl("");
-          }
-
-          // Line feeds and partial cut
-          text += '\n\n\n\n\n\n';
-
-          // Base64 encode the string as requested by the user
-          // utf8 to base64
-          const utf8Text = unescape(encodeURIComponent(text));
-          const base64Data = btoa(utf8Text);
-          const encodedData = encodeURIComponent(base64Data);
+          // Base64 data (without data URI prefix)
+          const pdfBase64 = pdf.output('datauristring').split(',')[1];
+          console.log('[SII] PDF base64 size:', Math.round(pdfBase64.length / 1024), 'KB (iOS limit: ~750KB)');
 
           const callbackUrl = encodeURIComponent('https://fukushima.10e.jp/regi/');
-          const scheme = `siiprintagent://1.0/print?Format=text&ErrorDialog=yes&CallbackSuccess=${callbackUrl}&Data=${encodedData}`;
+          const url = 'siiprintagent://1.0/print?' +
+              'CallbackSuccess=' + callbackUrl + '&' +
+              'CallbackFail=' + callbackUrl + '&' +
+              'BtKeepConnect=always&' +
+              'Format=pdf&' +
+              'Data=' + encodeURIComponent(pdfBase64) + '&' +
+              'SelectOnError=yes&' +
+              'CutType=full&' +
+              'CutFeed=yes&' +
+              'FitToWidth=yes&' +
+              'PaperWidth=58';
 
-          window.location.href = scheme;
+          location.href = url;
 
           if (!isCopy) {
               setTimeout(() => {
                   if (window.confirm("お客様用を印刷しました。続けて店舗控えを印刷しますか？")) {
-                      handleiOSPrint(true);
+                      handleSIIPrint(true);
                   }
               }, 4000);
           }
@@ -1252,55 +1144,70 @@ const App: React.FC = () => {
             {/* Footer */}
             <div className="w-full shrink-0 bg-white p-4 pb-10 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] rounded-t-2xl z-30 sticky bottom-0">
               <div className="flex gap-3">
-                  {/* iOS Buttons */}
-                  {/iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream ? (
+                  {/* @ts-ignore */}
+                  {(/(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin)) ? (
+                      /* SUNMI Device */
+                      <button
+                        onClick={handlePrint}
+                        className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
+                      >
+                        <Printer size={20} />
+                        印刷
+                      </button>
+                  ) : /iPhone|iPad|iPod/i.test(navigator.userAgent) ? (
+                      /* iOS: SII URL Print Agent */
                       <>
-                        <button 
+                        <button
                           onClick={handleSharePDF}
-                          className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-500 text-white"
+                          className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-600 text-white"
                         >
                           <Share size={20} />
                           PDFを共有
                         </button>
-                        <button 
-                          onClick={() => handleiOSPrint(false)}
+                        <button
+                          onClick={() => handleSIIPrint(false)}
                           className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-black text-white"
                         >
                           <Printer size={20} />
                           印刷
                         </button>
                       </>
+                  ) : /Android/i.test(navigator.userAgent) ? (
+                      /* Android: printerType に基づいてルーティング (RAWBT / PDF) */
+                      <>
+                        <button
+                          onClick={handleSharePDF}
+                          className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-600 text-white"
+                        >
+                          <Share size={20} />
+                          PDF/共有
+                        </button>
+                        <button
+                          onClick={handlePrint}
+                          className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
+                        >
+                          <Printer size={20} />
+                          印刷
+                        </button>
+                      </>
                   ) : (
-                      /* Android / PC Buttons */
-                      // @ts-ignore
-                      (/(SUNMI|V2)/i.test(navigator.userAgent) || (window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.SunmiPrinterPlugin)) ? (
-                          /* SUNMI Device: Only Print Button */
-                          <button 
+                      /* PC / その他 */
+                      <>
+                          <button
+                            onClick={handleSharePDF}
+                            className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-700 text-white"
+                          >
+                            <Share size={20} />
+                            PDF/共有
+                          </button>
+                          <button
                             onClick={handlePrint}
                             className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
                           >
                             <Printer size={20} />
                             印刷
                           </button>
-                      ) : (
-                          /* Standard Android / PC Buttons */
-                          <>
-                              <button 
-                                onClick={handleSharePDF}
-                                className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-gray-700 text-white"
-                              >
-                                <Share size={20} />
-                                PDF/共有
-                              </button>
-                              <button 
-                                onClick={handlePrint}
-                                className="flex-1 py-4 rounded-xl font-bold text-lg shadow-xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-blue-600 text-white"
-                              >
-                                <Printer size={20} />
-                                印刷
-                              </button>
-                          </>
-                      )
+                      </>
                   )}
               </div>
             </div>
