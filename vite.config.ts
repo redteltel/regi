@@ -16,7 +16,19 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'DATA.csv'],
+        // DATA.csv と ServiceItems.csv をキャッシュ対象から除外
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        workbox: {
+          // CSVファイルはService Workerのキャッシュから完全に除外
+          globIgnores: ['**/*.csv'],
+          // ネットワーク優先: CSVは常にサーバーから最新を取得
+          runtimeCaching: [
+            {
+              urlPattern: /\.csv(\?.*)?$/,
+              handler: 'NetworkOnly',
+            },
+          ],
+        },
         manifest: {
           name: 'パナランドフクシマ',
           short_name: 'Pixel POS',
