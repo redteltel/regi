@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Product, StoreSettings } from '../types';
+import { Product } from '../types';
 import { searchProduct, fetchServiceItems, updateSheetItem } from '../services/sheetService';
 import { X, Search, Save, Plus, Loader2, Edit2, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface MasterEditorProps {
   isOpen: boolean;
   onClose: () => void;
-  settings: StoreSettings;
   isDemoMode?: boolean;
 }
 
 type Tab = 'PRODUCT' | 'SERVICE';
 
-const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, settings, isDemoMode = false }) => {
+const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, isDemoMode = false }) => {
   const [activeTab, setActiveTab] = useState<Tab>('PRODUCT');
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Product[]>([]);
@@ -92,18 +91,14 @@ const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, settings, 
 
       setUpdating(true);
       try {
-          const targetSheetName = activeTab === 'PRODUCT' ? settings.sheetName : settings.serviceSheetName;
-          
           await updateSheetItem({
-              spreadsheetId: settings.spreadsheetId,
-              sheetName: targetSheetName,
               id: editForm.id,
               name: editForm.name,
               price: editForm.price,
               action: 'UPDATE'
           });
 
-          alert("保存しました。反映には数秒かかる場合があります。");
+          alert("メモリキャッシュを更新しました。\nDATA.csvへの永続的な変更はサーバー上で手動編集が必要です。");
           setEditingItem(null);
           loadItems(); // Reload list
       } catch (e: any) {
@@ -279,7 +274,7 @@ const MasterEditor: React.FC<MasterEditorProps> = ({ isOpen, onClose, settings, 
                       {isDemoMode ? (
                           <span className="text-orange-400">デモモード: データの保存は無効化されています。</span>
                       ) : (
-                          <>変更はGoogleスプレッドシートに直接反映されます。<br/>GASのデプロイが必要です。</>
+                          <>メモリキャッシュのみ更新されます。<br/>永続的な変更はサーバー上の DATA.csv を直接編集してください。</>
                       )}
                   </div>
               </div>

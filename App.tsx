@@ -24,11 +24,6 @@ const DEFAULT_SETTINGS: StoreSettings = {
   accountType: "普通",
   accountNumber: "0088477",
   accountHolder: "フクシマ カズヒコ",
-  // Spreadsheet Defaults
-  spreadsheetId: "1t0V0t5qpkL2zNZjHWPj_7ZRsxRXuzfrXikPGgqKDL_k",
-  spreadsheetName: "DATA",
-  sheetName: "品番参照",
-  serviceSheetName: "ServiceItems",
   printerType: "PDF",
   bluetoothAddress: "BC:31:98:A1:17:12"
 };
@@ -50,10 +45,6 @@ const isDemoMode = window.location.pathname.includes('/demo-regi/');
 const DEMO_DEFAULT_SETTINGS: StoreSettings = {
   ...DEFAULT_SETTINGS,
   storeName: "デモ店舗 (パナランド)",
-  spreadsheetId: "11ROHRTwszS3amhW0m-6n1UM8QmMNsgmK9bcDtTfOS14",
-  spreadsheetName: "デモデータ",
-  sheetName: "品番参照",
-  serviceSheetName: "ServiceItems"
 };
 
 const CURRENT_DEFAULT_SETTINGS = isDemoMode ? DEMO_DEFAULT_SETTINGS : DEFAULT_SETTINGS;
@@ -238,18 +229,8 @@ const App: React.FC = () => {
   }, [cart, discount, cashReceived, isCashManuallyEdited, receiptMode, recipientName, proviso, paymentDeadline, storeMemo, appState]);
 
   const handleSaveSettings = (newSettings: StoreSettings) => {
-      // Check if spreadsheet settings changed
-      const prevId = storeSettings.spreadsheetId;
-      const prevSheet = storeSettings.sheetName;
-      const prevServiceSheet = storeSettings.serviceSheetName;
-      
       setStoreSettings(newSettings);
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
-
-      if (prevId !== newSettings.spreadsheetId || prevSheet !== newSettings.sheetName || prevServiceSheet !== newSettings.serviceSheetName) {
-          clearCache();
-          loadAllData(); // Reload all data from new sheet
-      }
   };
 
   // Update proviso default when entering preview
@@ -1266,10 +1247,9 @@ const App: React.FC = () => {
          isDemoMode={isDemoMode}
       />
 
-      <MasterEditor 
+      <MasterEditor
         isOpen={showMasterEditor}
         onClose={() => setShowMasterEditor(false)}
-        settings={storeSettings}
         isDemoMode={isDemoMode}
       />
 

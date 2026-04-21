@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StoreSettings } from '../types';
-import { X, Save, Store, Landmark, FileSpreadsheet, Edit2, Printer } from 'lucide-react';
+import { X, Save, Store, Landmark, FileText, Edit2, Printer } from 'lucide-react';
 
 interface SettingsProps {
   isOpen: boolean;
@@ -163,67 +163,24 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
             </div>
           </div>
 
-          {/* Spreadsheet Info Section */}
+          {/* Master Data Section */}
           <div className="space-y-4">
              <h3 className="text-sm font-bold text-secondary flex items-center gap-2 border-b border-gray-800 pb-2">
-                <FileSpreadsheet size={16} /> データソース設定
+                <FileText size={16} /> マスターデータ
             </h3>
-            
-            <button 
+
+            <button
                 onClick={onOpenMasterEditor}
-                className="w-full bg-gray-800 border border-gray-700 text-secondary py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors mb-4"
+                className="w-full bg-gray-800 border border-gray-700 text-secondary py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors"
             >
                 <Edit2 size={18} />
                 マスターデータを編集
             </button>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-400 mb-1">スプレッドシートID {isDemoMode && <span className="text-red-400 text-[10px]">(デモ版は変更不可)</span>}</label>
-              <input
-                name="spreadsheetId"
-                value={settings.spreadsheetId || ''}
-                onChange={handleChange}
-                disabled={isDemoMode}
-                className={`w-full border border-gray-700 rounded-lg p-3 text-white font-mono text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all break-all ${isDemoMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-900'}`}
-                placeholder="1abc...xyz"
-              />
-              <p className="text-[10px] text-gray-500 mt-1">※URLの /d/ と /edit の間の文字列</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-1">
-                    <label className="block text-xs font-bold text-gray-400 mb-1">ブック名 (表示用)</label>
-                    <input
-                        name="spreadsheetName"
-                        value={settings.spreadsheetName || ''}
-                        onChange={handleChange}
-                        disabled={isDemoMode}
-                        className={`w-full border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all ${isDemoMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-900'}`}
-                        placeholder="DATA"
-                    />
-                </div>
-                <div className="col-span-1">
-                     <label className="block text-xs font-bold text-gray-400 mb-1">シート名 (品番参照)</label>
-                    <input
-                        name="sheetName"
-                        value={settings.sheetName || ''}
-                        onChange={handleChange}
-                        disabled={isDemoMode}
-                        className={`w-full border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all ${isDemoMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-900'}`}
-                        placeholder="品番参照"
-                    />
-                </div>
-                <div className="col-span-1">
-                     <label className="block text-xs font-bold text-gray-400 mb-1">シート名 (サービス)</label>
-                    <input
-                        name="serviceSheetName"
-                        value={settings.serviceSheetName || ''}
-                        onChange={handleChange}
-                        disabled={isDemoMode}
-                        className={`w-full border border-gray-700 rounded-lg p-3 text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all ${isDemoMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-900'}`}
-                        placeholder="ServiceItems"
-                    />
-                </div>
-            </div>
+            <p className="text-[10px] text-gray-500">
+              ※ 商品データは VPS 上の DATA.csv、サービス項目は ServiceItems.csv で管理しています。<br/>
+              アプリ内の編集はメモリキャッシュのみ更新されます。永続的な変更はサーバー上のCSVを直接編集してください。
+            </p>
           </div>
 
           {/* Bank Info Section */}

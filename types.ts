@@ -43,11 +43,6 @@ export interface StoreSettings {
   accountType: string;
   accountNumber: string;
   accountHolder: string;
-  // Spreadsheet Settings
-  spreadsheetId: string;
-  spreadsheetName: string; // Just for display/memo
-  sheetName: string; // For Product DB
-  serviceSheetName: string; // For Service Items
   // Printer Settings
   printerType: PrinterType;
   bluetoothAddress?: string; // Optional: BT address for SII Print Agent (iOS)
