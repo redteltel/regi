@@ -64,7 +64,6 @@ type PrinterType = 'PDF' | 'BLUETOOTH' | 'SUNMI' | 'SII_AGENT'
 interface StoreSettings {
   storeName, zipCode, address1, address2, tel, registrationNum,
   bankName, branchName, accountType, accountNumber, accountHolder,
-  spreadsheetId, spreadsheetName, sheetName, serviceSheetName,
   printerType, bluetoothAddress?
 }
 ```
@@ -95,6 +94,21 @@ bash deploy.sh
 2. `npm install && npm run build`
 3. `dist/` の所有権を `nginx:nginx` に変更
 4. SELinux コンテキスト (`httpd_sys_content_t`) を適用
+
+### Claude がビルドする場合の手順
+
+```bash
+# 1. dist/ 権限を一時的に戻す
+sudo chown -R redteltel:redteltel /var/www/regi/dist
+# 2. ビルド
+cd /var/www/regi && npm run build
+# 3. nginx 用に権限を戻す
+sudo chown -R nginx:nginx /var/www/regi/dist && sudo restorecon -R /var/www/regi/dist
+# 4. GitHub へプッシュ
+git add <変更ファイル> && git commit -m "..." && git push origin main
+```
+
+**ビルド後は必ず GitHub へ push すること。**
 
 ---
 
@@ -141,7 +155,7 @@ TEL: 0969-24-0218
 `/demo-regi/` パスでアクセスすると自動的にデモモードになる。
 - 背景色が濃紺 (`#0a192f`) に変わる
 - `localStorage` キーが `pixelpos_config_demo` / `pixelpos_autosave_demo` に分離
-- 別の Spreadsheet ID (デモ用) を使用
+- デモ専用のデフォルト店舗名を使用 (商品データは同じ CSV)
 
 ---
 
