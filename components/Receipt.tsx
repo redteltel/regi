@@ -98,11 +98,11 @@ const Receipt: React.FC<ReceiptProps> = ({
               </div>
           )}
 
-          <div className="bg-gray-100 py-3 px-2 text-center mb-2">
+          <div className="border-2 border-black py-3 px-2 text-center mb-2">
             <span className="text-base mr-2">
                 {mode === 'INVOICE' ? 'ご請求金額' : mode === 'ESTIMATION' ? '御見積金額' : '金額'}
             </span>
-            <span className="text-5xl font-bold tracking-wider block mt-1 border-b-4 border-black">
+            <span className="text-5xl font-bold tracking-wider block mt-1">
                 ¥ {total.toLocaleString()} -
             </span>
           </div>
