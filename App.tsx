@@ -412,6 +412,12 @@ const App: React.FC = () => {
     console.log('[handlePrint] printerType:', effectiveSettings.printerType);
     console.log('[handlePrint] userAgent:', navigator.userAgent);
 
+    // SII_AGENT: use handleSIIPrint on both iOS and Android
+    if (effectiveSettings.printerType === 'SII_AGENT') {
+        await handleSIIPrint(false);
+        return;
+    }
+
     setIsProcessing(true);
     if (navigator.vibrate) navigator.vibrate(50);
 

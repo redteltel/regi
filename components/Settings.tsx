@@ -65,10 +65,11 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onSave, initialSet
                   <option value="PDF">標準 (PDF/共有)</option>
                   <option value="BLUETOOTH">MP-B20 (RawBT経由)</option>
                   <option value="SUNMI">Sunmi (RawBT経由)</option>
+                  <option value="SII_AGENT">SII Print Agent (iOS/Android)</option>
               </select>
               <p className="text-[10px] text-gray-500 mt-1">
                 ※ MP-B20: Android RawBTアプリ経由で印刷します<br/>
-                ※ iOS: 「PDFを共有」ボタンがSII Print Agent経由で印刷します
+                ※ SII Print Agent: iOS・AndroidともSII Print Agentアプリ経由で印刷します
               </p>
             </div>
             <div>
