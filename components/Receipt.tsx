@@ -70,10 +70,10 @@ const Receipt: React.FC<ReceiptProps> = ({
         </h2>
         {mode === 'INVOICE' && <p className="text-lg font-bold mb-1 tracking-wide">(INVOICE)</p>}
         {mode === 'ESTIMATION' && <p className="text-lg font-bold mb-1 tracking-wide">(ESTIMATION)</p>}
-        <p className="text-gray-500 text-sm text-right">
+        <p className="text-gray-500 text-base text-right">
           No. {new Date().toISOString().slice(0,10).replace(/-/g,'')}-{new Date().getHours()}{new Date().getMinutes()}
         </p>
-        <p className="text-gray-500 text-sm text-right">
+        <p className="text-gray-500 text-base text-right">
           {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
         </p>
       </div>
@@ -145,7 +145,7 @@ const Receipt: React.FC<ReceiptProps> = ({
 
             {/* Part Number Display */}
             {item.partNumber && (
-                <span className="text-sm text-gray-500 tracking-tight mb-0.5 break-all">
+                <span className="text-base text-gray-500 tracking-tight mb-0.5 break-all">
                   (品番: {item.partNumber})
                 </span>
             )}
@@ -190,7 +190,7 @@ const Receipt: React.FC<ReceiptProps> = ({
         )}
 
         {discount > 0 && finalTax !== undefined && (
-             <div className="text-right text-sm text-gray-500 mt-1">
+             <div className="text-right text-base text-gray-500 mt-1">
                 (内消費税等: {finalTax.toLocaleString()}円)
              </div>
         )}

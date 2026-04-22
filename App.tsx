@@ -671,12 +671,14 @@ const App: React.FC = () => {
               margin: 0;
               padding: 0;
               width: 100%;
-              font-family: monospace;
+              font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', monospace;
+              font-size: 16px;
+              line-height: 1.6;
             }
             #receipt-container {
                 width: 58mm; /* MP-B20 width */
                 margin: 0 auto;
-                padding: 0;
+                padding: 2mm;
             }
             /* Force white background and black text */
             .bg-white { background-color: white !important; }
@@ -698,14 +700,15 @@ const App: React.FC = () => {
             .border-t-8 { border-top-width: 4px !important; }
 
             /* Adjust font sizes for 58mm paper */
-            .text-sm { font-size: 11px !important; }
-            .text-xs { font-size: 9px !important; }
-            .text-base { font-size: 12px !important; }
-            .text-lg { font-size: 14px !important; }
-            .text-xl { font-size: 16px !important; }
-            .text-2xl { font-size: 18px !important; }
-            .text-4xl { font-size: 24px !important; }
-            .text-5xl { font-size: 28px !important; }
+            .text-xs  { font-size: 12px !important; line-height: 1.5 !important; }
+            .text-sm  { font-size: 14px !important; line-height: 1.5 !important; }
+            .text-base{ font-size: 16px !important; line-height: 1.5 !important; }
+            .text-lg  { font-size: 18px !important; line-height: 1.6 !important; }
+            .text-xl  { font-size: 21px !important; line-height: 1.6 !important; }
+            .text-2xl { font-size: 24px !important; line-height: 1.5 !important; }
+            .text-3xl { font-size: 28px !important; line-height: 1.4 !important; }
+            .text-4xl { font-size: 30px !important; line-height: 1.3 !important; }
+            .text-5xl { font-size: 36px !important; line-height: 1.2 !important; }
             
             @media print {
               @page { margin: 0; }
