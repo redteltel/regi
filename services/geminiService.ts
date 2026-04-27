@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-const MODEL_NAME = 'gemini-1.5-flash';
+const MODEL_NAME = 'gemini-2.5-flash';
 
 // Helper to strip Markdown code blocks
 const cleanJsonString = (text: string): string => {
