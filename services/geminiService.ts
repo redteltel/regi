@@ -1,8 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ScannedResult } from '../types';
 
-// Using gemini-3-flash-preview for speed
-const MODEL_NAME = 'gemini-3-flash-preview';
+const MODEL_NAME = 'gemini-2.0-flash';
 
 // Helper to strip Markdown code blocks
 const cleanJsonString = (text: string): string => {
