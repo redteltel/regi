@@ -6,7 +6,8 @@ import MasterEditor from './components/MasterEditor';
 import { AppState, CartItem, Product, PrinterStatus, StoreSettings, PrinterType } from './types';
 import { printerService } from './services/printerService';
 import { fetchServiceItems, isProductKnown, logUnknownItem, clearCache, preloadDatabase } from './services/sheetService';
-import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon } from 'lucide-react';
+import { savePdfToFolder } from './services/pdfFolderService';
+import { Bluetooth, Camera as CameraIcon, ShoppingCart, Printer, Plus, Minus, Share, ChevronLeft, Home, Loader2, FileText, Receipt as ReceiptIcon, ListPlus, X, RefreshCw, Settings as SettingsIcon, FolderDown } from 'lucide-react';
 import { LOGO_URL } from './logoData';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -544,6 +545,87 @@ const App: React.FC = () => {
     } catch (error: any) {
       console.error('PDF error:', error);
       alert(`エラー詳細:\n${error?.message || String(error)}\n${error?.stack?.slice(0, 200) || ''}`);
+    } finally {
+      setIsProcessing(false);
+      setProcessingMessage('');
+    }
+  };
+
+  const handleSavePDFToFolder = async () => {
+    const input = document.getElementById('receipt-preview');
+    if (!input) return;
+
+    try {
+      setIsProcessing(true);
+      setProcessingMessage('PDF保存中...');
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(input, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        // @ts-ignore
+        timeout: 60000,
+        onclone: (document) => {
+          const element = document.getElementById('receipt-preview');
+          if (element) {
+            element.style.width = '384px';
+            element.style.minWidth = '384px';
+            element.style.maxWidth = '384px';
+            element.style.backgroundColor = '#ffffff';
+            element.style.color = '#000000';
+            element.style.margin = '0';
+            element.style.padding = '0';
+
+            const receipts = element.querySelectorAll('.bg-white.text-black');
+            receipts.forEach((r: any) => {
+              r.style.width = '100%';
+              r.style.padding = '0';
+              r.style.paddingLeft = '0';
+              r.style.paddingRight = '16px';
+              r.style.paddingBottom = '10px';
+              r.style.marginBottom = '0';
+              r.style.boxSizing = 'border-box';
+            });
+
+            const all = element.getElementsByTagName('*');
+            for (let i = 0; i < all.length; i++) {
+              const el = all[i] as HTMLElement;
+              el.style.fontWeight = 'bold';
+              el.style.color = '#000000';
+              // @ts-ignore
+              el.style.webkitFontSmoothing = 'none';
+              el.style.overflowWrap = 'break-word';
+            }
+          }
+        }
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const paperWidth = 58;
+      const pdfHeight = (canvas.height * paperWidth) / canvas.width;
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [paperWidth, pdfHeight],
+        compress: true,
+      });
+      pdf.addImage(imgData, 'JPEG', 0, 0, paperWidth, pdfHeight, '', 'FAST');
+
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      const fileName = `receipt_${hhmm}.pdf`;
+      const pdfBlob = pdf.output('blob');
+
+      const savedPath = await savePdfToFolder(pdfBlob, fileName);
+      alert(`PDFを保存しました:\n${savedPath}`);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        console.error('PDF保存エラー:', error);
+        alert(`PDF保存エラー:\n${error?.message || String(error)}`);
+      }
     } finally {
       setIsProcessing(false);
       setProcessingMessage('');
@@ -1200,6 +1282,13 @@ const App: React.FC = () => {
                       </>
                   )}
               </div>
+              <button
+                onClick={handleSavePDFToFolder}
+                className="w-full mt-2 py-3 rounded-xl font-bold text-base shadow active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-green-700 text-white"
+              >
+                <FolderDown size={18} />
+                PDFをフォルダに保存
+              </button>
             </div>
           </div>
         );
