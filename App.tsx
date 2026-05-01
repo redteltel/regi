@@ -1282,13 +1282,15 @@ const App: React.FC = () => {
                       </>
                   )}
               </div>
-              <button
-                onClick={handleSavePDFToFolder}
-                className="w-full mt-2 py-3 rounded-xl font-bold text-base shadow active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-green-700 text-white"
-              >
-                <FolderDown size={18} />
-                PDFをフォルダに保存
-              </button>
+              {!/iPhone|iPad|iPod/i.test(navigator.userAgent) && (
+                <button
+                  onClick={handleSavePDFToFolder}
+                  className="w-full mt-2 py-3 rounded-xl font-bold text-base shadow active:scale-[0.98] transition-transform flex items-center justify-center gap-2 bg-green-700 text-white"
+                >
+                  <FolderDown size={18} />
+                  PDFをフォルダに保存
+                </button>
+              )}
             </div>
           </div>
         );
